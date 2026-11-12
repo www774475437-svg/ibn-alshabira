@@ -1,0 +1,12 @@
+{
+  "sheikh": [
+    {"platform": "telegram", "name": "قناة تليجرام", "url": ""},
+    {"platform": "youtube",  "name": "يوتيوب",       "url": ""},
+    {"platform": "facebook", "name": "فيسبوك",       "url": ""},
+    {"platform": "x",        "name": "إكس (تويتر)",  "url": ""}
+  ],
+  "developer": {
+    "name": "أبو عبد الرحمن الأثري",
+    "url": "https://t.me/alhsaar4"
+  }
+}
