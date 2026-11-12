@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../config.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
 import '../theme.dart';
@@ -83,6 +84,17 @@ class FatwaScreen extends StatelessWidget {
                   ),
                 ],
               ),
+              const SizedBox(height: 8),
+              TextButton.icon(
+                icon: const Icon(Icons.link),
+                label: const Text('نسخ رابط الفتوى'),
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: AppConfig.fatwaLink(fatwa.id)));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('تم نسخ الرابط')),
+                  );
+                },
+              ),
               if (fatwa.source.isNotEmpty) ...[
                 const SizedBox(height: 10),
                 TextButton.icon(
@@ -91,11 +103,37 @@ class FatwaScreen extends StatelessWidget {
                   onPressed: () => openUrl(context, fatwa.source),
                 ),
               ],
+              ..._related(context, repo),
             ],
           ),
         );
       },
     );
+  }
+
+  List<Widget> _related(BuildContext context, Repository repo) {
+    final items = repo.related(fatwa);
+    if (items.isEmpty) return const [];
+    return [
+      const SizedBox(height: 20),
+      const Divider(),
+      const Padding(
+        padding: EdgeInsets.symmetric(vertical: 10),
+        child: Text('فتاوى ذات صلة',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+      ),
+      for (final f in items)
+        Card(
+          margin: const EdgeInsets.symmetric(vertical: 4),
+          child: ListTile(
+            leading: const Icon(Icons.article_outlined, color: kGold),
+            title: Text(f.title, maxLines: 2, overflow: TextOverflow.ellipsis),
+            subtitle: Text('باب ${repo.chapterName(f.chapter)}'),
+            trailing: const Icon(Icons.chevron_left),
+            onTap: () => openFatwa(context, f),
+          ),
+        ),
+    ];
   }
 }
 

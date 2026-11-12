@@ -1,19 +1,40 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
+import '../config.dart';
+import '../services/update_check.dart';
+
+import '../data/models.dart';
 import '../data/repository.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'ask_screen.dart';
 import 'chapter_screen.dart';
 
-class HomeTab extends StatelessWidget {
+class HomeTab extends StatefulWidget {
   final VoidCallback onOpenSearch;
   final VoidCallback onOpenMore;
 
   const HomeTab({super.key, required this.onOpenSearch, required this.onOpenMore});
 
   @override
+  State<HomeTab> createState() => _HomeTabState();
+}
+
+class _HomeTabState extends State<HomeTab> {
+  bool _updateAvailable = false;
+
+  @override
+  void initState() {
+    super.initState();
+    isUpdateAvailable().then((v) {
+      if (mounted && v) setState(() => _updateAvailable = true);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final onOpenSearch = widget.onOpenSearch;
     final repo = Repository.instance;
     final latest = repo.fatwas.reversed.take(5).toList();
     return ListenableBuilder(
@@ -21,6 +42,26 @@ class HomeTab extends StatelessWidget {
       builder: (context, _) => CustomScrollView(
         slivers: [
           SliverToBoxAdapter(child: _Header(onOpenSearch: onOpenSearch)),
+          if (_updateAvailable)
+            const SliverToBoxAdapter(
+              child: _Banner(
+                icon: Icons.system_update,
+                title: 'يوجد تحديث جديد للتطبيق',
+                subtitle: 'اضغط لتحميل النسخة الجديدة',
+                url: AppConfig.apkUrl,
+              ),
+            ),
+          if (kIsWeb)
+            const SliverToBoxAdapter(
+              child: _Banner(
+                icon: Icons.android,
+                title: 'حمّل تطبيق «ابن الشابرة»',
+                subtitle: 'لأجهزة أندرويد — يعمل دون إنترنت',
+                url: AppConfig.apkUrl,
+              ),
+            ),
+          if (repo.fatwaOfDay != null)
+            SliverToBoxAdapter(child: _FatwaOfDay(fatwa: repo.fatwaOfDay!)),
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
@@ -127,6 +168,73 @@ class _Header extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _FatwaOfDay extends StatelessWidget {
+  final Fatwa fatwa;
+  const _FatwaOfDay({required this.fatwa});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 14, 12, 0),
+      child: Material(
+        color: kGold.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(18),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: () => openFatwa(context, fatwa),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.wb_sunny_outlined, color: kGold, size: 20),
+                    SizedBox(width: 6),
+                    Text('فتوى اليوم',
+                        style: TextStyle(color: kGoldChip, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(fatwa.title,
+                    style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, height: 1.5)),
+                const SizedBox(height: 6),
+                const Text('اضغط لقراءة الجواب', style: TextStyle(color: Colors.grey)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Banner extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final String url;
+  const _Banner({required this.icon, required this.title, required this.subtitle, required this.url});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+      child: Card(
+        color: kGreen,
+        child: ListTile(
+          leading: Icon(icon, color: kGold, size: 30),
+          title: Text(title,
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          subtitle: Text(subtitle, style: const TextStyle(color: Colors.white70)),
+          trailing: const Icon(Icons.download, color: kGold),
+          onTap: () => openUrl(context, url),
+        ),
       ),
     );
   }

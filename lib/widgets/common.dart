@@ -3,7 +3,6 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../data/models.dart';
 import '../data/repository.dart';
-import '../screens/fatwa_screen.dart';
 
 IconData chapterIcon(String key) {
   switch (key) {
@@ -55,6 +54,12 @@ Future<void> openUrl(BuildContext context, String url) async {
   }
 }
 
+/// Opens a fatwa through its named route, so the web address becomes
+/// its own shareable link (…/#/fatwa/<id>).
+void openFatwa(BuildContext context, Fatwa fatwa) {
+  Navigator.of(context).pushNamed('/fatwa/${Uri.encodeComponent(fatwa.id)}');
+}
+
 class FatwaTile extends StatelessWidget {
   final Fatwa fatwa;
   final bool showChapter;
@@ -70,9 +75,7 @@ class FatwaTile extends StatelessWidget {
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => FatwaScreen(fatwa: fatwa)),
-        ),
+        onTap: () => openFatwa(context, fatwa),
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(
