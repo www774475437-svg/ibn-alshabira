@@ -37,6 +37,7 @@ class Repository extends ChangeNotifier {
   Set<String> favorites = {};
   ThemeMode themeMode = ThemeMode.system;
   double fontScale = 1.0;
+  bool dailyNotification = true;
 
   Future<void> load(SharedPreferences prefs) async {
     _prefs = prefs;
@@ -65,6 +66,7 @@ class Repository extends ChangeNotifier {
     favorites = (prefs.getStringList('favorites') ?? []).toSet();
     themeMode = ThemeMode.values[prefs.getInt('themeMode') ?? ThemeMode.system.index];
     fontScale = prefs.getDouble('fontScale') ?? 1.0;
+    dailyNotification = prefs.getBool('dailyNotification') ?? true;
   }
 
   String chapterName(String id) {
@@ -93,6 +95,54 @@ class Repository extends ChangeNotifier {
       return at.compareTo(bt);
     });
     return results;
+  }
+
+  Fatwa? findById(String id) {
+    for (final f in fatwas) {
+      if (f.id == id) return f;
+    }
+    return null;
+  }
+
+  /// One fatwa per day, the same for everyone, changing at midnight.
+  Fatwa? get fatwaOfDay {
+    final pool = fatwas.where((f) => f.type == 'fatwa').toList();
+    final list = pool.isEmpty ? fatwas : pool;
+    if (list.isEmpty) return null;
+    final now = DateTime.now();
+    final day = DateTime.utc(now.year, now.month, now.day).millisecondsSinceEpoch ~/ 86400000;
+    return list[day % list.length];
+  }
+
+  static final _stopWords = {
+    'ما', 'حكم', 'في', 'من', 'علي', 'الي', 'عن', 'هل', 'او', 'ان', 'لا', 'مع', 'هذا', 'هذه',
+    'التي', 'الذي', 'ذلك', 'يجوز', 'السوال', 'الجواب', 'كان', 'اذا', 'قد', 'به', 'بها', 'له', 'لها',
+  };
+
+  Set<String> _keywords(Fatwa f) => normalizeArabic('${f.title} ${f.question} ${f.tags.join(' ')}')
+      .split(RegExp(r'[^\p{L}]+', unicode: true))
+      .where((w) => w.length > 2 && !_stopWords.contains(w))
+      .map((w) => w.startsWith('ال') && w.length > 4 ? w.substring(2) : w)
+      .toSet();
+
+  /// Fatwas on the same topic: shared keywords first, then the same chapter.
+  List<Fatwa> related(Fatwa f, {int limit = 5}) {
+    final mine = _keywords(f);
+    final scored = <(Fatwa, int)>[];
+    for (final o in fatwas) {
+      if (o.id == f.id) continue;
+      var score = _keywords(o).intersection(mine).length * 3;
+      if (o.chapter == f.chapter) score += 1;
+      if (score > 0) scored.add((o, score));
+    }
+    scored.sort((a, b) => b.$2.compareTo(a.$2));
+    return scored.take(limit).map((e) => e.$1).toList();
+  }
+
+  void setDailyNotification(bool v) {
+    dailyNotification = v;
+    _prefs.setBool('dailyNotification', v);
+    notifyListeners();
   }
 
   bool isFavorite(String id) => favorites.contains(id);

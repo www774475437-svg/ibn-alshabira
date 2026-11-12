@@ -1,4 +1,8 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+
+import '../config.dart';
+import '../services/notifications.dart';
 
 import '../data/repository.dart';
 import '../theme.dart';
@@ -49,6 +53,17 @@ class MoreTab extends StatelessWidget {
             ]),
             const _Group('الإعدادات'),
             _Section(children: [
+              if (!kIsWeb)
+                SwitchListTile(
+                  secondary: const _IconBox(Icons.notifications_active_outlined),
+                  title: const Text('تنبيه «فتوى اليوم»'),
+                  subtitle: const Text('كل صباح الساعة 8'),
+                  value: repo.dailyNotification,
+                  onChanged: (v) {
+                    repo.setDailyNotification(v);
+                    DailyNotifications.setEnabled(v);
+                  },
+                ),
               ListTile(
                 leading: const _IconBox(Icons.dark_mode_outlined),
                 title: const Text('المظهر'),
@@ -75,6 +90,33 @@ class MoreTab extends StatelessWidget {
                 ),
               ),
             ]),
+            const _Group('التطبيق والموقع'),
+            _Section(children: [
+              ListTile(
+                leading: const _IconBox(Icons.android),
+                title: const Text('تحميل التطبيق لأندرويد'),
+                trailing: const Icon(Icons.download),
+                onTap: () => openUrl(context, AppConfig.apkUrl),
+              ),
+              if (AppConfig.playStoreUrl.isNotEmpty)
+                ListTile(
+                  leading: const _IconBox(Icons.shop),
+                  title: const Text('جوجل بلاي'),
+                  onTap: () => openUrl(context, AppConfig.playStoreUrl),
+                ),
+              if (AppConfig.appStoreUrl.isNotEmpty)
+                ListTile(
+                  leading: const _IconBox(Icons.apple),
+                  title: const Text('آبل ستور'),
+                  onTap: () => openUrl(context, AppConfig.appStoreUrl),
+                ),
+              ListTile(
+                leading: const _IconBox(Icons.language),
+                title: const Text('موقع التطبيق'),
+                subtitle: const Text(AppConfig.siteUrl, textDirection: TextDirection.ltr),
+                onTap: () => openUrl(context, AppConfig.siteUrl),
+              ),
+            ]),
             const _Group('عن التطبيق'),
             const _Section(children: [
               Padding(
@@ -82,7 +124,8 @@ class MoreTab extends StatelessWidget {
                 child: Text(
                   'تطبيق «ابن الشابرة» يجمع فتاوى ومقالات وكتب ورسائل الشيخ '
                   'قائد بن غانم الشابرة حفظه الله، من محافظة إب باليمن، '
-                  'مرتّبة على الأبواب مع البحث بالموضوع.\n\nالإصدار 1.0.0',
+                  'مرتّبة على الأبواب مع البحث بالموضوع.\n\n'
+                  'الإصدار ${AppConfig.version} (${AppConfig.buildNumber})',
                   style: TextStyle(height: 1.8),
                 ),
               ),

@@ -1,3 +1,5 @@
+import '../config.dart';
+
 class Chapter {
   final String id;
   final String name;
@@ -66,8 +68,8 @@ class Fatwa {
     final b = StringBuffer('📜 $title\n\n');
     if (question.isNotEmpty) b.write('❓ السؤال:\n$question\n\n');
     b.write(question.isNotEmpty ? '✅ الجواب:\n$answer\n\n' : '$answer\n\n');
-    b.write('— الشيخ قائد بن غانم الشابرة حفظه الله\n');
-    b.write('من تطبيق «ابن الشابرة»');
+    b.write('— الشيخ قائد بن غانم الشابرة حفظه الله\n\n');
+    b.write('🔗 رابط الفتوى:\n${AppConfig.fatwaLink(id)}');
     return b.toString();
   }
 }

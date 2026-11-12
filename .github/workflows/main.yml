@@ -1,4 +1,4 @@
-name: Build APK
+name: Build APK and website
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  android:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,18 +27,13 @@ jobs:
       - name: Create Android platform files
         run: flutter create --org com.ibnalshabira --project-name ibn_alshabira --platforms android .
 
-      - name: Patch Android (app name)
+      - name: Patch Android (name, permissions, notifications)
         run: python3 tool/patch_android.py
 
       - run: flutter pub get
 
       - name: Build APK
-        run: flutter build apk --release
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ibn-alshabira-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+        run: flutter build apk --release --build-number=${{ github.run_number }} --dart-define=BUILD_NUMBER=${{ github.run_number }}
 
       - name: Rename APK
         run: cp build/app/outputs/flutter-apk/app-release.apk ibn-alshabira.apk
@@ -50,3 +45,31 @@ jobs:
           name: ابن الشابرة — نسخة ${{ github.run_number }}
           make_latest: true
           files: ibn-alshabira.apk
+
+  website:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Create web platform files
+        run: flutter create --org com.ibnalshabira --project-name ibn_alshabira --platforms web .
+
+      - name: Web page title and description
+        run: python3 tool/patch_web.py
+
+      - run: flutter pub get
+
+      - name: Build website
+        run: flutter build web --release --base-href /ibn-alshabira/ --dart-define=BUILD_NUMBER=0
+
+      - name: Publish website (gh-pages branch)
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: build/web
+          force_orphan: true
