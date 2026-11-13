@@ -19,7 +19,7 @@ class Fatwa {
   final String id;
   final String chapter;
   final String type; // fatwa | article | letter
-  final String title;
+  String title;
   final String question;
   final String answer;
   final List<String> tags;
@@ -27,7 +27,7 @@ class Fatwa {
   final String source;
 
   /// Pre-computed normalized text for fast search.
-  late final String searchText;
+  late String searchText;
 
   Fatwa({
     required this.id,

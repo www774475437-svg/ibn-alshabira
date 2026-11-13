@@ -1,0 +1,424 @@
+import 'package:flutter/material.dart';
+
+import '../config.dart';
+import '../data/repository.dart';
+import '../services/cloud.dart';
+import '../theme.dart';
+import '../widgets/common.dart';
+
+void _toast(BuildContext context, String t) =>
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t)));
+
+/// Sign in with Google, see your account, open the admin panel.
+class AccountScreen extends StatelessWidget {
+  const AccountScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final cloud = Cloud.instance;
+    return Scaffold(
+      appBar: AppBar(title: const Text('الحساب')),
+      body: ListenableBuilder(
+        listenable: cloud,
+        builder: (context, _) {
+          final u = cloud.user;
+          return ListView(
+            padding: const EdgeInsets.all(24),
+            children: [
+              if (u == null) ...[
+                const Icon(Icons.account_circle_outlined, size: 90, color: kGold),
+                const SizedBox(height: 14),
+                const Text(
+                  'سجّل الدخول بحساب جوجل لتُحفظ محفوظاتك وقائمة «اقرأ لاحقاً» '
+                  'على حسابك، فترجع إليك إذا غيّرت جوالك.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 16, height: 1.8),
+                ),
+                const SizedBox(height: 24),
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+                  icon: const Icon(Icons.login),
+                  label: const Text('الدخول بحساب جوجل', style: TextStyle(fontSize: 17)),
+                  onPressed: () async {
+                    final err = await cloud.signIn();
+                    if (err != null && context.mounted) _toast(context, err);
+                  },
+                ),
+              ] else ...[
+                CircleAvatar(
+                  radius: 44,
+                  backgroundColor: kGold.withValues(alpha: 0.2),
+                  backgroundImage: u.photoURL != null ? NetworkImage(u.photoURL!) : null,
+                  child: u.photoURL == null ? const Icon(Icons.person, size: 44, color: kGold) : null,
+                ),
+                const SizedBox(height: 12),
+                Text(u.displayName ?? '',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                Text(u.email ?? '', textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey)),
+                const SizedBox(height: 10),
+                const Text('✅ محفوظاتك تُحفظ على حسابك', textAlign: TextAlign.center),
+                if (cloud.isAdmin) ...[
+                  const SizedBox(height: 24),
+                  FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size.fromHeight(52),
+                      backgroundColor: kGold,
+                      foregroundColor: Colors.black,
+                    ),
+                    icon: const Icon(Icons.admin_panel_settings),
+                    label: const Text('لوحة الإدارة', style: TextStyle(fontSize: 17)),
+                    onPressed: () => Navigator.of(context)
+                        .push(MaterialPageRoute(builder: (_) => const AdminScreen())),
+                  ),
+                ],
+                const SizedBox(height: 24),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.logout),
+                  label: const Text('تسجيل الخروج'),
+                  onPressed: cloud.signOut,
+                ),
+              ],
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// «الأكثر قراءة»
+class MostReadScreen extends StatelessWidget {
+  const MostReadScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final repo = Repository.instance;
+    return Scaffold(
+      appBar: AppBar(title: const Text('الأكثر قراءة')),
+      body: FutureBuilder(
+        future: Cloud.instance.mostRead(),
+        builder: (context, snap) {
+          if (snap.connectionState != ConnectionState.done) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final items = [
+            for (final (id, count) in snap.data ?? <(String, int)>[])
+              if (repo.findById(id) case final f?) (f, count),
+          ];
+          if (items.isEmpty) {
+            return const EmptyState(icon: Icons.trending_up, text: 'لا توجد مشاهدات بعد');
+          }
+          return ListView.builder(
+            itemCount: items.length,
+            itemBuilder: (context, i) {
+              final (f, count) = items[i];
+              return Card(
+                margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: i < 3 ? kGold : kGold.withValues(alpha: 0.2),
+                    child: Text('${i + 1}',
+                        style: TextStyle(
+                            color: i < 3 ? Colors.black : kGoldChip, fontWeight: FontWeight.bold)),
+                  ),
+                  title: Text(f.title, maxLines: 2, overflow: TextOverflow.ellipsis),
+                  subtitle: Text('👁 $count مشاهدة · باب ${repo.chapterName(f.chapter)}'),
+                  onTap: () => openFatwa(context, f),
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Admin panel: stats, admins, reports, publish an answer.
+class AdminScreen extends StatelessWidget {
+  const AdminScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return DefaultTabController(
+      length: 4,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('لوحة الإدارة'),
+          bottom: const TabBar(
+            isScrollable: true,
+            labelColor: kGold,
+            unselectedLabelColor: Colors.white70,
+            indicatorColor: kGold,
+            tabs: [
+              Tab(icon: Icon(Icons.bar_chart), text: 'الإحصائيات'),
+              Tab(icon: Icon(Icons.edit_note), text: 'نشر جواب'),
+              Tab(icon: Icon(Icons.flag), text: 'البلاغات'),
+              Tab(icon: Icon(Icons.group), text: 'المشرفون'),
+            ],
+          ),
+        ),
+        body: const TabBarView(
+          children: [_StatsTab(), _PublishTab(), _ReportsTab(), _AdminsTab()],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatsTab extends StatelessWidget {
+  const _StatsTab();
+
+  @override
+  Widget build(BuildContext context) {
+    final repo = Repository.instance;
+    return FutureBuilder(
+      future: Cloud.instance.overview(),
+      builder: (context, snap) {
+        if (snap.connectionState != ConnectionState.done) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final s = snap.data ?? {};
+        Widget tile(IconData icon, String label, Object value) => Card(
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(icon, color: kGold, size: 28),
+                    const SizedBox(height: 6),
+                    Text('$value', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                    Text(label, textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey)),
+                  ],
+                ),
+              ),
+            );
+        return GridView.count(
+          padding: const EdgeInsets.all(12),
+          crossAxisCount: 2,
+          childAspectRatio: 1.25,
+          children: [
+            tile(Icons.visibility, 'مجموع المشاهدات', s['views'] ?? 0),
+            tile(Icons.article, 'عدد الأجوبة في التطبيق', repo.fatwas.length),
+            tile(Icons.auto_stories, 'أجوبة قُرئت', s['answersViewed'] ?? 0),
+            tile(Icons.publish, 'أجوبة نُشرت من التطبيق', s['published'] ?? 0),
+            tile(Icons.thumb_up, 'أفادهم الجواب', s['helpful'] ?? 0),
+            tile(Icons.thumb_down, 'لم يُفدهم', s['notHelpful'] ?? 0),
+            tile(Icons.flag, 'البلاغات', s['reports'] ?? 0),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _PublishTab extends StatefulWidget {
+  const _PublishTab();
+
+  @override
+  State<_PublishTab> createState() => _PublishTabState();
+}
+
+class _PublishTabState extends State<_PublishTab> {
+  final _title = TextEditingController();
+  final _question = TextEditingController();
+  final _answer = TextEditingController();
+  String _chapter = Repository.instance.chapters.first.id;
+  bool _busy = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final repo = Repository.instance;
+    InputDecoration deco(String label) =>
+        InputDecoration(labelText: label, border: const OutlineInputBorder(), alignLabelWithHint: true);
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        DropdownButtonFormField<String>(
+          value: _chapter,
+          decoration: deco('الباب'),
+          items: [for (final c in repo.chapters) DropdownMenuItem(value: c.id, child: Text(c.name))],
+          onChanged: (v) => setState(() => _chapter = v ?? _chapter),
+        ),
+        const SizedBox(height: 12),
+        TextField(controller: _title, decoration: deco('العنوان')),
+        const SizedBox(height: 12),
+        TextField(controller: _question, maxLines: 3, decoration: deco('السؤال (اختياري)')),
+        const SizedBox(height: 12),
+        TextField(controller: _answer, maxLines: 10, decoration: deco('الجواب')),
+        const SizedBox(height: 16),
+        FilledButton.icon(
+          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
+          icon: _busy
+              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.publish),
+          label: const Text('نشر الجواب'),
+          onPressed: _busy
+              ? null
+              : () async {
+                  if (_title.text.trim().isEmpty || _answer.text.trim().isEmpty) {
+                    _toast(context, 'اكتب العنوان والجواب');
+                    return;
+                  }
+                  setState(() => _busy = true);
+                  final err = await Cloud.instance.publishAnswer(
+                    chapter: _chapter,
+                    title: _title.text,
+                    question: _question.text,
+                    answer: _answer.text,
+                  );
+                  if (!mounted) return;
+                  setState(() => _busy = false);
+                  if (err == null) {
+                    _title.clear();
+                    _question.clear();
+                    _answer.clear();
+                  }
+                  _toast(context, err ?? 'تم النشر ✅ يظهر الآن لكل مستخدمي التطبيق');
+                },
+        ),
+      ],
+    );
+  }
+}
+
+class _ReportsTab extends StatelessWidget {
+  const _ReportsTab();
+
+  @override
+  Widget build(BuildContext context) {
+    final repo = Repository.instance;
+    return StreamBuilder(
+      stream: Cloud.instance.reportsStream(),
+      builder: (context, snap) {
+        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+        final docs = snap.data!.docs;
+        if (docs.isEmpty) return const EmptyState(icon: Icons.flag_outlined, text: 'لا توجد بلاغات');
+        return ListView.builder(
+          itemCount: docs.length,
+          itemBuilder: (context, i) {
+            final d = docs[i].data();
+            final f = repo.findById('${d['answerId']}');
+            return Card(
+              margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+              child: ListTile(
+                title: Text('${d['title']}', maxLines: 2, overflow: TextOverflow.ellipsis),
+                subtitle: Text('${d['note'] ?? ''}\n${d['by'] ?? ''}'),
+                isThreeLine: true,
+                onTap: f == null ? null : () => openFatwa(context, f),
+                trailing: IconButton(
+                  tooltip: 'حذف البلاغ',
+                  icon: const Icon(Icons.delete_outline),
+                  onPressed: () => Cloud.instance.deleteReport(docs[i].id),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class _AdminsTab extends StatefulWidget {
+  const _AdminsTab();
+
+  @override
+  State<_AdminsTab> createState() => _AdminsTabState();
+}
+
+class _AdminsTabState extends State<_AdminsTab> {
+  final _email = TextEditingController();
+
+  @override
+  Widget build(BuildContext context) {
+    final cloud = Cloud.instance;
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        const Text(
+          'المشرفون يستطيعون نشر الأجوبة وتعديل العناوين وقراءة البلاغات من داخل التطبيق.',
+          style: TextStyle(height: 1.7),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _email,
+                keyboardType: TextInputType.emailAddress,
+                textDirection: TextDirection.ltr,
+                decoration: const InputDecoration(
+                  hintText: 'example@gmail.com',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            FilledButton(
+              onPressed: () async {
+                final err = await cloud.addAdmin(_email.text);
+                if (!mounted) return;
+                if (err == null) _email.clear();
+                _toast(context, err ?? 'تمت الإضافة ✅');
+              },
+              child: const Text('إضافة'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        const ListTile(
+          leading: Icon(Icons.verified, color: kGold),
+          title: Text(Cloud.developerEmail, textDirection: TextDirection.ltr),
+          subtitle: Text('المطوّر (دائماً)'),
+        ),
+        StreamBuilder(
+          stream: cloud.adminsStream(),
+          builder: (context, snap) {
+            final docs = snap.data?.docs ?? [];
+            return Column(
+              children: [
+                for (final d in docs)
+                  ListTile(
+                    leading: const Icon(Icons.person),
+                    title: Text(d.id, textDirection: TextDirection.ltr),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.remove_circle_outline, color: Colors.red),
+                      onPressed: () => cloud.removeAdmin(d.id),
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+/// Shown on the website for features that live in the Android app.
+class AppOnlyScreen extends StatelessWidget {
+  final String title;
+  const AppOnlyScreen({super.key, required this.title});
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: Text(title)),
+        body: ListView(
+          padding: const EdgeInsets.all(24),
+          children: [
+            const Icon(Icons.android, size: 72, color: kGold),
+            const SizedBox(height: 14),
+            const Text('هذه الميزة متوفرة في تطبيق أندرويد',
+                textAlign: TextAlign.center, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 20),
+            FilledButton.icon(
+              icon: const Icon(Icons.download),
+              label: const Text('تحميل التطبيق'),
+              onPressed: () => openUrl(context, AppConfig.apkUrl),
+            ),
+          ],
+        ),
+      );
+}

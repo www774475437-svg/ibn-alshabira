@@ -8,7 +8,9 @@ import '../data/repository.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'ask_screen.dart';
+import 'account_screens.dart';
 import 'extra_screens.dart';
+import '../services/cloud.dart';
 
 class MoreTab extends StatelessWidget {
   const MoreTab({super.key});
@@ -26,12 +28,27 @@ class MoreTab extends StatelessWidget {
             _ReaderStats(count: repo.readThisMonth),
             const _Group('الحساب'),
             _Section(children: [
-              _soon(context, Icons.account_circle_outlined, 'الدخول بحساب جوجل',
-                  'تدخل بحساب جوجل فتُحفظ محفوظاتك وأسئلتك، وترجع إليك إذا غيّرت جوالك.'),
-              _soon(context, Icons.trending_up, 'الأكثر قراءة',
-                  'قائمة بالأجوبة التي يقرؤها الناس أكثر من غيرها، مع عدد المشاهدات.'),
-              _soon(context, Icons.admin_panel_settings_outlined, 'إدارة المشرفين',
-                  'صفحة خاصة بالمطوّر يضيف منها حسابات المشرفين الذين يستطيعون نشر الأجوبة وتعديلها.'),
+              ListenableBuilder(
+                listenable: Cloud.instance,
+                builder: (context, _) {
+                  final u = Cloud.instance.user;
+                  return ListTile(
+                    leading: const _IconBox(Icons.account_circle_outlined),
+                    title: Text(u == null ? 'الدخول بحساب جوجل' : (u.displayName ?? 'حسابي')),
+                    subtitle: u == null ? null : Text(Cloud.instance.isAdmin ? 'مشرف · لوحة الإدارة' : (u.email ?? '')),
+                    trailing: const Icon(Icons.chevron_left),
+                    onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                        builder: (_) => kIsWeb ? const AppOnlyScreen(title: 'الحساب') : const AccountScreen())),
+                  );
+                },
+              ),
+              ListTile(
+                leading: const _IconBox(Icons.trending_up),
+                title: const Text('الأكثر قراءة'),
+                trailing: const Icon(Icons.chevron_left),
+                onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => kIsWeb ? const AppOnlyScreen(title: 'الأكثر قراءة') : const MostReadScreen())),
+              ),
             ]),
             const _Group('الشيخ'),
             _Section(children: [

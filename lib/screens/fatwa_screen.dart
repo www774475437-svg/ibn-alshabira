@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
@@ -5,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 import '../config.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
+import '../services/cloud.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 
@@ -40,6 +42,7 @@ class _FatwaScreenState extends State<FatwaScreen> {
     _index = _pages.indexWhere((f) => f.id == widget.fatwa.id);
     _pager = PageController(initialPage: _index);
     repo.markRead(current.id);
+    Cloud.instance.addView(current.id);
   }
 
   @override
@@ -153,6 +156,12 @@ class _FatwaScreenState extends State<FatwaScreen> {
             onPressed: () {
               Navigator.pop(ctx);
               final note = controller.text.trim();
+              if (Cloud.instance.ready) {
+                Cloud.instance.report(current, note).then((ok) {
+                  if (mounted) _toast(ok ? 'وصل البلاغ، جزاك الله خيراً' : 'تعذّر إرسال البلاغ');
+                });
+                return;
+              }
               final report = '⚠️ بلاغ عن خطأ في تطبيق «ابن الشابرة»\n'
                   'الجواب: ${current.title}\n'
                   'الرابط: ${AppConfig.fatwaLink(current.id)}\n'
@@ -162,6 +171,28 @@ class _FatwaScreenState extends State<FatwaScreen> {
               openUrl(context, repo.developerUrl);
             },
             child: const Text('إرسال'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _editTitle() {
+    final c = TextEditingController(text: current.title);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('تعديل العنوان'),
+        content: TextField(controller: c, maxLines: 3, decoration: const InputDecoration(border: OutlineInputBorder())),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+          FilledButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final err = await Cloud.instance.editTitle(current.id, c.text);
+              if (mounted) _toast(err ?? 'تم حفظ العنوان ✅');
+            },
+            child: const Text('حفظ'),
           ),
         ],
       ),
@@ -179,6 +210,16 @@ class _FatwaScreenState extends State<FatwaScreen> {
           appBar: AppBar(
             title: Text(current.typeLabel),
             actions: [
+              ListenableBuilder(
+                listenable: Cloud.instance,
+                builder: (context, _) => Cloud.instance.isAdmin
+                    ? IconButton(
+                        tooltip: 'تعديل العنوان',
+                        icon: const Icon(Icons.edit),
+                        onPressed: _editTitle,
+                      )
+                    : const SizedBox.shrink(),
+              ),
               IconButton(
                 tooltip: later ? 'إزالة من «اقرأ لاحقاً»' : 'اقرأ لاحقاً',
                 icon: Icon(later ? Icons.watch_later : Icons.watch_later_outlined),
@@ -209,6 +250,7 @@ class _FatwaScreenState extends State<FatwaScreen> {
               onPageChanged: (i) {
                 setState(() => _index = i);
                 repo.markRead(_pages[i].id);
+                Cloud.instance.addView(_pages[i].id);
               },
               itemBuilder: (context, i) => _AnswerBody(
                 fatwa: _pages[i],
@@ -352,6 +394,7 @@ class _AnswerBody extends StatelessWidget {
           const SizedBox(height: 12),
           Text('تاريخ النشر: ${fatwa.date}', style: const TextStyle(color: Colors.grey)),
         ],
+        if (!kIsWeb) _CloudPanel(fatwa: fatwa),
         const SizedBox(height: 22),
         Row(
           children: [
@@ -417,6 +460,90 @@ class _AnswerBody extends StatelessWidget {
           ),
         ),
     ];
+  }
+}
+
+/// Views count and «هل أفادك الجواب؟» (Android app, online).
+class _CloudPanel extends StatefulWidget {
+  final Fatwa fatwa;
+  const _CloudPanel({required this.fatwa});
+
+  @override
+  State<_CloudPanel> createState() => _CloudPanelState();
+}
+
+class _CloudPanelState extends State<_CloudPanel> {
+  Map<String, int> _stats = {};
+  bool _voted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    await Future.delayed(const Duration(milliseconds: 600));
+    final s = await Cloud.instance.stats(widget.fatwa.id);
+    if (mounted) setState(() => _stats = s);
+  }
+
+  Future<void> _vote(bool yes) async {
+    setState(() => _voted = true);
+    await Cloud.instance.vote(widget.fatwa.id, yes);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!Cloud.instance.ready) return const SizedBox.shrink();
+    final views = _stats['count'];
+    return Padding(
+      padding: const EdgeInsets.only(top: 14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: kGold.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Column(
+          children: [
+            if (views != null)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.visibility_outlined, size: 18, color: Colors.grey),
+                  const SizedBox(width: 6),
+                  Text('$views مشاهدة', style: const TextStyle(color: Colors.grey)),
+                ],
+              ),
+            const SizedBox(height: 6),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              child: _voted
+                  ? const Text('جزاك الله خيراً على رأيك 🌿', key: ValueKey('t'))
+                  : Row(
+                      key: const ValueKey('q'),
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text('هل أفادك الجواب؟', style: TextStyle(fontWeight: FontWeight.w600)),
+                        const SizedBox(width: 8),
+                        TextButton.icon(
+                          onPressed: () => _vote(true),
+                          icon: const Icon(Icons.thumb_up_alt_outlined, size: 18),
+                          label: const Text('نعم'),
+                        ),
+                        TextButton.icon(
+                          onPressed: () => _vote(false),
+                          icon: const Icon(Icons.thumb_down_alt_outlined, size: 18),
+                          label: const Text('لا'),
+                        ),
+                      ],
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

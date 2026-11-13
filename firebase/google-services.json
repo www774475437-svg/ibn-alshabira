@@ -12,7 +12,20 @@
           "package_name": "com.ibnalshabira.ibn_alshabira"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "402664894391-3l92vppr2qbh5eq10bqb8hkr6knks0vu.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.ibnalshabira.ibn_alshabira",
+            "certificate_hash": "458b659bae752fb748258e9b1a8d3f7db5e47d83"
+          }
+        },
+        {
+          "client_id": "402664894391-nlspbi9qo7lc65qkcngbufdh15n255jb.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyCOpkQxy5gP2-PuFAphg_tlJBv2gI8RkVI"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "402664894391-nlspbi9qo7lc65qkcngbufdh15n255jb.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
