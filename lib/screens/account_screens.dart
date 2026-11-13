@@ -176,10 +176,12 @@ class _EmailAuthFormState extends State<_EmailAuthForm> {
           Expanded(child: Divider()),
         ]),
         const SizedBox(height: 10),
-        OutlinedButton.icon(
-          style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(50)),
-          icon: const Icon(Icons.login),
-          label: const Text('الدخول بحساب جوجل'),
+        FilledButton.tonalIcon(
+          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+          icon: const Text('G',
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFF4285F4))),
+          label: const Text('الدخول بحساب جوجل',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
           onPressed: () => _run(cloud.signIn),
         ),
       ],
