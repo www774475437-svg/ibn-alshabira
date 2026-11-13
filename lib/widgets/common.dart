@@ -94,6 +94,10 @@ class FatwaTile extends StatelessWidget {
                     const SizedBox(width: 6),
                     _Chip(text: repo.chapterName(fatwa.chapter), color: kGoldChip),
                   ],
+                  if (isRecent(fatwa.date)) ...[
+                    const SizedBox(width: 6),
+                    const _Chip(text: 'جديد', color: Color(0xFFD9534F)),
+                  ],
                   const Spacer(),
                   if (repo.isFavorite(fatwa.id))
                     const Icon(Icons.bookmark, size: 18, color: kGoldChip),
@@ -116,6 +120,12 @@ class FatwaTile extends StatelessWidget {
 }
 
 const kGoldChip = Color(0xFFB8913A);
+
+/// True when the date (yyyy-MM-dd) is within the last 7 days.
+bool isRecent(String date) {
+  final d = DateTime.tryParse(date);
+  return d != null && DateTime.now().difference(d).inDays < 7;
+}
 
 class _Chip extends StatelessWidget {
   final String text;

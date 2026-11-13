@@ -217,6 +217,18 @@ class _FatwaScreenState extends State<FatwaScreen> {
                     ? Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          if (Cloud.instance.isFullAdmin)
+                            IconButton(
+                              tooltip: 'تثبيت في الرئيسية',
+                              icon: Icon(Cloud.instance.pinned.contains(current.id)
+                                  ? Icons.push_pin
+                                  : Icons.push_pin_outlined),
+                              onPressed: () async {
+                                final was = Cloud.instance.pinned.contains(current.id);
+                                final err = await Cloud.instance.togglePin(current.id);
+                                if (mounted) _toast(err ?? (was ? 'أُزيل التثبيت' : 'ثُبّت في الرئيسية ✅'));
+                              },
+                            ),
                           IconButton(
                             tooltip: 'إضافة إلى سلسلة',
                             icon: const Icon(Icons.playlist_add),

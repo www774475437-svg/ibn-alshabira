@@ -50,8 +50,13 @@ class AccountScreen extends StatelessWidget {
                       backgroundColor: kGold,
                       foregroundColor: Colors.black,
                     ),
-                    icon: const Icon(Icons.admin_panel_settings),
-                    label: const Text('لوحة الإدارة', style: TextStyle(fontSize: 17)),
+                    icon: Badge(
+                      isLabelVisible: cloud.newQuestions > 0,
+                      label: Text('${cloud.newQuestions}'),
+                      child: const Icon(Icons.admin_panel_settings),
+                    ),
+                    label: Text(cloud.isFullAdmin ? 'لوحة الإدارة' : 'لوحة المحرّر',
+                        style: const TextStyle(fontSize: 17)),
                     onPressed: () => Navigator.of(context)
                         .push(MaterialPageRoute(builder: (_) => const AdminScreen())),
                   ),
@@ -236,39 +241,51 @@ class AdminScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 7,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('لوحة الإدارة'),
-          bottom: const TabBar(
-            isScrollable: true,
-            labelColor: kGold,
-            unselectedLabelColor: Colors.white70,
-            indicatorColor: kGold,
-            tabs: [
-              Tab(icon: Icon(Icons.bar_chart), text: 'الإحصائيات'),
-              Tab(icon: Icon(Icons.forum), text: 'الأسئلة'),
-              Tab(icon: Icon(Icons.edit_note), text: 'نشر جواب'),
-              Tab(icon: Icon(Icons.campaign), text: 'الإعلان'),
-              Tab(icon: Icon(Icons.flag), text: 'البلاغات'),
-              Tab(icon: Icon(Icons.search_off), text: 'بحث بلا نتيجة'),
-              Tab(icon: Icon(Icons.group), text: 'المشرفون'),
-            ],
+    final cloud = Cloud.instance;
+    return ListenableBuilder(
+      listenable: cloud,
+      builder: (context, _) {
+        final full = cloud.isFullAdmin;
+        final tabs = <(Widget, Widget)>[
+          (const Tab(icon: Icon(Icons.bar_chart), text: 'الإحصائيات'), const _StatsTab()),
+          (
+            Tab(
+              icon: Badge(
+                isLabelVisible: cloud.newQuestions > 0,
+                label: Text('${cloud.newQuestions}'),
+                child: const Icon(Icons.forum),
+              ),
+              text: 'الأسئلة',
+            ),
+            const QuestionsTab()
           ),
-        ),
-        body: const TabBarView(
-          children: [
-            _StatsTab(),
-            QuestionsTab(),
-            _PublishTab(),
-            AnnouncementTab(),
-            _ReportsTab(),
-            MissesTab(),
-            _AdminsTab(),
-          ],
-        ),
-      ),
+          (const Tab(icon: Icon(Icons.edit_note), text: 'نشر ومسودات'), const _PublishTab()),
+          if (full) (const Tab(icon: Icon(Icons.campaign), text: 'الإعلان'), const AnnouncementTab()),
+          if (full) (const Tab(icon: Icon(Icons.category), text: 'الأبواب'), const ChaptersTab()),
+          if (full) (const Tab(icon: Icon(Icons.person_pin), text: 'عن الشيخ'), const AboutTab()),
+          (const Tab(icon: Icon(Icons.flag), text: 'البلاغات'), const _ReportsTab()),
+          (const Tab(icon: Icon(Icons.search_off), text: 'بحث بلا نتيجة'), const MissesTab()),
+          if (full) (const Tab(icon: Icon(Icons.group), text: 'المشرفون'), const _AdminsTab()),
+          if (cloud.isDeveloper) (const Tab(icon: Icon(Icons.history), text: 'السجل'), const LogTab()),
+        ];
+        return DefaultTabController(
+          key: ValueKey(tabs.length),
+          length: tabs.length,
+          child: Scaffold(
+            appBar: AppBar(
+              title: Text(full ? 'لوحة الإدارة' : 'لوحة المحرّر'),
+              bottom: TabBar(
+                isScrollable: true,
+                labelColor: kGold,
+                unselectedLabelColor: Colors.white70,
+                indicatorColor: kGold,
+                tabs: [for (final t in tabs) t.$1],
+              ),
+            ),
+            body: TabBarView(children: [for (final t in tabs) t.$2]),
+          ),
+        );
+      },
     );
   }
 }
@@ -331,17 +348,61 @@ class _PublishTabState extends State<_PublishTab> {
   final _question = TextEditingController();
   final _answer = TextEditingController();
   String _chapter = Repository.instance.chapters.first.id;
+  String? _draftId;
   bool _busy = false;
+
+  void _clear() {
+    _title.clear();
+    _question.clear();
+    _answer.clear();
+    _draftId = null;
+  }
+
+  Future<void> _publish() async {
+    if (_title.text.trim().isEmpty || _answer.text.trim().isEmpty) {
+      _toast(context, 'اكتب العنوان والجواب');
+      return;
+    }
+    setState(() => _busy = true);
+    final err = await Cloud.instance.publishAnswer(
+        chapter: _chapter, title: _title.text, question: _question.text, answer: _answer.text);
+    if (err == null && _draftId != null) await Cloud.instance.deleteDraft(_draftId!);
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      if (err == null) _clear();
+    });
+    _toast(context, err ?? 'تم النشر ✅ يظهر الآن لكل مستخدمي التطبيق');
+  }
+
+  Future<void> _saveDraft() async {
+    if (_title.text.trim().isEmpty && _answer.text.trim().isEmpty) {
+      _toast(context, 'اكتب شيئاً أولاً');
+      return;
+    }
+    final err = await Cloud.instance.saveDraft(_draftId,
+        chapter: _chapter, title: _title.text, question: _question.text, answer: _answer.text);
+    if (!mounted) return;
+    if (err == null) setState(_clear);
+    _toast(context, err ?? 'حُفظت المسودة، وتجدها في الأسفل');
+  }
 
   @override
   Widget build(BuildContext context) {
     final repo = Repository.instance;
+    if (!repo.chapters.any((c) => c.id == _chapter)) _chapter = repo.chapters.first.id;
     InputDecoration deco(String label) =>
         InputDecoration(labelText: label, border: const OutlineInputBorder(), alignLabelWithHint: true);
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        if (_draftId != null)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 10),
+            child: Text('تعدّل الآن مسودة محفوظة', style: TextStyle(color: kGoldChip)),
+          ),
         DropdownButtonFormField<String>(
+          key: ValueKey(_chapter),
           value: _chapter,
           decoration: deco('الباب'),
           items: [for (final c in repo.chapters) DropdownMenuItem(value: c.id, child: Text(c.name))],
@@ -354,35 +415,70 @@ class _PublishTabState extends State<_PublishTab> {
         const SizedBox(height: 12),
         TextField(controller: _answer, maxLines: 10, decoration: deco('الجواب')),
         const SizedBox(height: 16),
-        FilledButton.icon(
-          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
-          icon: _busy
-              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-              : const Icon(Icons.publish),
-          label: const Text('نشر الجواب'),
-          onPressed: _busy
-              ? null
-              : () async {
-                  if (_title.text.trim().isEmpty || _answer.text.trim().isEmpty) {
-                    _toast(context, 'اكتب العنوان والجواب');
-                    return;
-                  }
-                  setState(() => _busy = true);
-                  final err = await Cloud.instance.publishAnswer(
-                    chapter: _chapter,
-                    title: _title.text,
-                    question: _question.text,
-                    answer: _answer.text,
-                  );
-                  if (!mounted) return;
-                  setState(() => _busy = false);
-                  if (err == null) {
-                    _title.clear();
-                    _question.clear();
-                    _answer.clear();
-                  }
-                  _toast(context, err ?? 'تم النشر ✅ يظهر الآن لكل مستخدمي التطبيق');
-                },
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(50)),
+                icon: const Icon(Icons.save_outlined),
+                label: const Text('حفظ مسودة'),
+                onPressed: _busy ? null : _saveDraft,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
+                icon: _busy
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.publish),
+                label: const Text('نشر'),
+                onPressed: _busy ? null : _publish,
+              ),
+            ),
+          ],
+        ),
+        const Divider(height: 36),
+        const Text('المسودات', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 6),
+        StreamBuilder(
+          stream: Cloud.instance.draftsStream(),
+          builder: (context, snap) {
+            final docs = snap.data?.docs ?? [];
+            if (docs.isEmpty) {
+              return const Padding(
+                padding: EdgeInsets.all(12),
+                child: Text('لا توجد مسودات', style: TextStyle(color: Colors.grey)),
+              );
+            }
+            return Column(
+              children: [
+                for (final d in docs)
+                  Card(
+                    margin: const EdgeInsets.symmetric(vertical: 4),
+                    child: ListTile(
+                      leading: const Icon(Icons.drafts_outlined, color: kGold),
+                      title: Text('${d.data()['title'] ?? ''}'.isEmpty ? '(بلا عنوان)' : '${d.data()['title']}',
+                          maxLines: 2, overflow: TextOverflow.ellipsis),
+                      subtitle: Text('${d.data()['by'] ?? ''}', textDirection: TextDirection.ltr),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.delete_outline),
+                        onPressed: () => Cloud.instance.deleteDraft(d.id),
+                      ),
+                      onTap: () => setState(() {
+                        final m = d.data();
+                        _draftId = d.id;
+                        _title.text = '${m['title'] ?? ''}';
+                        _question.text = '${m['question'] ?? ''}';
+                        _answer.text = '${m['answer'] ?? ''}';
+                        final ch = '${m['chapter'] ?? ''}';
+                        if (repo.chapters.any((c) => c.id == ch)) _chapter = ch;
+                      }),
+                    ),
+                  ),
+              ],
+            );
+          },
         ),
       ],
     );
@@ -436,6 +532,7 @@ class _AdminsTab extends StatefulWidget {
 
 class _AdminsTabState extends State<_AdminsTab> {
   final _email = TextEditingController();
+  String _role = 'editor';
 
   @override
   Widget build(BuildContext context) {
@@ -444,34 +541,37 @@ class _AdminsTabState extends State<_AdminsTab> {
       padding: const EdgeInsets.all(16),
       children: [
         const Text(
-          'المشرفون يستطيعون نشر الأجوبة وتعديل العناوين وقراءة البلاغات من داخل التطبيق.',
-          style: TextStyle(height: 1.7),
+          '«المحرّر» ينشر الأجوبة ويعدّلها ويرد على الأسئلة.\n'
+          '«المشرف الكامل» يفعل ذلك كله، ويدير المشرفين والأبواب والإعلان والإعدادات.\n'
+          'يدخل المشرف بحساب جوجل بنفس البريد المضاف هنا.',
+          style: TextStyle(height: 1.8),
         ),
         const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _email,
-                keyboardType: TextInputType.emailAddress,
-                textDirection: TextDirection.ltr,
-                decoration: const InputDecoration(
-                  hintText: 'example@gmail.com',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            FilledButton(
-              onPressed: () async {
-                final err = await cloud.addAdmin(_email.text);
-                if (!mounted) return;
-                if (err == null) _email.clear();
-                _toast(context, err ?? 'تمت الإضافة ✅');
-              },
-              child: const Text('إضافة'),
-            ),
+        TextField(
+          controller: _email,
+          keyboardType: TextInputType.emailAddress,
+          textDirection: TextDirection.ltr,
+          decoration: const InputDecoration(hintText: 'example@gmail.com', border: OutlineInputBorder()),
+        ),
+        const SizedBox(height: 10),
+        SegmentedButton<String>(
+          segments: const [
+            ButtonSegment(value: 'editor', label: Text('محرّر'), icon: Icon(Icons.edit)),
+            ButtonSegment(value: 'admin', label: Text('مشرف كامل'), icon: Icon(Icons.admin_panel_settings)),
           ],
+          selected: {_role},
+          onSelectionChanged: (s) => setState(() => _role = s.first),
+        ),
+        const SizedBox(height: 10),
+        FilledButton.icon(
+          icon: const Icon(Icons.person_add),
+          label: const Text('إضافة'),
+          onPressed: () async {
+            final err = await cloud.addAdmin(_email.text, role: _role);
+            if (!context.mounted) return;
+            if (err == null) _email.clear();
+            _toast(context, err ?? 'تمت الإضافة ✅');
+          },
         ),
         const SizedBox(height: 16),
         const ListTile(
@@ -487,8 +587,11 @@ class _AdminsTabState extends State<_AdminsTab> {
               children: [
                 for (final d in docs)
                   ListTile(
-                    leading: const Icon(Icons.person),
+                    leading: Icon((d.data()['role'] ?? 'admin') == 'admin'
+                        ? Icons.admin_panel_settings
+                        : Icons.edit),
                     title: Text(d.id, textDirection: TextDirection.ltr),
+                    subtitle: Text((d.data()['role'] ?? 'admin') == 'admin' ? 'مشرف كامل' : 'محرّر'),
                     trailing: IconButton(
                       icon: const Icon(Icons.remove_circle_outline, color: Colors.red),
                       onPressed: () => cloud.removeAdmin(d.id),
