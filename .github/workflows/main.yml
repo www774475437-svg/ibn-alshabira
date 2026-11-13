@@ -119,7 +119,7 @@ jobs:
           path: assets/data
 
       - name: Build website
-        run: flutter build web --release --base-href /ibn-alshabira/ --dart-define=BUILD_NUMBER=0
+        run: flutter build web --release --no-web-resources-cdn --base-href /ibn-alshabira/ --dart-define=BUILD_NUMBER=0
 
       - name: Publish website (gh-pages branch)
         uses: peaceiris/actions-gh-pages@v4

@@ -24,6 +24,10 @@ IconData chapterIcon(String key) {
       return Icons.family_restroom;
     case 'akhlaq':
       return Icons.favorite_border;
+    case 'manhaj':
+      return Icons.alt_route;
+    case 'mawaiz':
+      return Icons.spa_outlined;
     default:
       return Icons.library_books_outlined;
   }

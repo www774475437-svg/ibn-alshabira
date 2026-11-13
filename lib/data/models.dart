@@ -33,8 +33,17 @@ class Fatwa {
   /// Link to a voice recording of the answer ('' = none).
   final String audio;
 
-  /// Pre-computed normalized text for fast search.
-  late String searchText;
+  /// Normalized text for search, built the first time it is needed
+  /// (so opening the app stays fast with thousands of answers).
+  String? _search;
+  String _chapterName = '';
+  String get searchText => _search ??= normalizeArabic('$title $question $answer ${tags.join(' ')} $_chapterName');
+  set searchText(String v) => _search = v;
+
+  void resetSearch(String chapterName) {
+    _chapterName = chapterName;
+    _search = null;
+  }
 
   Fatwa({
     required this.id,

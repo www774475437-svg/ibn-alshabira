@@ -1027,3 +1027,172 @@ class LogTab extends StatelessWidget {
     );
   }
 }
+
+
+/// Developer only: what one staff member did, and when they came in.
+class StaffActivityScreen extends StatefulWidget {
+  final String email;
+  const StaffActivityScreen({super.key, required this.email});
+
+  @override
+  State<StaffActivityScreen> createState() => _StaffActivityScreenState();
+}
+
+class _StaffActivityScreenState extends State<StaffActivityScreen> {
+  late Future<List<Map<String, dynamic>>> _future = Cloud.instance.activityOf(widget.email);
+  String _filter = '';
+
+  static String when(DateTime t) {
+    final d = DateTime.now().difference(t);
+    String ago;
+    if (d.inMinutes < 1) {
+      ago = 'الآن';
+    } else if (d.inMinutes < 60) {
+      ago = 'قبل ${d.inMinutes} د';
+    } else if (d.inHours < 24) {
+      ago = 'قبل ${d.inHours} س';
+    } else {
+      ago = 'قبل ${d.inDays} يوم';
+    }
+    final h = t.hour % 12 == 0 ? 12 : t.hour % 12;
+    return '$ago · ${t.day}/${t.month}/${t.year} $h:${t.minute.toString().padLeft(2, '0')} ${t.hour < 12 ? 'ص' : 'م'}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('نشاط المشرف')),
+      body: FutureBuilder(
+        future: _future,
+        builder: (context, snap) {
+          if (snap.hasError) return const EmptyState(icon: Icons.error_outline, text: 'تعذّر التحميل');
+          if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+          final all = snap.data!;
+          DateTime? at(Map<String, dynamic> m) =>
+              m['at'] is Timestamp ? (m['at'] as Timestamp).toDate().toLocal() : null;
+          final visits = all.where((m) => m['action'] == 'دخول').toList();
+          final work = all.where((m) => m['action'] != 'دخول').toList();
+          final counts = <String, int>{};
+          for (final m in work) {
+            final a = '${m['action'] ?? ''}';
+            counts[a] = (counts[a] ?? 0) + 1;
+          }
+          final weekAgo = DateTime.now().subtract(const Duration(days: 7));
+          final visitsWeek = visits.where((m) => at(m)?.isAfter(weekAgo) ?? false).length;
+          final fromApp = visits.where((m) => m['target'] == 'التطبيق').length;
+          final fromSite = visits.where((m) => m['target'] == 'الموقع').length;
+          final lastVisit = visits.isEmpty ? null : at(visits.first);
+          final lastWork = work.isEmpty ? null : at(work.first);
+          final shown = _filter.isEmpty ? all : all.where((m) => m['action'] == _filter).toList();
+
+          Widget stat(IconData icon, String label, String value) => Expanded(
+                child: Card(
+                  margin: const EdgeInsets.all(4),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
+                    child: Column(children: [
+                      Icon(icon, color: kGold),
+                      const SizedBox(height: 4),
+                      Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                      Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                    ]),
+                  ),
+                ),
+              );
+
+          return RefreshIndicator(
+            onRefresh: () async {
+              setState(() => _future = Cloud.instance.activityOf(widget.email));
+              await _future;
+            },
+            child: ListView(
+              padding: const EdgeInsets.all(12),
+              children: [
+                Text(widget.email,
+                    textAlign: TextAlign.center,
+                    textDirection: TextDirection.ltr,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                const SizedBox(height: 10),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(children: [
+                          const Icon(Icons.login, color: kGold, size: 20),
+                          const SizedBox(width: 6),
+                          Expanded(child: Text('آخر دخول: ${lastVisit == null ? 'لم يدخل بعد' : when(lastVisit)}')),
+                        ]),
+                        const SizedBox(height: 8),
+                        Row(children: [
+                          const Icon(Icons.edit_note, color: kGold, size: 20),
+                          const SizedBox(width: 6),
+                          Expanded(child: Text('آخر عمل: ${lastWork == null ? 'لا يوجد' : when(lastWork)}')),
+                        ]),
+                      ],
+                    ),
+                  ),
+                ),
+                Row(children: [
+                  stat(Icons.login, 'مرات الدخول', '${visits.length}'),
+                  stat(Icons.date_range, 'دخول هذا الأسبوع', '$visitsWeek'),
+                  stat(Icons.task_alt, 'الأعمال', '${work.length}'),
+                ]),
+                Row(children: [
+                  stat(Icons.phone_android, 'من التطبيق', '$fromApp'),
+                  stat(Icons.language, 'من الموقع', '$fromSite'),
+                ]),
+                if (counts.isNotEmpty) ...[
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(4, 14, 4, 6),
+                    child: Text('ماذا عمل', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+                  ),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      ChoiceChip(
+                        label: Text('الكل (${all.length})'),
+                        selected: _filter.isEmpty,
+                        onSelected: (_) => setState(() => _filter = ''),
+                      ),
+                      ChoiceChip(
+                        label: Text('الدخول (${visits.length})'),
+                        selected: _filter == 'دخول',
+                        onSelected: (_) => setState(() => _filter = 'دخول'),
+                      ),
+                      for (final e in (counts.entries.toList()..sort((a, b) => b.value.compareTo(a.value))))
+                        ChoiceChip(
+                          label: Text('${e.key} (${e.value})'),
+                          selected: _filter == e.key,
+                          onSelected: (_) => setState(() => _filter = e.key),
+                        ),
+                    ],
+                  ),
+                ],
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(4, 16, 4, 4),
+                  child: Text('السجل التفصيلي', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+                ),
+                if (shown.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Text('لا شيء بعد', style: TextStyle(color: Colors.grey)),
+                  ),
+                for (final m in shown.take(300))
+                  ListTile(
+                    dense: true,
+                    leading: Icon(m['action'] == 'دخول' ? Icons.login : Icons.history, color: kGold),
+                    title: Text('${m['action'] ?? ''}${'${m['target'] ?? ''}'.isEmpty ? '' : ': ${m['target']}'}',
+                        maxLines: 2, overflow: TextOverflow.ellipsis),
+                    subtitle: Text(at(m) == null ? '' : when(at(m)!)),
+                  ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}

@@ -341,6 +341,7 @@ class _FatwaScreenState extends State<FatwaScreen> {
                 Cloud.instance.addView(_pages[i].id);
               },
               itemBuilder: (context, i) => _AnswerBody(
+                key: ValueKey(_pages[i].id),
                 fatwa: _pages[i],
                 scale: _scale,
                 find: _finding ? _find : '',
@@ -441,18 +442,40 @@ class _PagerBar extends StatelessWidget {
   }
 }
 
-class _AnswerBody extends StatelessWidget {
+class _AnswerBody extends StatefulWidget {
   final Fatwa fatwa;
   final double scale;
   final String find;
   final VoidCallback onCopy;
   final VoidCallback onReport;
   const _AnswerBody(
-      {required this.fatwa,
+      {super.key,
+      required this.fatwa,
       required this.scale,
       this.find = '',
       required this.onCopy,
       required this.onReport});
+
+  @override
+  State<_AnswerBody> createState() => _AnswerBodyState();
+}
+
+class _AnswerBodyState extends State<_AnswerBody> {
+  // Each answer has its own scroll position and always opens at the top,
+  // where its title and question are.
+  final _scroll = ScrollController(keepScrollOffset: false);
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  Fatwa get fatwa => widget.fatwa;
+  double get scale => widget.scale;
+  String get find => widget.find;
+  VoidCallback get onCopy => widget.onCopy;
+  VoidCallback get onReport => widget.onReport;
 
   @override
   Widget build(BuildContext context) {
@@ -473,6 +496,8 @@ class _AnswerBody extends StatelessWidget {
           ]),
         );
     return ListView(
+      key: PageStorageKey('answer-${fatwa.id}'),
+      controller: _scroll,
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
       children: [
         Wrap(

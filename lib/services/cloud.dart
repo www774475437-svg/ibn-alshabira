@@ -87,6 +87,12 @@ class Cloud extends ChangeNotifier {
       if (d.exists) {
         isAdmin = true;
         isFullAdmin = (d.data()?['role'] ?? 'admin') == 'admin';
+        // Record each visit once per session, so the developer sees
+        // when this staff member came in, and from where.
+        if (_visitLogged != e) {
+          _visitLogged = e;
+          _log('دخول', kIsWeb ? 'الموقع' : 'التطبيق');
+        }
       }
     } catch (_) {}
   }
@@ -145,6 +151,17 @@ class Cloud extends ChangeNotifier {
     } catch (_) {}
   }
 
+  String? _visitLogged;
+
+  /// Everything one staff member did (developer only), newest first.
+  Future<List<Map<String, dynamic>>> activityOf(String who) async {
+    final q = await _db.collection('log').where('by', isEqualTo: who.toLowerCase()).limit(1000).get();
+    final list = [for (final d in q.docs) d.data()];
+    int ms(Map<String, dynamic> m) => m['at'] is Timestamp ? (m['at'] as Timestamp).millisecondsSinceEpoch : 0;
+    list.sort((a, b) => ms(b).compareTo(ms(a)));
+    return list;
+  }
+
   Stream<QuerySnapshot<Map<String, dynamic>>> logStream() =>
       _db.collection('log').orderBy('at', descending: true).limit(200).snapshots();
 
@@ -167,7 +184,17 @@ class Cloud extends ChangeNotifier {
     _signingIn = true;
     try {
       if (kIsWeb) {
-        await FirebaseAuth.instance.signInWithPopup(GoogleAuthProvider());
+        try {
+          await FirebaseAuth.instance.signInWithPopup(GoogleAuthProvider());
+        } on FirebaseAuthException catch (e) {
+          // Some phone browsers (e.g. Samsung Internet) block the popup:
+          // sign in on the same page instead.
+          if (e.code == 'popup-blocked' || e.code == 'operation-not-supported-in-this-environment') {
+            await FirebaseAuth.instance.signInWithRedirect(GoogleAuthProvider());
+          } else {
+            rethrow;
+          }
+        }
         return null;
       }
       await _ensureGoogle();
