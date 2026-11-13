@@ -34,7 +34,7 @@ class _ChapterScreenState extends State<ChapterScreen> {
                   children: [
                     for (final (key, label) in const [
                       ('all', 'الكل'),
-                      ('fatwa', 'فتاوى'),
+                      ('fatwa', 'أجوبة'),
                       ('article', 'مقالات'),
                       ('letter', 'رسائل'),
                     ])

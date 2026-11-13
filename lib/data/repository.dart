@@ -38,6 +38,17 @@ class Repository extends ChangeNotifier {
   ThemeMode themeMode = ThemeMode.system;
   double fontScale = 1.0;
   bool dailyNotification = true;
+  int notifyHour = 8;
+  int notifyMinute = 0;
+
+  /// '' = system font, 'Amiri', 'ReemKufi'.
+  String fontFamily = 'Amiri';
+
+  /// Text size inside an answer (pinch to zoom).
+  double readingScale = 1.0;
+
+  Set<String> readLater = {};
+  List<String> recentSearches = [];
 
   Future<void> load(SharedPreferences prefs) async {
     _prefs = prefs;
@@ -67,6 +78,12 @@ class Repository extends ChangeNotifier {
     themeMode = ThemeMode.values[prefs.getInt('themeMode') ?? ThemeMode.system.index];
     fontScale = prefs.getDouble('fontScale') ?? 1.0;
     dailyNotification = prefs.getBool('dailyNotification') ?? true;
+    notifyHour = prefs.getInt('notifyHour') ?? 8;
+    notifyMinute = prefs.getInt('notifyMinute') ?? 0;
+    fontFamily = prefs.getString('fontFamily') ?? 'Amiri';
+    readingScale = prefs.getDouble('readingScale') ?? 1.0;
+    readLater = (prefs.getStringList('readLater') ?? []).toSet();
+    recentSearches = prefs.getStringList('recentSearches') ?? [];
   }
 
   String chapterName(String id) {
@@ -137,6 +154,52 @@ class Repository extends ChangeNotifier {
     }
     scored.sort((a, b) => b.$2.compareTo(a.$2));
     return scored.take(limit).map((e) => e.$1).toList();
+  }
+
+  void setNotifyTime(int hour, int minute) {
+    notifyHour = hour;
+    notifyMinute = minute;
+    _prefs.setInt('notifyHour', hour);
+    _prefs.setInt('notifyMinute', minute);
+    notifyListeners();
+  }
+
+  void setFontFamily(String f) {
+    fontFamily = f;
+    _prefs.setString('fontFamily', f);
+    notifyListeners();
+  }
+
+  /// Saved without notifying: pinch-zoom updates its own screen.
+  void saveReadingScale(double v) {
+    readingScale = v;
+    _prefs.setDouble('readingScale', v);
+  }
+
+  bool isReadLater(String id) => readLater.contains(id);
+
+  void toggleReadLater(String id) {
+    if (!readLater.remove(id)) readLater.add(id);
+    _prefs.setStringList('readLater', readLater.toList());
+    notifyListeners();
+  }
+
+  List<Fatwa> get readLaterFatwas => fatwas.where((f) => readLater.contains(f.id)).toList();
+
+  void addRecentSearch(String q) {
+    q = q.trim();
+    if (q.length < 2) return;
+    recentSearches.remove(q);
+    recentSearches.insert(0, q);
+    if (recentSearches.length > 10) recentSearches = recentSearches.sublist(0, 10);
+    _prefs.setStringList('recentSearches', recentSearches);
+    notifyListeners();
+  }
+
+  void clearRecentSearches() {
+    recentSearches = [];
+    _prefs.setStringList('recentSearches', recentSearches);
+    notifyListeners();
   }
 
   void setDailyNotification(bool v) {

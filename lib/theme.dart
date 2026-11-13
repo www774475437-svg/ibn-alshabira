@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 const kGreen = Color(0xFF1F5E3B);
 const kGold = Color(0xFFC9A54C);
 
-ThemeData buildTheme(Brightness brightness) {
+ThemeData buildTheme(Brightness brightness, [String fontFamily = '']) {
   final dark = brightness == Brightness.dark;
   final scheme = ColorScheme.fromSeed(
     seedColor: kGreen,
@@ -16,6 +16,7 @@ ThemeData buildTheme(Brightness brightness) {
 
   return ThemeData(
     useMaterial3: true,
+    fontFamily: fontFamily.isEmpty ? null : fontFamily,
     colorScheme: scheme,
     scaffoldBackgroundColor: scheme.surface,
     appBarTheme: AppBarTheme(

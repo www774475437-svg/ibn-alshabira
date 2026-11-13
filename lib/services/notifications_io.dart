@@ -6,7 +6,6 @@ class DailyNotifications {
   static final _plugin = FlutterLocalNotificationsPlugin();
   static bool _ready = false;
   static const _id = 1;
-  static const _hour = 8; // 8 AM on the phone's clock
 
   static Future<void> init() async {
     try {
@@ -21,7 +20,7 @@ class DailyNotifications {
     }
   }
 
-  static Future<void> setEnabled(bool enabled) async {
+  static Future<void> setEnabled(bool enabled, {int hour = 8, int minute = 0}) async {
     if (!_ready) return;
     try {
       await _plugin.cancel(_id);
@@ -32,20 +31,20 @@ class DailyNotifications {
           ?.requestNotificationsPermission();
 
       final now = DateTime.now();
-      var next = DateTime(now.year, now.month, now.day, _hour);
+      var next = DateTime(now.year, now.month, now.day, hour, minute);
       if (!next.isAfter(now)) next = next.add(const Duration(days: 1));
       final when = tz.TZDateTime.from(next, tz.UTC);
 
       await _plugin.zonedSchedule(
         _id,
-        'فتوى اليوم',
-        'افتح تطبيق «ابن الشابرة» واقرأ فتوى اليوم',
+        'جواب اليوم',
+        'افتح تطبيق «ابن الشابرة» واقرأ جواب اليوم',
         when,
         const NotificationDetails(
           android: AndroidNotificationDetails(
             'daily_fatwa',
-            'فتوى اليوم',
-            channelDescription: 'تنبيه يومي بفتوى اليوم',
+            'جواب اليوم',
+            channelDescription: 'تنبيه يومي بجواب اليوم',
             importance: Importance.defaultImportance,
             priority: Priority.defaultPriority,
           ),

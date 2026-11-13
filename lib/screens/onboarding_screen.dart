@@ -19,12 +19,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     (
       Icons.menu_book_rounded,
       'مرحباً بك في «ابن الشابرة»',
-      'تطبيق يجمع فتاوى ومقالات وكتب ورسائل الشيخ قائد بن غانم الشابرة حفظه الله، من محافظة إب باليمن.',
+      'تطبيق يجمع أجوبة ومقالات وكتب ورسائل الشيخ قائد بن غانم الشابرة حفظه الله، من محافظة إب باليمن.',
     ),
     (
       Icons.search_rounded,
       'ابحث عن أي مسألة',
-      'اكتب كلمة واحدة، فتظهر لك الفتاوى المتعلقة بها، مرتّبة على أبواب العقيدة والفقه والآداب.',
+      'اكتب كلمة واحدة، فتظهر لك الأجوبة المتعلقة بها، مرتّبة على أبواب العقيدة والفقه والآداب.',
     ),
     (
       Icons.forum_outlined,
@@ -67,14 +67,19 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Container(
-                          padding: const EdgeInsets.all(28),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(color: kGold, width: 2),
+                        if (i == 0)
+                          ClipOval(
+                            child: Image.asset('assets/icon/icon.png', width: 150, height: 150),
+                          )
+                        else
+                          Container(
+                            padding: const EdgeInsets.all(28),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(color: kGold, width: 2),
+                            ),
+                            child: Icon(p.$1, size: 72, color: kGold),
                           ),
-                          child: Icon(p.$1, size: 72, color: kGold),
-                        ),
                         const SizedBox(height: 36),
                         Text(p.$2,
                             textAlign: TextAlign.center,

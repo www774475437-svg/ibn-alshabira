@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "402664894391",
+    "project_id": "ibn-alshabira",
+    "storage_bucket": "ibn-alshabira.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:402664894391:android:b09cad286f2dd5a1604232",
+        "android_client_info": {
+          "package_name": "com.ibnalshabira.ibn_alshabira"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCOpkQxy5gP2-PuFAphg_tlJBv2gI8RkVI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -22,7 +22,7 @@ class AskScreen extends StatelessWidget {
           SizedBox(height: 12),
           Text(
             'ستتمكن من إرسال سؤالك إلى الشيخ من هنا مباشرة، ويرد عليك الشيخ في محادثة خاصة.\n\n'
-            'وقد ينشر الشيخ السؤال وجوابه فتوى في التطبيق ليستفيد منها الجميع، '
+            'وقد ينشر الشيخ السؤال وجوابه في التطبيق ليستفيد منها الجميع، '
             'ولا يظهر اسم السائل أبداً.',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 16, height: 1.8),
