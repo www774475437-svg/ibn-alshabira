@@ -81,10 +81,23 @@ class Repository extends ChangeNotifier {
     } catch (_) {
       channel = [];
     }
+    // Channel posts that became answers/articles appear in «من قناة الشيخ» too.
+    channel = [
+      ...channel,
+      for (final f in fatwas)
+        if (f.id.startsWith('tg-') && int.tryParse(f.id.substring(3)) != null)
+          ChannelPost(
+            id: int.parse(f.id.substring(3)),
+            text: f.question.isEmpty ? f.answer : '${f.question}\n\nالجواب:\n${f.answer}',
+            date: f.date,
+            fatwaId: f.id,
+          ),
+    ]..sort((a, b) => b.id.compareTo(a.id));
 
     try {
       final vd = jsonDecode(await rootBundle.loadString('assets/data/videos.json')) as List;
       videos = vd.map((e) => Video.fromJson(e as Map<String, dynamic>)).toList();
+      _fetchedVideos = videos;
     } catch (_) {
       videos = [];
     }
@@ -134,11 +147,18 @@ class Repository extends ChangeNotifier {
   }
 
   /// Merges answers published from inside the app and edited titles.
-  void applyRemote(List<Fatwa> published, Map<String, String> titleEdits) {
+  void applyRemote(List<Fatwa> published, Map<String, Map<String, dynamic>> edits) {
     final all = [..._bundled, ...published];
+    final known = {for (final c in chapters) c.id};
     for (final f in all) {
-      final t = titleEdits[f.id];
-      if (t != null && t.isNotEmpty) f.title = t;
+      final e = edits[f.id];
+      if (e != null) {
+        final t = '${e['title'] ?? ''}';
+        if (t.isNotEmpty) f.title = t;
+        final c = '${e['chapter'] ?? ''}';
+        if (c.isNotEmpty && known.contains(c)) f.chapter = c;
+        if (e['sub'] != null) f.sub = '${e['sub']}';
+      }
       _index(f);
     }
     fatwas = all;
@@ -221,6 +241,14 @@ class Repository extends ChangeNotifier {
   int countInChapter(String id) => fatwas.where((f) => f.chapter == id).length;
 
   /// Every word of the query must appear (in any order).
+  List<Video> _fetchedVideos = [];
+
+  void setExtraVideos(List<Video> extra) {
+    final ids = {for (final v in extra) v.id};
+    videos = [...extra, ..._fetchedVideos.where((v) => !ids.contains(v.id))];
+    notifyListeners();
+  }
+
   /// Posts from the sheikh's Telegram channel (newest first).
   List<ChannelPost> channel = [];
 

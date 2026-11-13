@@ -9,7 +9,21 @@ permissions:
   contents: write
 
 jobs:
+  data:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Posts from the sheikh's Telegram channel
+        run: python3 tool/fetch_telegram.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: channel-data
+          path: |
+            assets/data/fatwas.json
+            assets/data/channel.json
+
   android:
+    needs: data
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -48,8 +62,11 @@ jobs:
       - name: Latest videos from the sheikh's YouTube channel
         run: python3 tool/fetch_youtube.py
 
-      - name: Posts from the sheikh's Telegram channel
-        run: python3 tool/fetch_telegram.py
+      - name: Answers from the sheikh's Telegram channel (fetched once)
+        uses: actions/download-artifact@v4
+        with:
+          name: channel-data
+          path: assets/data
 
       - run: flutter pub get
 
@@ -71,6 +88,7 @@ jobs:
           files: ibn-alshabira.apk
 
   website:
+    needs: data
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -94,8 +112,11 @@ jobs:
       - name: Latest videos from the sheikh's YouTube channel
         run: python3 tool/fetch_youtube.py
 
-      - name: Posts from the sheikh's Telegram channel
-        run: python3 tool/fetch_telegram.py
+      - name: Answers from the sheikh's Telegram channel (fetched once)
+        uses: actions/download-artifact@v4
+        with:
+          name: channel-data
+          path: assets/data
 
       - name: Build website
         run: flutter build web --release --base-href /ibn-alshabira/ --dart-define=BUILD_NUMBER=0

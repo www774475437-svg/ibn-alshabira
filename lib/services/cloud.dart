@@ -425,7 +425,7 @@ class Cloud extends ChangeNotifier {
               'id': d.id,
             }),
         ],
-        {for (final d in edits.docs) d.id: '${d.data()['title'] ?? ''}'},
+        {for (final d in edits.docs) d.id: d.data()},
       );
     } catch (e) {
       debugPrint('remote answers failed: $e');
@@ -466,9 +466,22 @@ class Cloud extends ChangeNotifier {
     }
   }
 
+  /// Title, chapter and sub-chapter of an answer that came with the app
+  /// (e.g. from the sheikh's channel).
+  Future<String?> editBundled(String id, {required String title, required String chapter, required String sub}) async {
+    try {
+      await _db.doc('titleEdits/$id').set({'title': title.trim(), 'chapter': chapter, 'sub': sub.trim(), 'by': email});
+      _log('تعديل جواب', title);
+      await loadRemoteAnswers();
+      return null;
+    } catch (_) {
+      return 'تعذّر الحفظ';
+    }
+  }
+
   Future<String?> editTitle(String id, String title) async {
     try {
-      await _db.doc('titleEdits/$id').set({'title': title.trim(), 'by': email});
+      await _db.doc('titleEdits/$id').set({'title': title.trim(), 'by': email}, SetOptions(merge: true));
       _log('تعديل عنوان', title);
       await loadRemoteAnswers();
       return null;
@@ -652,6 +665,11 @@ class Cloud extends ChangeNotifier {
         for (final e in ((c['synonyms']?['map'] ?? {}) as Map).entries)
           '${e.key}': ((e.value ?? []) as List).map((x) => '$x').toList(),
       };
+      extraVideos = [
+        for (final m in ((c['videos']?['items'] ?? []) as List))
+          if (m is Map) Video(id: '${m['id'] ?? ''}', title: '${m['title'] ?? ''}', published: '${m['published'] ?? ''}'),
+      ];
+      Repository.instance.setExtraVideos(extraVideos);
       lessons = [
         for (final m in ((c['lessons']?['items'] ?? []) as List))
           if (m is Map) Lesson('${m['title'] ?? ''}', '${m['url'] ?? ''}', '${m['group'] ?? ''}'),
@@ -678,6 +696,22 @@ class Cloud extends ChangeNotifier {
     } catch (e) {
       debugPrint('config failed: $e');
     }
+  }
+
+  /// Videos the staff added by link (shown before the fetched ones).
+  List<Video> extraVideos = [];
+
+  Future<String?> setVideos(List<Video> list, String logText) async {
+    final err = await setConfig(
+        'videos',
+        {'items': [for (final v in list) {'id': v.id, 'title': v.title, 'published': v.published}]},
+        logText);
+    if (err == null) {
+      extraVideos = list;
+      Repository.instance.setExtraVideos(list);
+      notifyListeners();
+    }
+    return err;
   }
 
   /// Audio library of the sheikh's lessons (kept in config/lessons).
