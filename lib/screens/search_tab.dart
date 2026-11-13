@@ -133,6 +133,9 @@ class _SearchTabState extends State<SearchTab> {
               ),
             ),
           ),
+          if (_query.trim().isNotEmpty) ...[
+            _Suggestions(query: _query, onPick: _search),
+          ],
           if (_query.trim().isNotEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -155,6 +158,37 @@ class _SearchTabState extends State<SearchTab> {
                         ),
                       ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Word suggestions while typing: «النم» → «النمص».
+class _Suggestions extends StatelessWidget {
+  final String query;
+  final ValueChanged<String> onPick;
+  const _Suggestions({required this.query, required this.onPick});
+
+  @override
+  Widget build(BuildContext context) {
+    final words = Repository.instance.suggestions(query, kIndexTopics);
+    if (words.isEmpty) return const SizedBox.shrink();
+    return SizedBox(
+      height: 46,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        children: [
+          for (final w in words)
+            Padding(
+              padding: const EdgeInsetsDirectional.only(end: 6),
+              child: ActionChip(
+                avatar: const Icon(Icons.north_west, size: 16),
+                label: Text(w),
+                onPressed: () => onPick(w),
+              ),
+            ),
         ],
       ),
     );

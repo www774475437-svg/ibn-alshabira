@@ -64,6 +64,24 @@ class _HomeTabState extends State<HomeTab> {
             SliverToBoxAdapter(child: _FatwaOfDay(fatwa: repo.fatwaOfDay!)),
           SliverToBoxAdapter(
             child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(48),
+                  side: const BorderSide(color: kGold),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+                icon: const Icon(Icons.shuffle, color: kGold),
+                label: const Text('جواب عشوائي لم تقرأه بعد'),
+                onPressed: () {
+                  final f = repo.randomUnread();
+                  if (f != null) openFatwa(context, f);
+                },
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
               child: Card(
                 child: ListTile(
@@ -136,7 +154,7 @@ class _Header extends StatelessWidget {
     return Container(
       padding: EdgeInsets.fromLTRB(20, MediaQuery.of(context).padding.top + 20, 20, 24),
       decoration: BoxDecoration(
-        color: dark ? const Color(0xFF0E0E0E) : kGreen,
+        color: headerColor(context, Repository.instance.palette),
         borderRadius: const BorderRadius.vertical(bottom: Radius.circular(28)),
       ),
       child: Column(

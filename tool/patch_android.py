@@ -52,3 +52,43 @@ elif groovy.exists():
         g += "\ndependencies {\n    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'\n}\n"
     groovy.write_text(g, encoding="utf-8")
     print("build.gradle patched")
+
+# --- Permanent release signing key (decrypted by the workflow when the
+#     KEY_PASSWORD secret exists; otherwise the debug key is used) --------
+if kts.exists():
+    g = kts.read_text(encoding="utf-8")
+    if "keyProps" not in g:
+        g = "import java.util.Properties\n" + g
+        g = g.replace("android {", '''val keyProps = Properties().apply {
+    val f = rootProject.file("key.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+
+android {''', 1)
+        g = g.replace("    buildTypes {", '''    signingConfigs {
+        if (keyProps.isNotEmpty()) {
+            create("release") {
+                storeFile = file(keyProps["storeFile"] as String)
+                storePassword = keyProps["storePassword"] as String
+                keyAlias = keyProps["keyAlias"] as String
+                keyPassword = keyProps["keyPassword"] as String
+            }
+        }
+    }
+
+    buildTypes {''', 1)
+        g = g.replace('signingConfig = signingConfigs.getByName("debug")',
+                      'signingConfig = if (keyProps.isNotEmpty()) signingConfigs.getByName("release") else signingConfigs.getByName("debug")', 1)
+        kts.write_text(g, encoding="utf-8")
+        print("Release signing configured")
+
+# --- Launch screen background: dark green instead of white ---------------
+for d in ["drawable", "drawable-v21"]:
+    lb = Path(f"android/app/src/main/res/{d}/launch_background.xml")
+    if lb.exists():
+        lb.write_text('''<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item><color android:color="#0A2417" /></item>
+</layer-list>
+''', encoding="utf-8")
+print("Launch background set")

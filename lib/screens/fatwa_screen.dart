@@ -8,6 +8,8 @@ import '../data/repository.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 
+/// Shows one answer; swipe (or use the arrows) to move through the other
+/// answers of the same chapter, like turning the pages of a book.
 class FatwaScreen extends StatefulWidget {
   final Fatwa fatwa;
   const FatwaScreen({super.key, required this.fatwa});
@@ -17,13 +19,34 @@ class FatwaScreen extends StatefulWidget {
 }
 
 class _FatwaScreenState extends State<FatwaScreen> {
-  // Pinch-to-zoom: raw pointers (a Listener) so normal scrolling is untouched.
+  final repo = Repository.instance;
+  late final List<Fatwa> _pages;
+  late final PageController _pager;
+  late int _index;
+
+  // Pinch-to-zoom with raw pointers (a Listener), so scrolling is untouched.
   final Map<int, Offset> _pointers = {};
   double? _startDistance;
   double _startScale = 1.0;
   double _scale = Repository.instance.readingScale;
 
-  Fatwa get fatwa => widget.fatwa;
+  Fatwa get current => _pages[_index];
+
+  @override
+  void initState() {
+    super.initState();
+    final siblings = repo.byChapter(widget.fatwa.chapter);
+    _pages = siblings.any((f) => f.id == widget.fatwa.id) ? siblings : [widget.fatwa];
+    _index = _pages.indexWhere((f) => f.id == widget.fatwa.id);
+    _pager = PageController(initialPage: _index);
+    repo.markRead(current.id);
+  }
+
+  @override
+  void dispose() {
+    _pager.dispose();
+    super.dispose();
+  }
 
   double _distance() {
     final p = _pointers.values.toList();
@@ -33,8 +56,10 @@ class _FatwaScreenState extends State<FatwaScreen> {
   void _onDown(PointerDownEvent e) {
     _pointers[e.pointer] = e.position;
     if (_pointers.length == 2) {
-      _startDistance = _distance();
-      _startScale = _scale;
+      setState(() {
+        _startDistance = _distance();
+        _startScale = _scale;
+      });
     }
   }
 
@@ -50,37 +75,122 @@ class _FatwaScreenState extends State<FatwaScreen> {
   void _onUp(PointerEvent e) {
     _pointers.remove(e.pointer);
     if (_pointers.length < 2 && _startDistance != null) {
-      _startDistance = null;
-      Repository.instance.saveReadingScale(_scale);
+      setState(() => _startDistance = null);
+      repo.saveReadingScale(_scale);
     }
+  }
+
+  void _go(int delta) {
+    final target = _index + delta;
+    if (target < 0 || target >= _pages.length) return;
+    _pager.animateToPage(target,
+        duration: const Duration(milliseconds: 420), curve: Curves.easeInOutCubic);
+  }
+
+  void _toast(String text) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+
+  void _copyOptions() {
+    showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.copy),
+              title: const Text('نسخ الجواب كما هو (بالتشكيل)'),
+              onTap: () {
+                Navigator.pop(ctx);
+                Clipboard.setData(ClipboardData(text: current.shareText));
+                _toast('تم النسخ');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.text_fields),
+              title: const Text('نسخ الجواب دون تشكيل'),
+              onTap: () {
+                Navigator.pop(ctx);
+                Clipboard.setData(ClipboardData(text: stripTashkeel(current.shareText)));
+                _toast('تم النسخ دون تشكيل');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.link),
+              title: const Text('نسخ رابط الجواب'),
+              onTap: () {
+                Navigator.pop(ctx);
+                Clipboard.setData(ClipboardData(text: AppConfig.fatwaLink(current.id)));
+                _toast('تم نسخ الرابط');
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Copies a short report to the clipboard and opens the developer's
+  /// Telegram to paste it (until reports go to the online database).
+  void _reportError() {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('الإبلاغ عن خطأ'),
+        content: TextField(
+          controller: controller,
+          maxLines: 4,
+          decoration: const InputDecoration(
+            hintText: 'اكتب الخطأ الذي وجدته (اختياري)…',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              final note = controller.text.trim();
+              final report = '⚠️ بلاغ عن خطأ في تطبيق «ابن الشابرة»\n'
+                  'الجواب: ${current.title}\n'
+                  'الرابط: ${AppConfig.fatwaLink(current.id)}\n'
+                  'الملاحظة: ${note.isEmpty ? '—' : note}';
+              Clipboard.setData(ClipboardData(text: report));
+              _toast('نُسخ البلاغ، الصقه في رسالة المطوّر');
+              openUrl(context, repo.developerUrl);
+            },
+            child: const Text('إرسال'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final repo = Repository.instance;
     return ListenableBuilder(
       listenable: repo,
       builder: (context, _) {
-        final fav = repo.isFavorite(fatwa.id);
-        final later = repo.isReadLater(fatwa.id);
+        final fav = repo.isFavorite(current.id);
+        final later = repo.isReadLater(current.id);
         return Scaffold(
           appBar: AppBar(
-            title: Text(fatwa.typeLabel),
+            title: Text(current.typeLabel),
             actions: [
               IconButton(
                 tooltip: later ? 'إزالة من «اقرأ لاحقاً»' : 'اقرأ لاحقاً',
                 icon: Icon(later ? Icons.watch_later : Icons.watch_later_outlined),
                 onPressed: () {
-                  repo.toggleReadLater(fatwa.id);
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text(later ? 'أُزيل من «اقرأ لاحقاً»' : 'أُضيف إلى «اقرأ لاحقاً»'),
-                  ));
+                  repo.toggleReadLater(current.id);
+                  _toast(later ? 'أُزيل من «اقرأ لاحقاً»' : 'أُضيف إلى «اقرأ لاحقاً»');
                 },
               ),
               IconButton(
                 tooltip: fav ? 'إزالة من المحفوظات' : 'حفظ',
                 icon: Icon(fav ? Icons.bookmark : Icons.bookmark_border),
-                onPressed: () => repo.toggleFavorite(fatwa.id),
+                onPressed: () => repo.toggleFavorite(current.id),
               ),
             ],
           ),
@@ -89,92 +199,199 @@ class _FatwaScreenState extends State<FatwaScreen> {
             onPointerMove: _onMove,
             onPointerUp: _onUp,
             onPointerCancel: _onUp,
-            child: ListView(
-            padding: const EdgeInsets.all(18),
-            children: [
-              Text('باب ${repo.chapterName(fatwa.chapter)}',
-                  style: const TextStyle(color: kGoldChip, fontWeight: FontWeight.w600)),
-              const SizedBox(height: 8),
-              SelectableText(fatwa.title,
-                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, height: 1.5)),
-              const SizedBox(height: 16),
-              if (fatwa.question.isNotEmpty) ...[
-                _Block(label: 'السؤال', text: fatwa.question, highlight: true, scale: _scale),
-                const SizedBox(height: 14),
-              ],
-              _Block(
-                label: fatwa.question.isNotEmpty ? 'الجواب' : null,
-                text: fatwa.answer,
+            child: PageView.builder(
+              controller: _pager,
+              // While two fingers are zooming, don't turn the page.
+              physics: _startDistance != null
+                  ? const NeverScrollableScrollPhysics()
+                  : const PageScrollPhysics(),
+              itemCount: _pages.length,
+              onPageChanged: (i) {
+                setState(() => _index = i);
+                repo.markRead(_pages[i].id);
+              },
+              itemBuilder: (context, i) => _AnswerBody(
+                fatwa: _pages[i],
                 scale: _scale,
+                onCopy: _copyOptions,
+                onReport: _reportError,
               ),
-              const Padding(
-                padding: EdgeInsets.only(top: 6),
-                child: Text('قرّب إصبعيك أو باعدهما لتصغير الخط أو تكبيره',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 12, color: Colors.grey)),
-              ),
-              if (fatwa.tags.isNotEmpty) ...[
-                const SizedBox(height: 18),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [for (final t in fatwa.tags) Chip(label: Text('#$t'))],
-                ),
-              ],
-              if (fatwa.date.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Text('تاريخ النشر: ${fatwa.date}', style: const TextStyle(color: Colors.grey)),
-              ],
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      icon: const Icon(Icons.copy),
-                      label: const Text('نسخ'),
-                      onPressed: () {
-                        Clipboard.setData(ClipboardData(text: fatwa.shareText));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('تم النسخ')),
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: FilledButton.icon(
-                      icon: const Icon(Icons.share),
-                      label: const Text('مشاركة'),
-                      onPressed: () => Share.share(fatwa.shareText),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              TextButton.icon(
-                icon: const Icon(Icons.link),
-                label: const Text('نسخ رابط الجواب'),
-                onPressed: () {
-                  Clipboard.setData(ClipboardData(text: AppConfig.fatwaLink(fatwa.id)));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('تم نسخ الرابط')),
-                  );
-                },
-              ),
-              if (fatwa.source.isNotEmpty) ...[
-                const SizedBox(height: 10),
-                TextButton.icon(
-                  icon: const Icon(Icons.open_in_new),
-                  label: const Text('عرض المصدر في تليجرام'),
-                  onPressed: () => openUrl(context, fatwa.source),
-                ),
-              ],
-              ..._related(context, repo),
-            ],
+            ),
           ),
-          ),
+          bottomNavigationBar: _pages.length > 1
+              ? _PagerBar(
+                  index: _index,
+                  count: _pages.length,
+                  onPrev: () => _go(-1),
+                  onNext: () => _go(1),
+                )
+              : null,
         );
       },
+    );
+  }
+}
+
+/// Elegant previous / next bar. In Arabic (right-to-left) "previous" sits
+/// on the right and "next" on the left, like a book.
+class _PagerBar extends StatelessWidget {
+  final int index;
+  final int count;
+  final VoidCallback onPrev;
+  final VoidCallback onNext;
+  const _PagerBar({required this.index, required this.count, required this.onPrev, required this.onNext});
+
+  Widget _arrow(BuildContext context,
+      {required bool enabled,
+      required IconData icon,
+      required String label,
+      required VoidCallback onTap,
+      required bool iconFirst}) {
+    final scheme = Theme.of(context).colorScheme;
+    final color = enabled ? scheme.primary : scheme.onSurface.withValues(alpha: 0.25);
+    final parts = <Widget>[
+      Icon(icon, size: 20, color: color),
+      const SizedBox(width: 6),
+      Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w600, fontSize: 15)),
+    ];
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 250),
+      opacity: enabled ? 1 : 0.5,
+      child: Material(
+        color: enabled ? kGold.withValues(alpha: 0.13) : Colors.transparent,
+        borderRadius: BorderRadius.circular(30),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(30),
+          onTap: enabled ? onTap : null,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: iconFirst ? parts : parts.reversed.toList(),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return SafeArea(
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardTheme.color,
+          border: Border(top: BorderSide(color: kGold.withValues(alpha: 0.25))),
+        ),
+        child: Row(
+          children: [
+            _arrow(context,
+                enabled: index > 0,
+                icon: Icons.arrow_forward_ios_rounded,
+                label: 'السابق',
+                onTap: onPrev,
+                iconFirst: true),
+            const Spacer(),
+            Text('${index + 1} من $count',
+                style: TextStyle(color: scheme.onSurface.withValues(alpha: 0.6), fontSize: 13)),
+            const Spacer(),
+            _arrow(context,
+                enabled: index < count - 1,
+                icon: Icons.arrow_back_ios_new_rounded,
+                label: 'التالي',
+                onTap: onNext,
+                iconFirst: false),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AnswerBody extends StatelessWidget {
+  final Fatwa fatwa;
+  final double scale;
+  final VoidCallback onCopy;
+  final VoidCallback onReport;
+  const _AnswerBody(
+      {required this.fatwa, required this.scale, required this.onCopy, required this.onReport});
+
+  @override
+  Widget build(BuildContext context) {
+    final repo = Repository.instance;
+    return ListView(
+      padding: const EdgeInsets.all(18),
+      children: [
+        Text('باب ${repo.chapterName(fatwa.chapter)}',
+            style: const TextStyle(color: kGoldChip, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 8),
+        SelectableText(fatwa.title,
+            style: TextStyle(fontSize: 22 * scale, fontWeight: FontWeight.bold, height: 1.5)),
+        const SizedBox(height: 16),
+        if (fatwa.question.isNotEmpty) ...[
+          _Block(label: 'السؤال', text: fatwa.question, highlight: true, scale: scale),
+          const SizedBox(height: 14),
+        ],
+        _Block(label: fatwa.question.isNotEmpty ? 'الجواب' : null, text: fatwa.answer, scale: scale),
+        const Padding(
+          padding: EdgeInsets.only(top: 6),
+          child: Text('قرّب إصبعيك أو باعدهما لتكبير الخط · واسحب يميناً أو يساراً للجواب التالي',
+              textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Colors.grey)),
+        ),
+        if (fatwa.tags.isNotEmpty) ...[
+          const SizedBox(height: 18),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [for (final t in fatwa.tags) Chip(label: Text('#$t'))],
+          ),
+        ],
+        if (fatwa.date.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Text('تاريخ النشر: ${fatwa.date}', style: const TextStyle(color: Colors.grey)),
+        ],
+        const SizedBox(height: 22),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.copy),
+                label: const Text('نسخ'),
+                onPressed: onCopy,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: FilledButton.icon(
+                icon: const Icon(Icons.share),
+                label: const Text('مشاركة'),
+                onPressed: () => Share.share(fatwa.shareText),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Wrap(
+          alignment: WrapAlignment.center,
+          children: [
+            TextButton.icon(
+              icon: const Icon(Icons.flag_outlined, size: 20),
+              label: const Text('الإبلاغ عن خطأ'),
+              onPressed: onReport,
+            ),
+            if (fatwa.source.isNotEmpty)
+              TextButton.icon(
+                icon: const Icon(Icons.open_in_new, size: 20),
+                label: const Text('المصدر'),
+                onPressed: () => openUrl(context, fatwa.source),
+              ),
+          ],
+        ),
+        ..._related(context, repo),
+        const SizedBox(height: 12),
+      ],
     );
   }
 
@@ -182,12 +399,11 @@ class _FatwaScreenState extends State<FatwaScreen> {
     final items = repo.related(fatwa);
     if (items.isEmpty) return const [];
     return [
-      const SizedBox(height: 20),
+      const SizedBox(height: 14),
       const Divider(),
       const Padding(
         padding: EdgeInsets.symmetric(vertical: 10),
-        child: Text('أجوبة ذات صلة',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        child: Text('أجوبة ذات صلة', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
       ),
       for (final f in items)
         Card(
@@ -203,6 +419,10 @@ class _FatwaScreenState extends State<FatwaScreen> {
     ];
   }
 }
+
+/// Removes Arabic diacritics (tashkeel) and tatweel.
+String stripTashkeel(String s) =>
+    s.replaceAll(RegExp(r'[ؐ-ًؚ-ٰٟۖ-ۭـ]'), '');
 
 /// Quran verses ﴿…﴾ in green with the Amiri font, hadith «…» in gold.
 List<TextSpan> highlightSpans(String text, TextStyle base) {

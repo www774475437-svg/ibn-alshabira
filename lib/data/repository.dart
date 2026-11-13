@@ -47,6 +47,12 @@ class Repository extends ChangeNotifier {
   /// Text size inside an answer (pinch to zoom).
   double readingScale = 1.0;
 
+  /// Color theme: 'green' (green & gold), 'black' (black & gold), 'paper'.
+  String palette = 'green';
+
+  /// Answers opened, per month: {'2026-11': {'id1', 'id2'}}.
+  Map<String, Set<String>> readLog = {};
+
   Set<String> readLater = {};
   List<String> recentSearches = [];
 
@@ -83,6 +89,13 @@ class Repository extends ChangeNotifier {
     fontFamily = prefs.getString('fontFamily') ?? 'Amiri';
     readingScale = prefs.getDouble('readingScale') ?? 1.0;
     readLater = (prefs.getStringList('readLater') ?? []).toSet();
+    palette = prefs.getString('palette') ?? 'green';
+    try {
+      final raw = jsonDecode(prefs.getString('readLog') ?? '{}') as Map<String, dynamic>;
+      readLog = raw.map((k, v) => MapEntry(k, (v as List).map((e) => '$e').toSet()));
+    } catch (_) {
+      readLog = {};
+    }
     recentSearches = prefs.getStringList('recentSearches') ?? [];
   }
 
@@ -174,6 +187,103 @@ class Repository extends ChangeNotifier {
   void saveReadingScale(double v) {
     readingScale = v;
     _prefs.setDouble('readingScale', v);
+  }
+
+  void setPalette(String p) {
+    palette = p;
+    _prefs.setString('palette', p);
+    notifyListeners();
+  }
+
+  static String _monthKey(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}';
+
+  void markRead(String id) {
+    final key = _monthKey(DateTime.now());
+    final set = readLog.putIfAbsent(key, () => <String>{});
+    if (set.add(id)) {
+      _prefs.setString('readLog', jsonEncode(readLog.map((k, v) => MapEntry(k, v.toList()))));
+    }
+  }
+
+  int get readThisMonth => readLog[_monthKey(DateTime.now())]?.length ?? 0;
+
+  Set<String> get everRead => readLog.values.expand((e) => e).toSet();
+
+  /// A random answer the reader hasn't opened yet (or any, if all read).
+  Fatwa? randomUnread() {
+    if (fatwas.isEmpty) return null;
+    final read = everRead;
+    final pool = fatwas.where((f) => !read.contains(f.id)).toList();
+    final list = pool.isEmpty ? fatwas : pool;
+    return list[DateTime.now().microsecondsSinceEpoch % list.length];
+  }
+
+  /// Words to suggest while typing in search.
+  List<String> suggestions(String query, List<String> extraTopics) {
+    final q = normalizeArabic(query.trim());
+    if (q.isEmpty) return [];
+    final seen = <String>{};
+    final out = <String>[];
+    void consider(String w) {
+      final n = normalizeArabic(w);
+      if (n.length < 2 || n == q || !seen.add(n)) return;
+      if (n.startsWith(q) || (n.startsWith('ال') && n.substring(2).startsWith(q))) out.add(w);
+    }
+    for (final t in extraTopics) {
+      consider(t);
+    }
+    for (final c in chapters) {
+      consider(c.name);
+    }
+    for (final f in fatwas) {
+      for (final w in '${f.title} ${f.tags.join(' ')}'.split(RegExp(r'[^\p{L}]+', unicode: true))) {
+        consider(w);
+      }
+      if (out.length > 12) break;
+    }
+    return out.take(6).toList();
+  }
+
+  // ---- Backup -----------------------------------------------------------
+  String exportBackup() => jsonEncode({
+        'app': 'ibn_alshabira',
+        'favorites': favorites.toList(),
+        'readLater': readLater.toList(),
+        'recentSearches': recentSearches,
+        'readLog': readLog.map((k, v) => MapEntry(k, v.toList())),
+        'fontFamily': fontFamily,
+        'palette': palette,
+        'fontScale': fontScale,
+        'readingScale': readingScale,
+      });
+
+  /// Returns false if the text isn't a valid backup.
+  bool importBackup(String text) {
+    try {
+      final m = jsonDecode(text.trim()) as Map<String, dynamic>;
+      if (m['app'] != 'ibn_alshabira') return false;
+      favorites = ((m['favorites'] ?? []) as List).map((e) => '$e').toSet();
+      readLater = ((m['readLater'] ?? []) as List).map((e) => '$e').toSet();
+      recentSearches = ((m['recentSearches'] ?? []) as List).map((e) => '$e').toList();
+      readLog = ((m['readLog'] ?? {}) as Map<String, dynamic>)
+          .map((k, v) => MapEntry(k, (v as List).map((e) => '$e').toSet()));
+      fontFamily = (m['fontFamily'] ?? fontFamily) as String;
+      palette = (m['palette'] ?? palette) as String;
+      fontScale = ((m['fontScale'] ?? fontScale) as num).toDouble();
+      readingScale = ((m['readingScale'] ?? readingScale) as num).toDouble();
+      _prefs.setStringList('favorites', favorites.toList());
+      _prefs.setStringList('readLater', readLater.toList());
+      _prefs.setStringList('recentSearches', recentSearches);
+      _prefs.setString('readLog', jsonEncode(readLog.map((k, v) => MapEntry(k, v.toList()))));
+      _prefs.setString('fontFamily', fontFamily);
+      _prefs.setString('palette', palette);
+      _prefs.setDouble('fontScale', fontScale);
+      _prefs.setDouble('readingScale', readingScale);
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   bool isReadLater(String id) => readLater.contains(id);
