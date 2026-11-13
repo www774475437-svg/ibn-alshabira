@@ -272,7 +272,7 @@ class AdminScreen extends StatelessWidget {
           if (full) (const Tab(icon: Icon(Icons.person_pin), text: 'عن الشيخ'), const AboutTab()),
           (const Tab(icon: Icon(Icons.flag), text: 'البلاغات'), const _ReportsTab()),
           (const Tab(icon: Icon(Icons.search_off), text: 'بحث بلا نتيجة'), const MissesTab()),
-          if (full) (const Tab(icon: Icon(Icons.group), text: 'المشرفون'), const _AdminsTab()),
+          if (cloud.canManageStaff) (const Tab(icon: Icon(Icons.group), text: 'المشرفون'), const _AdminsTab()),
           if (cloud.isDeveloper) (const Tab(icon: Icon(Icons.history), text: 'السجل'), const LogTab()),
         ];
         return DefaultTabController(
@@ -800,7 +800,8 @@ class _AdminsTabState extends State<_AdminsTab> {
       children: [
         const Text(
           '«المحرّر» ينشر الأجوبة ويعدّلها ويرد على الأسئلة.\n'
-          '«المشرف الكامل» يفعل ذلك كله، ويدير المشرفين والأبواب والإعلان والإعدادات.\n'
+          '«المشرف الكامل» يفعل ذلك كله، ويدير الأبواب والإعلان والإعدادات.\n'
+          'إضافة المشرفين والمحرّرين وحذفهم للمطوّر ولحساب الشيخ فقط.\n'
           'يدخل المشرف بحساب جوجل بنفس البريد المضاف هنا.',
           style: TextStyle(height: 1.8),
         ),
@@ -850,14 +851,33 @@ class _AdminsTabState extends State<_AdminsTab> {
                         : Icons.edit),
                     title: Text(d.id, textDirection: TextDirection.ltr),
                     subtitle: Text(((d.data()['role'] ?? 'admin') == 'admin' ? 'مشرف كامل' : 'محرّر') +
+                        (d.data()['owner'] == true ? ' · يدير المشرفين' : '') +
                         (cloud.isDeveloper ? ' · اضغط لترى نشاطه' : '')),
                     onTap: cloud.isDeveloper
                         ? () => Navigator.of(context)
                             .push(MaterialPageRoute(builder: (_) => StaffActivityScreen(email: d.id)))
                         : null,
-                    trailing: IconButton(
-                      icon: const Icon(Icons.remove_circle_outline, color: Colors.red),
-                      onPressed: () => cloud.removeAdmin(d.id),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (cloud.isDeveloper && (d.data()['role'] ?? 'admin') == 'admin')
+                          IconButton(
+                            tooltip: d.data()['owner'] == true
+                                ? 'يدير المشرفين (اضغط للسحب)'
+                                : 'اسمح له بإضافة المشرفين والمحرّرين',
+                            icon: Icon(Icons.manage_accounts,
+                                color: d.data()['owner'] == true ? kGold : Colors.grey),
+                            onPressed: () async {
+                              final err = await cloud.setOwner(d.id, d.data()['owner'] != true);
+                              if (context.mounted && err != null) _toast(context, err);
+                            },
+                          ),
+                        if (d.data()['owner'] != true || cloud.isDeveloper)
+                          IconButton(
+                            icon: const Icon(Icons.remove_circle_outline, color: Colors.red),
+                            onPressed: () => cloud.removeAdmin(d.id),
+                          ),
+                      ],
                     ),
                   ),
               ],
