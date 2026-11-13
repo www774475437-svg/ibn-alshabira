@@ -27,24 +27,7 @@ class AccountScreen extends StatelessWidget {
             padding: const EdgeInsets.all(24),
             children: [
               if (u == null) ...[
-                const Icon(Icons.account_circle_outlined, size: 90, color: kGold),
-                const SizedBox(height: 14),
-                const Text(
-                  'سجّل الدخول بحساب جوجل لتُحفظ محفوظاتك وقائمة «اقرأ لاحقاً» '
-                  'على حسابك، فترجع إليك إذا غيّرت جوالك.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 16, height: 1.8),
-                ),
-                const SizedBox(height: 24),
-                FilledButton.icon(
-                  style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
-                  icon: const Icon(Icons.login),
-                  label: const Text('الدخول بحساب جوجل', style: TextStyle(fontSize: 17)),
-                  onPressed: () async {
-                    final err = await cloud.signIn();
-                    if (err != null && context.mounted) _toast(context, err);
-                  },
-                ),
+                const _EmailAuthForm(),
               ] else ...[
                 CircleAvatar(
                   radius: 44,
@@ -84,6 +67,117 @@ class AccountScreen extends StatelessWidget {
           );
         },
       ),
+    );
+  }
+}
+
+/// Ordinary registration with email and password, plus Google as an option.
+class _EmailAuthForm extends StatefulWidget {
+  const _EmailAuthForm();
+
+  @override
+  State<_EmailAuthForm> createState() => _EmailAuthFormState();
+}
+
+class _EmailAuthFormState extends State<_EmailAuthForm> {
+  final _name = TextEditingController();
+  final _email = TextEditingController();
+  final _password = TextEditingController();
+  bool _register = false;
+  bool _busy = false;
+  bool _hide = true;
+
+  Future<void> _run(Future<String?> Function() action, {String? ok}) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    final err = await action();
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (err != null) {
+      _toast(context, err);
+    } else if (ok != null) {
+      _toast(context, ok);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cloud = Cloud.instance;
+    InputDecoration deco(String label, IconData icon) => InputDecoration(
+          labelText: label,
+          prefixIcon: Icon(icon),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+        );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Icon(Icons.account_circle_outlined, size: 76, color: kGold),
+        const SizedBox(height: 8),
+        Text(_register ? 'إنشاء حساب جديد' : 'تسجيل الدخول',
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 6),
+        const Text('لتُحفظ محفوظاتك، وتسأل الشيخ ويصلك جوابه.',
+            textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
+        const SizedBox(height: 18),
+        if (_register) ...[
+          TextField(controller: _name, decoration: deco('الاسم', Icons.person_outline)),
+          const SizedBox(height: 12),
+        ],
+        TextField(
+          controller: _email,
+          keyboardType: TextInputType.emailAddress,
+          textDirection: TextDirection.ltr,
+          autofillHints: const [AutofillHints.email],
+          decoration: deco('البريد الإلكتروني', Icons.email_outlined),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _password,
+          obscureText: _hide,
+          textDirection: TextDirection.ltr,
+          decoration: deco('كلمة السر', Icons.lock_outline).copyWith(
+            suffixIcon: IconButton(
+              icon: Icon(_hide ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+              onPressed: () => setState(() => _hide = !_hide),
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        FilledButton(
+          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+          onPressed: _busy
+              ? null
+              : () => _run(() => _register
+                  ? cloud.registerEmail(_name.text, _email.text, _password.text)
+                  : cloud.signInEmail(_email.text, _password.text)),
+          child: _busy
+              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+              : Text(_register ? 'إنشاء الحساب' : 'دخول', style: const TextStyle(fontSize: 17)),
+        ),
+        TextButton(
+          onPressed: () => setState(() => _register = !_register),
+          child: Text(_register ? 'عندي حساب، أريد الدخول' : 'ليس عندي حساب، إنشاء حساب جديد'),
+        ),
+        if (!_register)
+          TextButton(
+            onPressed: () => _run(() => cloud.resetPassword(_email.text),
+                ok: 'أرسلنا إلى بريدك رسالة لتغيير كلمة السر'),
+            child: const Text('نسيت كلمة السر'),
+          ),
+        const Row(children: [
+          Expanded(child: Divider()),
+          Padding(padding: EdgeInsets.symmetric(horizontal: 10), child: Text('أو')),
+          Expanded(child: Divider()),
+        ]),
+        const SizedBox(height: 10),
+        OutlinedButton.icon(
+          style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(50)),
+          icon: const Icon(Icons.login),
+          label: const Text('الدخول بحساب جوجل'),
+          onPressed: () => _run(cloud.signIn),
+        ),
+      ],
     );
   }
 }

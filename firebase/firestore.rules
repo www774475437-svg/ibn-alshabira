@@ -3,7 +3,7 @@ service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
     function isAdmin() {
-      return signedIn() && (
+      return signedIn() && request.auth.token.email_verified == true && (
         request.auth.token.email == 'www774475437@gmail.com' ||
         exists(/databases/$(database)/documents/admins/$(request.auth.token.email)));
     }

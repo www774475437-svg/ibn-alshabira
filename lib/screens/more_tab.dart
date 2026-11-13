@@ -35,7 +35,7 @@ class MoreTab extends StatelessWidget {
                   final u = Cloud.instance.user;
                   return ListTile(
                     leading: const _IconBox(Icons.account_circle_outlined),
-                    title: Text(u == null ? 'الدخول بحساب جوجل' : (u.displayName ?? 'حسابي')),
+                    title: Text(u == null ? 'تسجيل الدخول أو إنشاء حساب' : (u.displayName ?? 'حسابي')),
                     subtitle: u == null ? null : Text(Cloud.instance.isAdmin ? 'مشرف · لوحة الإدارة' : (u.email ?? '')),
                     trailing: const Icon(Icons.chevron_left),
                     onTap: () => Navigator.of(context).push(MaterialPageRoute(

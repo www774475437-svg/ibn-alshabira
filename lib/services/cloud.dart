@@ -60,6 +60,11 @@ class Cloud extends ChangeNotifier {
       isAdmin = false;
       return;
     }
+    // Admin rights need a verified email (Google accounts always are).
+    if (user?.emailVerified != true) {
+      isAdmin = false;
+      return;
+    }
     if (e == developerEmail) {
       isAdmin = true;
       return;
@@ -105,6 +110,72 @@ class Cloud extends ChangeNotifier {
       return 'تعذّر تسجيل الدخول';
     } finally {
       _signingIn = false;
+    }
+  }
+
+  // ------------------------------------------ Ordinary email + password
+  String _authError(FirebaseAuthException e) {
+    switch (e.code) {
+      case 'email-already-in-use':
+        return 'هذا البريد مسجّل من قبل، اضغط «دخول»';
+      case 'invalid-email':
+        return 'البريد غير صحيح';
+      case 'weak-password':
+        return 'كلمة السر ضعيفة، اجعلها 6 أحرف أو أكثر';
+      case 'user-not-found':
+      case 'wrong-password':
+      case 'invalid-credential':
+        return 'البريد أو كلمة السر غير صحيحة';
+      case 'operation-not-allowed':
+        return 'التسجيل بالبريد غير مفعّل بعد';
+      case 'network-request-failed':
+        return 'تأكد من الاتصال بالإنترنت';
+      default:
+        return 'تعذّرت العملية (${e.code})';
+    }
+  }
+
+  Future<String?> registerEmail(String name, String email, String password) async {
+    if (!ready) return 'الخدمة غير متاحة الآن، تأكد من الاتصال بالإنترنت';
+    try {
+      final cred = await FirebaseAuth.instance
+          .createUserWithEmailAndPassword(email: email.trim(), password: password);
+      if (name.trim().isNotEmpty) {
+        await cred.user?.updateDisplayName(name.trim());
+        await cred.user?.reload();
+        user = FirebaseAuth.instance.currentUser;
+        notifyListeners();
+      }
+      return null;
+    } on FirebaseAuthException catch (e) {
+      return _authError(e);
+    } catch (_) {
+      return 'تعذّر إنشاء الحساب';
+    }
+  }
+
+  Future<String?> signInEmail(String email, String password) async {
+    if (!ready) return 'الخدمة غير متاحة الآن، تأكد من الاتصال بالإنترنت';
+    try {
+      await FirebaseAuth.instance.signInWithEmailAndPassword(email: email.trim(), password: password);
+      return null;
+    } on FirebaseAuthException catch (e) {
+      return _authError(e);
+    } catch (_) {
+      return 'تعذّر تسجيل الدخول';
+    }
+  }
+
+  Future<String?> resetPassword(String email) async {
+    if (!ready) return 'الخدمة غير متاحة الآن';
+    if (!email.contains('@')) return 'اكتب بريدك أولاً';
+    try {
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email.trim());
+      return null;
+    } on FirebaseAuthException catch (e) {
+      return _authError(e);
+    } catch (_) {
+      return 'تعذّر الإرسال';
     }
   }
 
