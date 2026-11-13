@@ -25,13 +25,13 @@ class HomeTab extends StatefulWidget {
 }
 
 class _HomeTabState extends State<HomeTab> {
-  bool _updateAvailable = false;
+  DateTime? _updateAt;
 
   @override
   void initState() {
     super.initState();
-    isUpdateAvailable().then((v) {
-      if (mounted && v) setState(() => _updateAvailable = true);
+    updatePublishedAt().then((v) {
+      if (mounted && v != null) setState(() => _updateAt = v);
     });
   }
 
@@ -48,12 +48,13 @@ class _HomeTabState extends State<HomeTab> {
           const SliverToBoxAdapter(child: _CloudSections()),
           if (!kIsWeb && repo.lastBook != null)
             SliverToBoxAdapter(child: _ContinueReading(book: repo.lastBook!)),
-          if (_updateAvailable)
-            const SliverToBoxAdapter(
+          if (_updateAt != null)
+            SliverToBoxAdapter(
               child: _Banner(
                 icon: Icons.system_update,
                 title: 'يوجد تحديث جديد للتطبيق',
                 subtitle: 'اضغط لتحميل النسخة الجديدة',
+                note: 'صدر ${updateTimeText(_updateAt!)}',
                 url: AppConfig.apkUrl,
               ),
             ),
@@ -496,7 +497,8 @@ class _Banner extends StatelessWidget {
   final String title;
   final String subtitle;
   final String url;
-  const _Banner({required this.icon, required this.title, required this.subtitle, required this.url});
+  final String? note;
+  const _Banner({required this.icon, required this.title, required this.subtitle, required this.url, this.note});
 
   @override
   Widget build(BuildContext context) {
@@ -508,7 +510,14 @@ class _Banner extends StatelessWidget {
           leading: Icon(icon, color: kGold, size: 30),
           title: Text(title,
               style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          subtitle: Text(subtitle, style: const TextStyle(color: Colors.white70)),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(subtitle, style: const TextStyle(color: Colors.white70)),
+              if (note != null)
+                Text(note!, style: const TextStyle(color: Colors.white60, fontSize: 12)),
+            ],
+          ),
           trailing: const Icon(Icons.download, color: kGold),
           onTap: () => openUrl(context, url),
         ),
