@@ -249,3 +249,116 @@ class PrivacyScreen extends StatelessWidget {
     );
   }
 }
+
+/// «ما الجديد»: what each version added, newest first.
+const whatsNew = <(String, List<String>)>[
+  (
+    '1.9.0',
+    [
+      'البحث داخل الجواب: زر العدسة أعلى الجواب يظلّل الكلمة التي تبحث عنها.',
+      'تقدّمك في كل باب: كم قرأت من أجوبته، وزر «ما لم أقرأه».',
+      'عند اختيار «لم يفدني» يمكنك ذكر السبب ليصل إلى المشرفين.',
+      'صفحة «ما الجديد».',
+    ]
+  ),
+  (
+    '1.8',
+    [
+      'الموقع صار مثل التطبيق: التسجيل، «اسأل الشيخ»، ولوحة الإدارة.',
+      'خط جديد واضح للعناوين.',
+      'خانة «الإدارة» في الشريط السفلي للمشرفين.',
+      'تقييم الجواب مرة واحدة، وعدّ المشاهدات بدقة.',
+      'وقت صدور التحديث الجديد.',
+    ]
+  ),
+  (
+    '1.7',
+    [
+      'صلاحيات المشرف والمحرّر، والمسودات، وسجل التعديلات.',
+      'تثبيت الأجوبة في الرئيسية، وتعديل الأبواب و«عن الشيخ».',
+      'تحسينات «اسأل الشيخ»: اختيار الباب، والأجوبة المشابهة.',
+    ]
+  ),
+];
+
+class WhatsNewScreen extends StatelessWidget {
+  const WhatsNewScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('ما الجديد')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          for (final (version, items) in whatsNew)
+            Card(
+              margin: const EdgeInsets.only(bottom: 12),
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('النسخة $version',
+                        style: const TextStyle(
+                            fontFamily: 'Tajawal', fontWeight: FontWeight.bold, fontSize: 17, color: kGoldChip)),
+                    const SizedBox(height: 8),
+                    for (final t in items)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Padding(
+                              padding: EdgeInsets.only(top: 8, left: 8),
+                              child: Icon(Icons.circle, size: 7, color: kGold),
+                            ),
+                            Expanded(child: Text(t, style: const TextStyle(height: 1.7))),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Shown instead of the app when this build is older than the minimum
+/// the developer allows.
+class MustUpdateScreen extends StatelessWidget {
+  const MustUpdateScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.system_update, size: 72, color: kGold),
+              const SizedBox(height: 16),
+              const Text('يلزم تحديث التطبيق',
+                  style: TextStyle(fontFamily: 'Tajawal', fontSize: 22, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 10),
+              const Text('هذه النسخة قديمة ولم تعد تعمل. حمّل النسخة الجديدة لتواصل استعمال التطبيق.',
+                  textAlign: TextAlign.center, style: TextStyle(height: 1.8, fontSize: 16)),
+              const SizedBox(height: 20),
+              FilledButton.icon(
+                style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+                icon: const Icon(Icons.download),
+                label: const Text('تحميل النسخة الجديدة', style: TextStyle(fontSize: 17)),
+                onPressed: () => openUrl(context, AppConfig.apkUrl),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

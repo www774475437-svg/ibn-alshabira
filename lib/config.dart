@@ -18,7 +18,7 @@ class AppConfig {
   /// Set at build time: --dart-define=BUILD_NUMBER=<run number>.
   static const buildNumber = int.fromEnvironment('BUILD_NUMBER', defaultValue: 0);
 
-  static const version = '1.8.4';
+  static const version = '1.9.0';
 
   static String fatwaLink(String id) => '$siteUrl#/fatwa/$id';
 }
