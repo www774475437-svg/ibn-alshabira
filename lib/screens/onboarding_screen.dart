@@ -19,7 +19,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     (
       Icons.menu_book_rounded,
       'مرحباً بك في «ابن الشابرة»',
-      'تطبيق يجمع أجوبة ومقالات وكتب ورسائل الشيخ قائد بن غانم الشابرة حفظه الله، من محافظة إب باليمن.',
+      'تطبيق يجمع أجوبة ومقالات وكتب ورسائل الشيخ قايد بن غانم الشابرة حفظه الله، من اليمن.',
     ),
     (
       Icons.search_rounded,

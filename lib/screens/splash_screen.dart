@@ -84,7 +84,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                       Text('ابن الشابرة',
                           style: TextStyle(color: kGold, fontSize: 32, fontWeight: FontWeight.bold)),
                       SizedBox(height: 6),
-                      Text('أجوبة ومقالات وكتب الشيخ قائد بن غانم الشابرة',
+                      Text('أجوبة ومقالات وكتب الشيخ قايد بن غانم الشابرة',
                           style: TextStyle(color: Colors.white70, fontSize: 14)),
                     ],
                   ),

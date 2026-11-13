@@ -13,6 +13,7 @@ import 'channel_screen.dart';
 import 'account_screens.dart';
 import 'content_screens.dart';
 import 'extra_screens.dart';
+import 'review_screen.dart';
 import '../services/cloud.dart';
 
 class MoreTab extends StatelessWidget {
@@ -24,7 +25,7 @@ class MoreTab extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('المزيد')),
       body: ListenableBuilder(
-        listenable: repo,
+        listenable: Listenable.merge([repo, Cloud.instance]),
         builder: (context, _) => ListView(
           padding: const EdgeInsets.symmetric(vertical: 8),
           children: [
@@ -57,6 +58,26 @@ class MoreTab extends StatelessWidget {
                     builder: (_) => const MostReadScreen())),
               ),
             ]),
+            if (Cloud.instance.ready && Cloud.instance.isAdmin) ...[
+              const _Group('أدوات المشرفين'),
+              _Section(children: [
+                ListTile(
+                  leading: const _IconBox(Icons.rule_folder_outlined),
+                  title: const Text('مراجعة ترتيب المنشورات'),
+                  subtitle: const Text('انقل كل منشور إلى بابه بضغطة'),
+                  trailing: const Icon(Icons.chevron_left),
+                  onTap: () => Navigator.of(context)
+                      .push(MaterialPageRoute(builder: (_) => const ReviewScreen())),
+                ),
+                ListTile(
+                  leading: const _IconBox(Icons.visibility_off_outlined),
+                  title: const Text('المنشورات المخفية'),
+                  trailing: const Icon(Icons.chevron_left),
+                  onTap: () => Navigator.of(context)
+                      .push(MaterialPageRoute(builder: (_) => const HiddenScreen())),
+                ),
+              ]),
+            ],
             const _Group('الشيخ'),
             _Section(children: [
               ListTile(
@@ -200,6 +221,32 @@ class MoreTab extends StatelessWidget {
                   ],
                 ),
               ),
+              SwitchListTile(
+                secondary: const _IconBox(Icons.text_increase),
+                title: const Text('الخط الكبير'),
+                subtitle: const Text('لمن يحتاج خطاً أوضح'),
+                value: repo.fontScale >= 1.3,
+                onChanged: (v) {
+                  repo.setFontScale(v ? 1.35 : 1.0);
+                  repo.saveReadingScale(v ? 1.3 : 1.0);
+                },
+              ),
+              ListTile(
+                leading: const _IconBox(Icons.local_fire_department_outlined),
+                title: const Text('الوِرد اليومي من الأجوبة'),
+                trailing: DropdownButton<int>(
+                  value: const [0, 1, 3, 5, 10].contains(repo.wirdTarget) ? repo.wirdTarget : 0,
+                  underline: const SizedBox(),
+                  onChanged: (n) => repo.setWirdTarget(n ?? 0),
+                  items: const [
+                    DropdownMenuItem(value: 0, child: Text('بدون')),
+                    DropdownMenuItem(value: 1, child: Text('جواب')),
+                    DropdownMenuItem(value: 3, child: Text('3 أجوبة')),
+                    DropdownMenuItem(value: 5, child: Text('5 أجوبة')),
+                    DropdownMenuItem(value: 10, child: Text('10 أجوبة')),
+                  ],
+                ),
+              ),
               ListTile(
                 leading: const _IconBox(Icons.format_size),
                 title: const Text('حجم الخط'),
@@ -256,6 +303,38 @@ class MoreTab extends StatelessWidget {
             const _Group('عن التطبيق'),
             _Section(children: [
               ListTile(
+                leading: const _IconBox(Icons.lightbulb_outline),
+                title: const Text('اقتراح للمطوّر'),
+                subtitle: const Text('فكرة أو ملاحظة تحسّن التطبيق'),
+                trailing: const Icon(Icons.chevron_left),
+                onTap: () async {
+                  final c = TextEditingController();
+                  final text = await showDialog<String>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('اقتراح للمطوّر'),
+                      content: TextField(
+                        controller: c,
+                        autofocus: true,
+                        maxLines: 5,
+                        maxLength: 1500,
+                        decoration: const InputDecoration(
+                            hintText: 'اكتب اقتراحك أو ملاحظتك', border: OutlineInputBorder()),
+                      ),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+                        FilledButton(onPressed: () => Navigator.pop(ctx, c.text), child: const Text('إرسال')),
+                      ],
+                    ),
+                  );
+                  if (text == null || text.trim().length < 3) return;
+                  final err = await Cloud.instance.suggest(text);
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context)
+                      .showSnackBar(SnackBar(content: Text(err ?? 'وصل اقتراحك، جزاك الله خيراً')));
+                },
+              ),
+              ListTile(
                 leading: const _IconBox(Icons.new_releases_outlined),
                 title: const Text('ما الجديد'),
                 trailing: const Icon(Icons.chevron_left),
@@ -276,7 +355,7 @@ class MoreTab extends StatelessWidget {
                 padding: EdgeInsets.all(16),
                 child: Text(
                   'تطبيق «ابن الشابرة» يجمع أجوبة ومقالات وكتب ورسائل الشيخ '
-                  'قائد بن غانم الشابرة حفظه الله، من محافظة إب باليمن، '
+                  'قايد بن غانم الشابرة حفظه الله، من اليمن، '
                   'مرتّبة على الأبواب مع البحث بالموضوع.\n\n'
                   'الإصدار ${AppConfig.version} (${AppConfig.buildNumber})',
                   style: TextStyle(height: 1.8),

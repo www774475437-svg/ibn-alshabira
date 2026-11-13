@@ -187,7 +187,7 @@ class _Card extends StatelessWidget {
                 textAlign: TextAlign.justify,
                 style: const TextStyle(fontFamily: 'Amiri', fontSize: 16, height: 1.9, color: ink)),
             const SizedBox(height: 14),
-            const Text('الشيخ قائد بن غانم الشابرة حفظه الله',
+            const Text('الشيخ قايد بن غانم الشابرة حفظه الله',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                     fontFamily: 'Amiri', fontWeight: FontWeight.bold, fontSize: 14, color: ink)),
