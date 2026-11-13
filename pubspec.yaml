@@ -1,7 +1,7 @@
 name: ibn_alshabira
 description: "تطبيق ابن الشابرة — فتاوى ومقالات وكتب الشيخ قائد بن غانم الشابرة"
 publish_to: 'none'
-version: 1.5.0+1
+version: 1.5.1+1
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -22,6 +22,7 @@ dependencies:
   pdfrx: ^2.0.0
   firebase_core: ^4.0.0
   firebase_auth: ^6.0.0
+  google_sign_in: ^7.0.0
   cloud_firestore: ^6.0.0
 
 dev_dependencies:
