@@ -6,6 +6,7 @@ import '../config.dart';
 import '../services/cloud.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import 'account_screens.dart';
 
 /// «اسأل الشيخ»: the user sends a question and sees the sheikh's replies
 /// here, like a private chat.
@@ -67,11 +68,9 @@ class _AskScreenState extends State<AskScreen> {
               title: 'سجّل الدخول لترسل سؤالك',
               text: 'نحتاج حسابك ليصلك جواب الشيخ في محادثة خاصة بك.\n'
                   'وإذا نُشر الجواب في التطبيق فلا يظهر اسمك أبداً.',
-              button: 'الدخول بحساب جوجل',
-              onTap: () async {
-                final err = await cloud.signIn();
-                if (err != null && context.mounted) _toast(err);
-              },
+              button: 'تسجيل الدخول أو إنشاء حساب',
+              onTap: () => Navigator.of(context)
+                  .push(MaterialPageRoute(builder: (_) => const AccountScreen())),
             );
           }
           return Column(
