@@ -65,9 +65,9 @@ class Repository extends ChangeNotifier {
     final fw = jsonDecode(await rootBundle.loadString('assets/data/fatwas.json')) as List;
     fatwas = fw.map((e) => Fatwa.fromJson(e as Map<String, dynamic>)).toList();
     for (final f in fatwas) {
-      f.searchText = normalizeArabic(
-          '${f.title} ${f.question} ${f.answer} ${f.tags.join(' ')} ${chapterName(f.chapter)}');
+      _index(f);
     }
+    _bundled = List.of(fatwas);
 
     final bk = jsonDecode(await rootBundle.loadString('assets/data/books.json')) as List;
     books = bk.map((e) => Book.fromJson(e as Map<String, dynamic>)).toList();
@@ -97,6 +97,36 @@ class Repository extends ChangeNotifier {
       readLog = {};
     }
     recentSearches = prefs.getStringList('recentSearches') ?? [];
+  }
+
+  late List<Fatwa> _bundled;
+
+  /// Called after saved lists change (to sync with the signed-in account).
+  static VoidCallback? onSavedListsChanged;
+
+  void _index(Fatwa f) {
+    f.searchText = normalizeArabic(
+        '${f.title} ${f.question} ${f.answer} ${f.tags.join(' ')} ${chapterName(f.chapter)}');
+  }
+
+  /// Merges answers published from inside the app and edited titles.
+  void applyRemote(List<Fatwa> published, Map<String, String> titleEdits) {
+    final all = [..._bundled, ...published];
+    for (final f in all) {
+      final t = titleEdits[f.id];
+      if (t != null && t.isNotEmpty) f.title = t;
+      _index(f);
+    }
+    fatwas = all;
+    notifyListeners();
+  }
+
+  void replaceSavedLists(Set<String> favs, Set<String> later) {
+    favorites = favs;
+    readLater = later;
+    _prefs.setStringList('favorites', favorites.toList());
+    _prefs.setStringList('readLater', readLater.toList());
+    notifyListeners();
   }
 
   String chapterName(String id) {
@@ -292,6 +322,7 @@ class Repository extends ChangeNotifier {
     if (!readLater.remove(id)) readLater.add(id);
     _prefs.setStringList('readLater', readLater.toList());
     notifyListeners();
+    onSavedListsChanged?.call();
   }
 
   List<Fatwa> get readLaterFatwas => fatwas.where((f) => readLater.contains(f.id)).toList();
@@ -324,6 +355,7 @@ class Repository extends ChangeNotifier {
     if (!favorites.remove(id)) favorites.add(id);
     _prefs.setStringList('favorites', favorites.toList());
     notifyListeners();
+    onSavedListsChanged?.call();
   }
 
   List<Fatwa> get favoriteFatwas => fatwas.where((f) => favorites.contains(f.id)).toList();
