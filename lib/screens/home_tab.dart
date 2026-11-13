@@ -141,10 +141,14 @@ class _Header extends StatelessWidget {
       ),
       child: Column(
         children: [
+          ClipOval(
+            child: Image.asset('assets/icon/icon.png', width: 84, height: 84),
+          ),
+          const SizedBox(height: 8),
           const Text('ابن الشابرة',
               style: TextStyle(color: kGold, fontSize: 30, fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
-          const Text('فتاوى ومقالات وكتب الشيخ قائد بن غانم الشابرة',
+          const Text('أجوبة ومقالات وكتب الشيخ قائد بن غانم الشابرة',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.white70, fontSize: 14)),
           const SizedBox(height: 18),
@@ -196,7 +200,7 @@ class _FatwaOfDay extends StatelessWidget {
                   children: [
                     Icon(Icons.wb_sunny_outlined, color: kGold, size: 20),
                     SizedBox(width: 6),
-                    Text('فتوى اليوم',
+                    Text('جواب اليوم',
                         style: TextStyle(color: kGoldChip, fontWeight: FontWeight.bold)),
                   ],
                 ),

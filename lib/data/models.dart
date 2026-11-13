@@ -60,7 +60,7 @@ class Fatwa {
       case 'letter':
         return 'رسالة دعوية';
       default:
-        return 'فتوى';
+        return 'جواب';
     }
   }
 
@@ -69,7 +69,7 @@ class Fatwa {
     if (question.isNotEmpty) b.write('❓ السؤال:\n$question\n\n');
     b.write(question.isNotEmpty ? '✅ الجواب:\n$answer\n\n' : '$answer\n\n');
     b.write('— الشيخ قائد بن غانم الشابرة حفظه الله\n\n');
-    b.write('🔗 رابط الفتوى:\n${AppConfig.fatwaLink(id)}');
+    b.write('🔗 رابط الجواب:\n${AppConfig.fatwaLink(id)}');
     return b.toString();
   }
 }

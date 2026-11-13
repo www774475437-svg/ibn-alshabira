@@ -16,7 +16,11 @@ Future<void> main() async {
   runApp(const IbnAlshabiraApp());
   // Set up the daily notification after the first frame; never blocks startup.
   DailyNotifications.init().then(
-    (_) => DailyNotifications.setEnabled(Repository.instance.dailyNotification),
+    (_) => DailyNotifications.setEnabled(
+      Repository.instance.dailyNotification,
+      hour: Repository.instance.notifyHour,
+      minute: Repository.instance.notifyMinute,
+    ),
   );
 }
 
@@ -53,8 +57,8 @@ class IbnAlshabiraApp extends StatelessWidget {
           GlobalWidgetsLocalizations.delegate,
           GlobalCupertinoLocalizations.delegate,
         ],
-        theme: buildTheme(Brightness.light),
-        darkTheme: buildTheme(Brightness.dark),
+        theme: buildTheme(Brightness.light, repo.fontFamily),
+        darkTheme: buildTheme(Brightness.dark, repo.fontFamily),
         themeMode: repo.themeMode,
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context).copyWith(

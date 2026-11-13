@@ -53,17 +53,50 @@ class MoreTab extends StatelessWidget {
             ]),
             const _Group('الإعدادات'),
             _Section(children: [
-              if (!kIsWeb)
+              if (!kIsWeb) ...[
                 SwitchListTile(
                   secondary: const _IconBox(Icons.notifications_active_outlined),
-                  title: const Text('تنبيه «فتوى اليوم»'),
-                  subtitle: const Text('كل صباح الساعة 8'),
+                  title: const Text('تنبيه «جواب اليوم»'),
                   value: repo.dailyNotification,
                   onChanged: (v) {
                     repo.setDailyNotification(v);
-                    DailyNotifications.setEnabled(v);
+                    DailyNotifications.setEnabled(v,
+                        hour: repo.notifyHour, minute: repo.notifyMinute);
                   },
                 ),
+                ListTile(
+                  leading: const _IconBox(Icons.schedule),
+                  title: const Text('وقت التنبيه'),
+                  enabled: repo.dailyNotification,
+                  trailing: Text(
+                    TimeOfDay(hour: repo.notifyHour, minute: repo.notifyMinute).format(context),
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  onTap: () async {
+                    final t = await showTimePicker(
+                      context: context,
+                      initialTime: TimeOfDay(hour: repo.notifyHour, minute: repo.notifyMinute),
+                    );
+                    if (t == null) return;
+                    repo.setNotifyTime(t.hour, t.minute);
+                    DailyNotifications.setEnabled(true, hour: t.hour, minute: t.minute);
+                  },
+                ),
+              ],
+              ListTile(
+                leading: const _IconBox(Icons.font_download_outlined),
+                title: const Text('نوع الخط'),
+                trailing: DropdownButton<String>(
+                  value: repo.fontFamily,
+                  underline: const SizedBox(),
+                  onChanged: (f) => repo.setFontFamily(f ?? ''),
+                  items: const [
+                    DropdownMenuItem(value: 'Amiri', child: Text('أميري', style: TextStyle(fontFamily: 'Amiri'))),
+                    DropdownMenuItem(value: 'ReemKufi', child: Text('ريم كوفي', style: TextStyle(fontFamily: 'ReemKufi'))),
+                    DropdownMenuItem(value: '', child: Text('خط الجهاز')),
+                  ],
+                ),
+              ),
               ListTile(
                 leading: const _IconBox(Icons.dark_mode_outlined),
                 title: const Text('المظهر'),
@@ -122,7 +155,7 @@ class MoreTab extends StatelessWidget {
               Padding(
                 padding: EdgeInsets.all(16),
                 child: Text(
-                  'تطبيق «ابن الشابرة» يجمع فتاوى ومقالات وكتب ورسائل الشيخ '
+                  'تطبيق «ابن الشابرة» يجمع أجوبة ومقالات وكتب ورسائل الشيخ '
                   'قائد بن غانم الشابرة حفظه الله، من محافظة إب باليمن، '
                   'مرتّبة على الأبواب مع البحث بالموضوع.\n\n'
                   'الإصدار ${AppConfig.version} (${AppConfig.buildNumber})',

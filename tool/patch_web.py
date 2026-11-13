@@ -4,8 +4,8 @@ import json
 import re
 from pathlib import Path
 
-TITLE = "ابن الشابرة — فتاوى الشيخ قائد بن غانم الشابرة"
-DESC = ("فتاوى ومقالات وكتب ورسائل الشيخ قائد بن غانم الشابرة حفظه الله، "
+TITLE = "ابن الشابرة — أجوبة الشيخ قائد بن غانم الشابرة"
+DESC = ("أجوبة ومقالات وكتب ورسائل الشيخ قائد بن غانم الشابرة حفظه الله، "
         "مرتبة على أبواب العقيدة والفقه والآداب، مع البحث بالموضوع.")
 
 index = Path("web/index.html")
@@ -26,3 +26,10 @@ data.update({"name": "ابن الشابرة", "short_name": "ابن الشابر
              "background_color": "#1F5E3B", "theme_color": "#1F5E3B", "dir": "rtl", "lang": "ar"})
 manifest.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 print("Web patched")
+
+# Site icons (pre-made from the logo in tool/web_icons/)
+import shutil
+for name in ["Icon-192.png", "Icon-512.png", "Icon-maskable-192.png", "Icon-maskable-512.png"]:
+    shutil.copy(f"tool/web_icons/{name}", f"web/icons/{name}")
+shutil.copy("tool/web_icons/favicon.png", "web/favicon.png")
+print("Web icons copied")
