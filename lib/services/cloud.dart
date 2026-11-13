@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/models.dart';
 import '../data/repository.dart';
+import 'notifications.dart';
 
 /// Online features (app and website): Google sign-in, admins, views,
 /// «هل أفادك الجواب؟», error reports, published answers and title edits.
@@ -99,7 +100,12 @@ class Cloud extends ChangeNotifier {
     final u = user;
     if (!ready || u == null) return;
     if (isAdmin) {
+      var first = true;
       _newQSub = _db.collection('questions').where('status', isEqualTo: 'new').snapshots().listen((q) {
+        if (!first && q.size > newQuestions) {
+          AppAlerts.show('سؤال جديد', 'وصل سؤال جديد إلى «اسأل الشيخ»');
+        }
+        first = false;
         newQuestions = q.size;
         notifyListeners();
       }, onError: (_) {});
@@ -108,7 +114,11 @@ class Cloud extends ChangeNotifier {
       _answeredCount = q.docs.where((d) => '${d.data()['reply'] ?? ''}'.isNotEmpty).length;
       final prefs = await SharedPreferences.getInstance();
       final seen = prefs.getInt('seenReplies_${u.uid}') ?? 0;
+      final before = unseenReplies;
       unseenReplies = _answeredCount > seen ? _answeredCount - seen : 0;
+      if (unseenReplies > before) {
+        AppAlerts.show('وصل جواب سؤالك', 'افتح «اسأل الشيخ» لقراءة الجواب');
+      }
       notifyListeners();
     }, onError: (_) {});
   }
@@ -638,6 +648,14 @@ class Cloud extends ChangeNotifier {
         for (final e in ((c['subs']?['map'] ?? {}) as Map).entries)
           '${e.key}': ((e.value ?? []) as List).map((x) => '$x').toList(),
       };
+      Repository.instance.extraSynonyms = {
+        for (final e in ((c['synonyms']?['map'] ?? {}) as Map).entries)
+          '${e.key}': ((e.value ?? []) as List).map((x) => '$x').toList(),
+      };
+      lessons = [
+        for (final m in ((c['lessons']?['items'] ?? []) as List))
+          if (m is Map) Lesson('${m['title'] ?? ''}', '${m['url'] ?? ''}', '${m['group'] ?? ''}'),
+      ];
       final mb = c['app']?['minBuild'];
       minBuild = mb is int ? mb : 0;
       aboutText = '${c['about']?['text'] ?? ''}';
@@ -660,6 +678,33 @@ class Cloud extends ChangeNotifier {
     } catch (e) {
       debugPrint('config failed: $e');
     }
+  }
+
+  /// Audio library of the sheikh's lessons (kept in config/lessons).
+  List<Lesson> lessons = [];
+
+  Future<String?> setLessons(List<Lesson> list, String logText) async {
+    final err = await setConfig(
+        'lessons', {'items': [for (final l in list) {'title': l.title, 'url': l.url, 'group': l.group}]}, logText);
+    if (err == null) {
+      lessons = list;
+      notifyListeners();
+    }
+    return err;
+  }
+
+  /// Search words the staff linked to other words (e.g. الحواجب → النمص).
+  Future<String?> addSynonym(String word, String target) async {
+    final w = word.trim(), t = target.trim();
+    if (w.isEmpty || t.isEmpty) return 'اكتب الكلمتين';
+    final map = {
+      for (final e in Repository.instance.extraSynonyms.entries) e.key: [...e.value],
+    };
+    map.putIfAbsent(w, () => []);
+    if (!map[w]!.contains(t)) map[w]!.add(t);
+    final err = await setConfig('synonyms', {'map': map}, 'ربط كلمة بحث', );
+    if (err == null) Repository.instance.extraSynonyms = map;
+    return err;
   }
 
   /// Sub-chapters: chapter id → names.
@@ -947,6 +992,13 @@ class Cloud extends ChangeNotifier {
       await _db.doc('scholars/$id').delete();
     } catch (_) {}
   }
+}
+
+class Lesson {
+  final String title;
+  final String url;
+  final String group;
+  Lesson(this.title, this.url, this.group);
 }
 
 class Series {

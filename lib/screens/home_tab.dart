@@ -10,6 +10,7 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import '../services/cloud.dart';
 import 'ask_screen.dart';
+import 'channel_screen.dart';
 import 'book_reader_screen.dart';
 import 'content_screens.dart';
 import 'chapter_screen.dart';
@@ -145,6 +146,53 @@ class _HomeTabState extends State<HomeTab> {
               },
             ),
           ),
+          if (repo.channel.isNotEmpty) ...[
+            SliverToBoxAdapter(
+              child: _SectionTitle('أحدث منشورات القناة',
+                  action: 'الكل',
+                  onAction: () => Navigator.of(context)
+                      .push(MaterialPageRoute(builder: (_) => const ChannelScreen()))),
+            ),
+            SliverToBoxAdapter(
+              child: SizedBox(
+                height: 150,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  itemCount: repo.channel.length < 8 ? repo.channel.length : 8,
+                  separatorBuilder: (_, __) => const SizedBox(width: 10),
+                  itemBuilder: (context, i) {
+                    final p = repo.channel[i];
+                    return SizedBox(
+                      width: 250,
+                      child: Card(
+                        margin: EdgeInsets.zero,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(18),
+                          onTap: () => Navigator.of(context)
+                              .push(MaterialPageRoute(builder: (_) => ChannelPostScreen(post: p))),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(p.date, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                                const SizedBox(height: 6),
+                                Expanded(
+                                  child: Text(p.text,
+                                      maxLines: 4, overflow: TextOverflow.ellipsis, style: const TextStyle(height: 1.7)),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
           if (repo.videos.isNotEmpty) ...[
             SliverToBoxAdapter(
               child: _SectionTitle('أحدث المرئيات',

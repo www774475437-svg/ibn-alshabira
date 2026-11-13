@@ -491,12 +491,49 @@ class _MissesTabState extends State<MissesTab> {
               ),
               title: Text(term),
               subtitle: const Text('مرات البحث دون نتيجة'),
-              trailing: IconButton(
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    tooltip: 'اربطها بكلمة موجودة',
+                    icon: const Icon(Icons.link),
+                    onPressed: () async {
+                      final c = TextEditingController();
+                      final target = await showDialog<String>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: Text('اربط «$term» بكلمة'),
+                          content: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text('اكتب الكلمة التي توجد في الأجوبة، فمن بحث بـ«الحواجب» مثلاً يجد أجوبة «النمص».',
+                                  style: TextStyle(color: Colors.grey)),
+                              const SizedBox(height: 8),
+                              TextField(controller: c, autofocus: true, decoration: _deco('الكلمة')),
+                            ],
+                          ),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+                            FilledButton(onPressed: () => Navigator.pop(ctx, c.text), child: const Text('ربط')),
+                          ],
+                        ),
+                      );
+                      if (target == null || target.trim().isEmpty) return;
+                      final err = await Cloud.instance.addSynonym(term, target);
+                      if (err == null) await Cloud.instance.clearMiss(term);
+                      if (!context.mounted) return;
+                      _toast(context, err ?? 'رُبطت ✅ صار البحث بها يجد الأجوبة');
+                      setState(() => _future = Cloud.instance.topMisses());
+                    },
+                  ),
+                  IconButton(
                 icon: const Icon(Icons.close),
                 onPressed: () async {
                   await Cloud.instance.clearMiss(term);
                   setState(() => _future = Cloud.instance.topMisses());
                 },
+              ),
+                ],
               ),
             );
           },

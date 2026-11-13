@@ -1,3 +1,4 @@
+import 'repository.dart' show normalizeArabic;
 import '../config.dart';
 
 class Chapter {
@@ -117,6 +118,26 @@ class SocialLink {
         name: (j['name'] ?? '') as String,
         url: (j['url'] ?? '') as String,
       );
+}
+
+/// One post from the sheikh's Telegram channel, word for word.
+class ChannelPost {
+  final int id;
+  final String text;
+  final String date;
+  late final String searchText = normalizeArabic(text);
+
+  ChannelPost({required this.id, required this.text, required this.date});
+
+  factory ChannelPost.fromJson(Map<String, dynamic> j) =>
+      ChannelPost(id: (j['id'] as num).toInt(), text: '${j['text'] ?? ''}', date: '${j['date'] ?? ''}');
+
+  String get link => 'https://t.me/qaidghsh/$id';
+
+  String get firstLine {
+    final l = text.split('\n').map((e) => e.trim()).firstWhere((e) => e.isNotEmpty, orElse: () => '');
+    return l.length > 90 ? '${l.substring(0, 90)}…' : l;
+  }
 }
 
 class Video {

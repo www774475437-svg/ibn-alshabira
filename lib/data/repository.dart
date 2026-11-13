@@ -76,6 +76,13 @@ class Repository extends ChangeNotifier {
     books = bk.map((e) => Book.fromJson(e as Map<String, dynamic>)).toList();
 
     try {
+      final cp = jsonDecode(await rootBundle.loadString('assets/data/channel.json')) as List;
+      channel = cp.map((e) => ChannelPost.fromJson(e as Map<String, dynamic>)).toList();
+    } catch (_) {
+      channel = [];
+    }
+
+    try {
       final vd = jsonDecode(await rootBundle.loadString('assets/data/videos.json')) as List;
       videos = vd.map((e) => Video.fromJson(e as Map<String, dynamic>)).toList();
     } catch (_) {
@@ -214,13 +221,64 @@ class Repository extends ChangeNotifier {
   int countInChapter(String id) => fatwas.where((f) => f.chapter == id).length;
 
   /// Every word of the query must appear (in any order).
+  /// Posts from the sheikh's Telegram channel (newest first).
+  List<ChannelPost> channel = [];
+
+  List<ChannelPost> searchChannel(String query) {
+    final words = normalizeArabic(query).split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+    if (words.isEmpty) return channel;
+    return channel.where((p) => words.every(p.searchText.contains)).toList();
+  }
+
+  /// Words that mean the same thing for search, e.g. الحواجب → النمص.
+  /// Built-in pairs plus those the staff add from the admin panel.
+  static const _builtinSynonyms = <String, List<String>>{
+    'الحواجب': ['النمص'],
+    'الحاجب': ['النمص'],
+    'نتف': ['النمص'],
+    'الاغاني': ['الغناء', 'المعازف'],
+    'الموسيقي': ['المعازف', 'الغناء'],
+    'الدخان': ['التدخين'],
+    'السجاير': ['التدخين'],
+    'الشمه': ['التدخين'],
+    'القات': ['القات'],
+    'الربا': ['الفوائد', 'الربا'],
+    'البنك': ['الربا', 'البنوك'],
+    'الطلاق': ['الطلاق'],
+    'الحيض': ['الحيض', 'الدوره'],
+    'الدوره': ['الحيض'],
+  };
+  Map<String, List<String>> extraSynonyms = {};
+
+  /// Every form a search word may take: itself plus its related words.
+  List<String> _forms(String w) {
+    final out = <String>{w};
+    void add(Map<String, List<String>> m) {
+      for (final e in m.entries) {
+        final k = normalizeArabic(e.key);
+        final vals = e.value.map(normalizeArabic).toList();
+        if (k == w || (w.length > 3 && (k.contains(w) || w.contains(k)))) out.addAll(vals);
+        if (vals.contains(w)) out.add(k);
+      }
+    }
+
+    add(_builtinSynonyms);
+    add(extraSynonyms);
+    return out.where((e) => e.isNotEmpty).toList();
+  }
+
   List<Fatwa> search(String query) {
     final words = normalizeArabic(query)
         .split(RegExp(r'\s+'))
         .where((w) => w.isNotEmpty)
         .toList();
     if (words.isEmpty) return [];
-    final results = fatwas.where((f) => words.every(f.searchText.contains)).toList();
+    var results = fatwas.where((f) => words.every(f.searchText.contains)).toList();
+    if (results.isEmpty) {
+      // Search by meaning: try the related words too.
+      final forms = [for (final w in words) _forms(w)];
+      results = fatwas.where((f) => forms.every((alts) => alts.any(f.searchText.contains))).toList();
+    }
     // Title matches first.
     results.sort((a, b) {
       final at = words.every(normalizeArabic(a.title).contains) ? 0 : 1;

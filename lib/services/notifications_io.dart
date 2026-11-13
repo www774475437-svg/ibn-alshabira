@@ -2,6 +2,37 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
+/// One-off alerts (new question for staff, reply for the asker).
+class AppAlerts {
+  static int _n = 100;
+  static bool _asked = false;
+  static Future<void> show(String title, String body) async {
+    if (!DailyNotifications._ready) return;
+    try {
+      if (!_asked) {
+        _asked = true;
+        await DailyNotifications._plugin
+            .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+            ?.requestNotificationsPermission();
+      }
+      await DailyNotifications._plugin.show(
+        _n++,
+        title,
+        body,
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'questions',
+            'الأسئلة والأجوبة',
+            channelDescription: 'تنبيه عند وصول سؤال جديد أو جواب سؤالك',
+            importance: Importance.high,
+            priority: Priority.high,
+          ),
+        ),
+      );
+    } catch (_) {}
+  }
+}
+
 class DailyNotifications {
   static final _plugin = FlutterLocalNotificationsPlugin();
   static bool _ready = false;

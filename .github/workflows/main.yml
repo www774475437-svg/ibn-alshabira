@@ -48,6 +48,9 @@ jobs:
       - name: Latest videos from the sheikh's YouTube channel
         run: python3 tool/fetch_youtube.py
 
+      - name: Posts from the sheikh's Telegram channel
+        run: python3 tool/fetch_telegram.py
+
       - run: flutter pub get
 
       - name: App icon (logo)
@@ -90,6 +93,9 @@ jobs:
 
       - name: Latest videos from the sheikh's YouTube channel
         run: python3 tool/fetch_youtube.py
+
+      - name: Posts from the sheikh's Telegram channel
+        run: python3 tool/fetch_telegram.py
 
       - name: Build website
         run: flutter build web --release --base-href /ibn-alshabira/ --dart-define=BUILD_NUMBER=0
