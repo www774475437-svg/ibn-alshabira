@@ -23,100 +23,164 @@ class QuestionsTab extends StatefulWidget {
 }
 
 class _QuestionsTabState extends State<QuestionsTab> {
-  String _filter = 'new'; // new | answered | hidden
+  String _filter = 'new'; // new | answered | hidden | blocked
+
+  Widget _blockedList() => StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: Cloud.instance.blockedStream(),
+        builder: (context, snap) {
+          final docs = snap.data?.docs ?? [];
+          if (docs.isEmpty) return const EmptyState(icon: Icons.block, text: 'لا يوجد محظورون');
+          return ListView(
+            children: [
+              for (final d in docs)
+                Card(
+                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  child: ListTile(
+                    leading: const Icon(Icons.block, color: Colors.red),
+                    title: Text('${d.data()['sample'] ?? ''}', maxLines: 3, overflow: TextOverflow.ellipsis),
+                    subtitle: const Text('سؤال من هذا السائل'),
+                    trailing: TextButton(
+                      onPressed: () => Cloud.instance.unblockUser(d.id),
+                      child: const Text('رفع الحظر'),
+                    ),
+                  ),
+                ),
+            ],
+          );
+        },
+      );
 
   @override
   Widget build(BuildContext context) {
+    final cloud = Cloud.instance;
+    final repo = Repository.instance;
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.all(10),
+        if (cloud.isFullAdmin)
+          ListenableBuilder(
+            listenable: cloud,
+            builder: (context, _) => SwitchListTile(
+              dense: true,
+              title: const Text('استقبال الأسئلة من الناس'),
+              subtitle: Text(cloud.askOpen ? 'مفتوح' : 'متوقف مؤقتاً'),
+              value: cloud.askOpen,
+              onChanged: (v) => cloud.setConfig(
+                  'ask', {'open': v}, v ? 'فتح استقبال الأسئلة' : 'إيقاف استقبال الأسئلة'),
+            ),
+          ),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           child: SegmentedButton<String>(
+            showSelectedIcon: false,
             segments: const [
               ButtonSegment(value: 'new', label: Text('جديدة')),
               ButtonSegment(value: 'answered', label: Text('أُجيب عنها')),
               ButtonSegment(value: 'hidden', label: Text('مخفية')),
+              ButtonSegment(value: 'blocked', label: Text('المحظورون')),
             ],
             selected: {_filter},
             onSelectionChanged: (s) => setState(() => _filter = s.first),
           ),
         ),
         Expanded(
-          child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: Cloud.instance.allQuestions(),
-            builder: (context, snap) {
-              if (snap.hasError) {
-                return const EmptyState(icon: Icons.error_outline, text: 'تعذّر تحميل الأسئلة');
-              }
-              if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-              final docs = snap.data!.docs.where((d) => (d.data()['status'] ?? 'new') == _filter).toList();
-              if (docs.isEmpty) {
-                return const EmptyState(icon: Icons.inbox_outlined, text: 'لا توجد أسئلة هنا');
-              }
-              return ListView.builder(
-                padding: const EdgeInsets.only(bottom: 16),
-                itemCount: docs.length,
-                itemBuilder: (context, i) {
-                  final d = docs[i];
-                  final q = d.data();
-                  final reply = '${q['reply'] ?? ''}';
-                  return Card(
-                    margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    child: Padding(
-                      padding: const EdgeInsets.all(14),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          SelectableText('${q['text'] ?? ''}',
-                              style: const TextStyle(fontSize: 16, height: 1.7)),
-                          if (reply.isNotEmpty) ...[
-                            const Divider(height: 20),
-                            Text(q['published'] == true ? 'الجواب (منشور للجميع)' : 'الجواب (خاص بالسائل)',
-                                style: const TextStyle(color: kGoldChip, fontWeight: FontWeight.bold)),
-                            const SizedBox(height: 4),
-                            Text(reply, style: const TextStyle(height: 1.7)),
-                          ],
-                          const SizedBox(height: 10),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 6,
-                            children: [
-                              FilledButton.icon(
-                                icon: const Icon(Icons.reply, size: 18),
-                                label: Text(reply.isEmpty ? 'الرد' : 'تعديل الرد'),
-                                onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-                                  builder: (_) => ReplyScreen(id: d.id, question: '${q['text'] ?? ''}', oldReply: reply),
-                                )),
-                              ),
-                              if (_filter != 'hidden')
-                                OutlinedButton.icon(
-                                  icon: const Icon(Icons.visibility_off_outlined, size: 18),
-                                  label: const Text('إخفاء'),
-                                  onPressed: () => Cloud.instance.setQuestionStatus(d.id, 'hidden'),
-                                )
-                              else ...[
-                                OutlinedButton.icon(
-                                  icon: const Icon(Icons.undo, size: 18),
-                                  label: const Text('إرجاع'),
-                                  onPressed: () => Cloud.instance
-                                      .setQuestionStatus(d.id, reply.isEmpty ? 'new' : 'answered'),
-                                ),
-                                TextButton.icon(
-                                  icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
-                                  label: const Text('حذف نهائي', style: TextStyle(color: Colors.red)),
-                                  onPressed: () => Cloud.instance.deleteQuestion(d.id),
+          child: _filter == 'blocked'
+              ? _blockedList()
+              : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                  stream: cloud.allQuestions(),
+                  builder: (context, snap) {
+                    if (snap.hasError) {
+                      return const EmptyState(icon: Icons.error_outline, text: 'تعذّر تحميل الأسئلة');
+                    }
+                    if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+                    final docs =
+                        snap.data!.docs.where((d) => (d.data()['status'] ?? 'new') == _filter).toList();
+                    if (docs.isEmpty) {
+                      return const EmptyState(icon: Icons.inbox_outlined, text: 'لا توجد أسئلة هنا');
+                    }
+                    return ListView.builder(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      itemCount: docs.length,
+                      itemBuilder: (context, i) {
+                        final d = docs[i];
+                        final q = d.data();
+                        final reply = '${q['reply'] ?? ''}';
+                        final text = '${q['text'] ?? ''}';
+                        final chapter = '${q['chapter'] ?? ''}';
+                        return Card(
+                          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          child: Padding(
+                            padding: const EdgeInsets.all(14),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (chapter.isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 6),
+                                    child: Text('باب ${repo.chapterName(chapter)}',
+                                        style: const TextStyle(color: kGoldChip, fontSize: 12)),
+                                  ),
+                                SelectableText(text, style: const TextStyle(fontSize: 16, height: 1.7)),
+                                if (reply.isNotEmpty) ...[
+                                  const Divider(height: 20),
+                                  Text(
+                                      q['published'] == true
+                                          ? 'الجواب (منشور للجميع)'
+                                          : 'الجواب (خاص بالسائل)',
+                                      style: const TextStyle(color: kGoldChip, fontWeight: FontWeight.bold)),
+                                  const SizedBox(height: 4),
+                                  Text(reply, style: const TextStyle(height: 1.7)),
+                                ],
+                                const SizedBox(height: 10),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 6,
+                                  children: [
+                                    FilledButton.icon(
+                                      icon: const Icon(Icons.reply, size: 18),
+                                      label: Text(reply.isEmpty ? 'الرد' : 'تعديل الرد'),
+                                      onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                                        builder: (_) => ReplyScreen(
+                                            id: d.id, question: text, oldReply: reply, chapter: chapter),
+                                      )),
+                                    ),
+                                    if (_filter != 'hidden')
+                                      OutlinedButton.icon(
+                                        icon: const Icon(Icons.visibility_off_outlined, size: 18),
+                                        label: const Text('إخفاء'),
+                                        onPressed: () => cloud.setQuestionStatus(d.id, 'hidden'),
+                                      )
+                                    else ...[
+                                      OutlinedButton.icon(
+                                        icon: const Icon(Icons.undo, size: 18),
+                                        label: const Text('إرجاع'),
+                                        onPressed: () => cloud.setQuestionStatus(
+                                            d.id, reply.isEmpty ? 'new' : 'answered'),
+                                      ),
+                                      TextButton.icon(
+                                        icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                                        label: const Text('حذف نهائي', style: TextStyle(color: Colors.red)),
+                                        onPressed: () => cloud.deleteQuestion(d.id),
+                                      ),
+                                      TextButton.icon(
+                                        icon: const Icon(Icons.block, size: 18, color: Colors.red),
+                                        label: const Text('حظر السائل', style: TextStyle(color: Colors.red)),
+                                        onPressed: () async {
+                                          await cloud.blockUser('${q['uid']}', text);
+                                          if (context.mounted) _toast(context, 'حُظر السائل من إرسال الأسئلة');
+                                        },
+                                      ),
+                                    ],
+                                  ],
                                 ),
                               ],
-                            ],
+                            ),
                           ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              );
-            },
-          ),
+                        );
+                      },
+                    );
+                  },
+                ),
         ),
       ],
     );
@@ -128,7 +192,9 @@ class ReplyScreen extends StatefulWidget {
   final String id;
   final String question;
   final String oldReply;
-  const ReplyScreen({super.key, required this.id, required this.question, required this.oldReply});
+  final String chapter;
+  const ReplyScreen(
+      {super.key, required this.id, required this.question, required this.oldReply, this.chapter = ''});
 
   @override
   State<ReplyScreen> createState() => _ReplyScreenState();
@@ -137,9 +203,61 @@ class ReplyScreen extends StatefulWidget {
 class _ReplyScreenState extends State<ReplyScreen> {
   late final _reply = TextEditingController(text: widget.oldReply);
   final _title = TextEditingController();
-  String _chapter = Repository.instance.chapters.first.id;
+  late String _chapter = Repository.instance.chapters.any((c) => c.id == widget.chapter)
+      ? widget.chapter
+      : Repository.instance.chapters.first.id;
   bool _publish = false;
   bool _busy = false;
+  String _refId = '';
+
+  /// Refer the asker to an answer that already exists in the app.
+  void _pickExisting() {
+    final repo = Repository.instance;
+    var results = repo.similarToText(widget.question, limit: 8);
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) => Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+          child: SizedBox(
+            height: MediaQuery.of(ctx).size.height * 0.7,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: TextField(
+                    decoration: _deco('ابحث عن الجواب الموجود'),
+                    onChanged: (v) => setSheet(() => results = repo.search(v)),
+                  ),
+                ),
+                Expanded(
+                  child: ListView(
+                    children: [
+                      for (final f in results)
+                        ListTile(
+                          title: Text(f.title, maxLines: 2, overflow: TextOverflow.ellipsis),
+                          subtitle: Text('باب ${repo.chapterName(f.chapter)}'),
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            setState(() {
+                              _refId = f.id;
+                              _publish = false;
+                              _reply.text = 'جواب سؤالك موجود في التطبيق بعنوان:\n«${f.title}»';
+                            });
+                          },
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   Future<void> _save() async {
     setState(() => _busy = true);
@@ -150,6 +268,7 @@ class _ReplyScreenState extends State<ReplyScreen> {
       publish: _publish,
       chapter: _chapter,
       title: _title.text,
+      refId: _refId,
     );
     if (!mounted) return;
     setState(() => _busy = false);
@@ -178,6 +297,12 @@ class _ReplyScreenState extends State<ReplyScreen> {
             child: SelectableText(widget.question, style: const TextStyle(fontSize: 16, height: 1.7)),
           ),
           const SizedBox(height: 14),
+          OutlinedButton.icon(
+            icon: const Icon(Icons.link),
+            label: Text(_refId.isEmpty ? 'إحالة إلى جواب موجود في التطبيق' : 'أُحيل إلى جواب موجود ✓'),
+            onPressed: _pickExisting,
+          ),
+          const SizedBox(height: 10),
           TextField(controller: _reply, maxLines: 10, decoration: _deco('الجواب')),
           const SizedBox(height: 8),
           SwitchListTile(
@@ -189,6 +314,7 @@ class _ReplyScreenState extends State<ReplyScreen> {
           ),
           if (_publish) ...[
             DropdownButtonFormField<String>(
+              key: ValueKey(_chapter),
               value: _chapter,
               decoration: _deco('الباب'),
               items: [for (final c in repo.chapters) DropdownMenuItem(value: c.id, child: Text(c.name))],
@@ -443,4 +569,249 @@ void showSeriesSheet(BuildContext context, Fatwa fatwa) {
       ),
     ),
   );
+}
+
+
+/// Full admin: rename chapters and add new ones.
+class ChaptersTab extends StatelessWidget {
+  const ChaptersTab({super.key});
+
+  Future<void> _save(BuildContext context, Map<String, String> names, List<Chapter> extra, String log) async {
+    final err = await Cloud.instance.setConfig(
+      'chapters',
+      {
+        'names': names,
+        'extra': [for (final c in extra) {'id': c.id, 'name': c.name}],
+      },
+      log,
+    );
+    if (context.mounted) _toast(context, err ?? 'تم الحفظ ✅');
+  }
+
+  Future<String?> _askName(BuildContext context, String title, String initial) {
+    final c = TextEditingController(text: initial);
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: TextField(controller: c, autofocus: true, decoration: _deco('اسم الباب')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, c.text.trim()), child: const Text('حفظ')),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final repo = Repository.instance;
+    return ListenableBuilder(
+      listenable: repo,
+      builder: (context, _) {
+        final extra = repo.chapters.where((c) => !repo.isBaseChapter(c.id)).toList();
+        final names = {for (final c in repo.chapters.where((c) => repo.isBaseChapter(c.id))) c.id: c.name};
+        return ListView(
+          padding: const EdgeInsets.all(12),
+          children: [
+            for (final c in repo.chapters)
+              Card(
+                margin: const EdgeInsets.symmetric(vertical: 4),
+                child: ListTile(
+                  leading: Icon(chapterIcon(c.icon), color: kGold),
+                  title: Text(c.name),
+                  subtitle: Text('${repo.countInChapter(c.id)} مادة'),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        tooltip: 'تغيير الاسم',
+                        icon: const Icon(Icons.edit),
+                        onPressed: () async {
+                          final n = await _askName(context, 'تغيير اسم الباب', c.name);
+                          if (n == null || n.isEmpty || !context.mounted) return;
+                          if (repo.isBaseChapter(c.id)) {
+                            names[c.id] = n;
+                            await _save(context, names, extra, 'تغيير اسم باب');
+                          } else {
+                            final list = [
+                              for (final e in extra)
+                                e.id == c.id ? Chapter(id: e.id, name: n, icon: e.icon) : e,
+                            ];
+                            await _save(context, names, list, 'تغيير اسم باب');
+                          }
+                        },
+                      ),
+                      if (!repo.isBaseChapter(c.id))
+                        IconButton(
+                          tooltip: 'حذف الباب',
+                          icon: const Icon(Icons.delete_outline, color: Colors.red),
+                          onPressed: () {
+                            if (repo.countInChapter(c.id) > 0) {
+                              _toast(context, 'انقل أجوبة هذا الباب إلى باب آخر أولاً');
+                              return;
+                            }
+                            _save(context, names, extra.where((e) => e.id != c.id).toList(), 'حذف باب');
+                          },
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            const SizedBox(height: 10),
+            FilledButton.icon(
+              icon: const Icon(Icons.add),
+              label: const Text('إضافة باب جديد'),
+              onPressed: () async {
+                final n = await _askName(context, 'باب جديد', '');
+                if (n == null || n.isEmpty || !context.mounted) return;
+                final id = 'c${DateTime.now().millisecondsSinceEpoch}';
+                await _save(context, names, [...extra, Chapter(id: id, name: n, icon: 'mutafarriq')], 'إضافة باب');
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Full admin: the «عن الشيخ» text and the sheikh's accounts.
+class AboutTab extends StatefulWidget {
+  const AboutTab({super.key});
+
+  @override
+  State<AboutTab> createState() => _AboutTabState();
+}
+
+class _AboutTabState extends State<AboutTab> {
+  late final _about = TextEditingController(text: Cloud.instance.aboutText);
+  final _name = TextEditingController();
+  final _url = TextEditingController();
+  String _platform = 'telegram';
+
+  static const _platforms = {
+    'telegram': 'تليجرام',
+    'whatsapp': 'واتساب',
+    'youtube': 'يوتيوب',
+    'facebook': 'فيسبوك',
+    'x': 'إكس',
+    'audio': 'صوتيات',
+    'group': 'مجموعة',
+    'link': 'رابط آخر',
+  };
+
+  Future<void> _saveLinks(List<SocialLink> links) async {
+    final err = await Cloud.instance.setConfig(
+      'links',
+      {
+        'items': [for (final l in links) {'platform': l.platform, 'name': l.name, 'url': l.url}],
+      },
+      'تعديل حسابات الشيخ',
+    );
+    if (mounted) _toast(context, err ?? 'تم الحفظ ✅');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final repo = Repository.instance;
+    return ListenableBuilder(
+      listenable: repo,
+      builder: (context, _) => ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          const Text('نص صفحة «عن الشيخ»', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          TextField(controller: _about, maxLines: 8, decoration: _deco('التعريف بالشيخ')),
+          const SizedBox(height: 8),
+          FilledButton.icon(
+            icon: const Icon(Icons.save),
+            label: const Text('حفظ النص'),
+            onPressed: () async {
+              final err = await Cloud.instance
+                  .setConfig('about', {'text': _about.text.trim()}, 'تعديل صفحة عن الشيخ');
+              if (context.mounted) _toast(context, err ?? 'تم الحفظ ✅');
+            },
+          ),
+          const Divider(height: 36),
+          const Text('حسابات الشيخ', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+          for (final l in repo.sheikhLinks)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(platformIcon(l.platform), color: kGold),
+              title: Text(l.name),
+              subtitle: Text(l.url, textDirection: TextDirection.ltr, maxLines: 1, overflow: TextOverflow.ellipsis),
+              trailing: IconButton(
+                icon: const Icon(Icons.delete_outline, color: Colors.red),
+                onPressed: () => _saveLinks(repo.sheikhLinks.where((e) => e != l).toList()),
+              ),
+            ),
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String>(
+            value: _platform,
+            decoration: _deco('النوع'),
+            items: [for (final e in _platforms.entries) DropdownMenuItem(value: e.key, child: Text(e.value))],
+            onChanged: (v) => setState(() => _platform = v ?? _platform),
+          ),
+          const SizedBox(height: 10),
+          TextField(controller: _name, decoration: _deco('الاسم الظاهر')),
+          const SizedBox(height: 10),
+          TextField(controller: _url, textDirection: TextDirection.ltr, decoration: _deco('الرابط')),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            icon: const Icon(Icons.add_link),
+            label: const Text('إضافة حساب'),
+            onPressed: () {
+              if (_name.text.trim().isEmpty || !_url.text.trim().startsWith('http')) {
+                _toast(context, 'اكتب الاسم ورابطاً يبدأ بـ https');
+                return;
+              }
+              final list = [
+                ...repo.sheikhLinks,
+                SocialLink(platform: _platform, name: _name.text.trim(), url: _url.text.trim()),
+              ];
+              _name.clear();
+              _url.clear();
+              _saveLinks(list);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Developer only: who did what, and when.
+class LogTab extends StatelessWidget {
+  const LogTab({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: Cloud.instance.logStream(),
+      builder: (context, snap) {
+        if (snap.hasError) return const EmptyState(icon: Icons.error_outline, text: 'تعذّر تحميل السجل');
+        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+        final docs = snap.data!.docs;
+        if (docs.isEmpty) return const EmptyState(icon: Icons.history, text: 'السجل فارغ');
+        return ListView.separated(
+          itemCount: docs.length,
+          separatorBuilder: (_, __) => const Divider(height: 1),
+          itemBuilder: (context, i) {
+            final d = docs[i].data();
+            final at = d['at'];
+            final when = at is Timestamp ? at.toDate().toLocal().toString().substring(0, 16) : '';
+            final target = '${d['target'] ?? ''}';
+            return ListTile(
+              dense: true,
+              leading: const Icon(Icons.history, color: kGold),
+              title: Text('${d['action'] ?? ''}${target.isEmpty ? '' : ': $target'}',
+                  maxLines: 2, overflow: TextOverflow.ellipsis),
+              subtitle: Text('${d['by'] ?? ''} · $when', textDirection: TextDirection.ltr),
+            );
+          },
+        );
+      },
+    );
+  }
 }

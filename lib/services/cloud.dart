@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/models.dart';
 import '../data/repository.dart';
@@ -19,7 +22,19 @@ class Cloud extends ChangeNotifier {
 
   bool ready = false;
   User? user;
+  /// Any staff member (editor or full admin).
   bool isAdmin = false;
+
+  /// Full admin: can also manage admins, chapters, announcement, settings.
+  bool isFullAdmin = false;
+
+  bool get isDeveloper => isFullAdmin && email == developerEmail;
+
+  int newQuestions = 0; // for staff
+  int unseenReplies = 0; // for the asker
+  int _answeredCount = 0;
+  StreamSubscription? _newQSub;
+  StreamSubscription? _myQSub;
 
   FirebaseFirestore get _db => FirebaseFirestore.instance;
 
@@ -39,11 +54,12 @@ class Cloud extends ChangeNotifier {
       FirebaseAuth.instance.authStateChanges().listen((u) async {
         user = u;
         await _checkAdmin();
+        _watchQuestions();
         if (u != null) await _syncUserData();
         notifyListeners();
       });
       await loadRemoteAnswers();
-      loadAnnouncement();
+      loadConfig();
       loadSeries();
     } catch (e) {
       debugPrint('Cloud init failed: $e');
@@ -55,26 +71,72 @@ class Cloud extends ChangeNotifier {
   String? get email => user?.email?.toLowerCase();
 
   Future<void> _checkAdmin() async {
+    isAdmin = false;
+    isFullAdmin = false;
     final e = email;
-    if (e == null) {
-      isAdmin = false;
-      return;
-    }
-    // Admin rights need a verified email (Google accounts always are).
-    if (user?.emailVerified != true) {
-      isAdmin = false;
-      return;
-    }
+    // Staff rights need a verified email (Google accounts always are).
+    if (e == null || user?.emailVerified != true) return;
     if (e == developerEmail) {
       isAdmin = true;
+      isFullAdmin = true;
       return;
     }
     try {
-      isAdmin = (await _db.doc('admins/$e').get()).exists;
-    } catch (_) {
-      isAdmin = false;
+      final d = await _db.doc('admins/$e').get();
+      if (d.exists) {
+        isAdmin = true;
+        isFullAdmin = (d.data()?['role'] ?? 'admin') == 'admin';
+      }
+    } catch (_) {}
+  }
+
+  /// Staff: count of new questions. Asker: count of replies not seen yet.
+  void _watchQuestions() {
+    _newQSub?.cancel();
+    _myQSub?.cancel();
+    newQuestions = 0;
+    unseenReplies = 0;
+    final u = user;
+    if (!ready || u == null) return;
+    if (isAdmin) {
+      _newQSub = _db.collection('questions').where('status', isEqualTo: 'new').snapshots().listen((q) {
+        newQuestions = q.size;
+        notifyListeners();
+      }, onError: (_) {});
+    }
+    _myQSub = _db.collection('questions').where('uid', isEqualTo: u.uid).snapshots().listen((q) async {
+      _answeredCount = q.docs.where((d) => '${d.data()['reply'] ?? ''}'.isNotEmpty).length;
+      final prefs = await SharedPreferences.getInstance();
+      final seen = prefs.getInt('seenReplies_${u.uid}') ?? 0;
+      unseenReplies = _answeredCount > seen ? _answeredCount - seen : 0;
+      notifyListeners();
+    }, onError: (_) {});
+  }
+
+  Future<void> markRepliesSeen() async {
+    final u = user;
+    if (u == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('seenReplies_${u.uid}', _answeredCount);
+    if (unseenReplies != 0) {
+      unseenReplies = 0;
+      notifyListeners();
     }
   }
+
+  Future<void> _log(String action, [String target = '']) async {
+    try {
+      await _db.collection('log').add({
+        'by': email ?? '',
+        'action': action,
+        'target': target.length > 120 ? target.substring(0, 120) : target,
+        'at': FieldValue.serverTimestamp(),
+      });
+    } catch (_) {}
+  }
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> logStream() =>
+      _db.collection('log').orderBy('at', descending: true).limit(200).snapshots();
 
   // ---------------------------------------------------------------- Auth
   static const _webClientId =
@@ -290,18 +352,25 @@ class Cloud extends ChangeNotifier {
   // --------------------------------------------------------------- Admins
   Stream<QuerySnapshot<Map<String, dynamic>>> adminsStream() => _db.collection('admins').snapshots();
 
-  Future<String?> addAdmin(String email) async {
+  Future<String?> addAdmin(String email, {String role = 'admin'}) async {
     final e = email.trim().toLowerCase();
     if (!e.contains('@') || !e.contains('.')) return 'اكتب بريداً صحيحاً';
     try {
-      await _db.doc('admins/$e').set({'addedBy': this.email, 'at': FieldValue.serverTimestamp()});
+      await _db.doc('admins/$e').set(
+          {'addedBy': this.email, 'role': role, 'at': FieldValue.serverTimestamp()});
+      _log(role == 'admin' ? 'إضافة مشرف كامل' : 'إضافة محرّر', e);
       return null;
     } catch (_) {
       return 'تعذّرت الإضافة';
     }
   }
 
-  Future<void> removeAdmin(String email) => _db.doc('admins/$email').delete();
+  Future<void> removeAdmin(String email) async {
+    try {
+      await _db.doc('admins/$email').delete();
+      _log('حذف مشرف', email);
+    } catch (_) {}
+  }
 
   // ----------------------------------- Published answers and title edits
   Future<void> loadRemoteAnswers() async {
@@ -338,6 +407,7 @@ class Cloud extends ChangeNotifier {
         'source': '',
         'by': email,
       });
+      _log('نشر جواب', title);
       await loadRemoteAnswers();
       return null;
     } catch (_) {
@@ -348,6 +418,7 @@ class Cloud extends ChangeNotifier {
   Future<String?> editTitle(String id, String title) async {
     try {
       await _db.doc('titleEdits/$id').set({'title': title.trim(), 'by': email});
+      _log('تعديل عنوان', title);
       await loadRemoteAnswers();
       return null;
     } catch (_) {
@@ -395,6 +466,7 @@ class Cloud extends ChangeNotifier {
         'question': question.trim(),
         'answer': answer.trim(),
       });
+      _log('تعديل جواب', title);
       await loadRemoteAnswers();
       return null;
     } catch (_) {
@@ -405,6 +477,7 @@ class Cloud extends ChangeNotifier {
   Future<String?> deleteAnswer(String id) async {
     try {
       await _db.doc('answers/$id').delete();
+      _log('حذف جواب', Repository.instance.findById(id)?.title ?? id);
       await loadRemoteAnswers();
       return null;
     } catch (_) {
@@ -415,19 +488,63 @@ class Cloud extends ChangeNotifier {
   // --------------------------------------------------------- Announcement
   String announcement = '';
 
-  Future<void> loadAnnouncement() async {
+  bool askOpen = true;
+  String aboutText = '';
+  List<String> pinned = [];
+
+  /// Loads every settings document at once.
+  Future<void> loadConfig() async {
     if (!ready) return;
     try {
-      final d = (await _db.doc('config/announcement').get()).data();
-      announcement = d != null && d['active'] == true ? '${d['text'] ?? ''}' : '';
+      final q = await _db.collection('config').get();
+      final c = {for (final d in q.docs) d.id: d.data()};
+      final an = c['announcement'];
+      announcement = an != null && an['active'] == true ? '${an['text'] ?? ''}' : '';
+      askOpen = c['ask']?['open'] != false;
+      aboutText = '${c['about']?['text'] ?? ''}';
+      pinned = ((c['pinned']?['ids'] ?? []) as List).map((e) => '$e').toList();
+      final ch = c['chapters'];
+      Repository.instance.applyChapterConfig(
+        [
+          for (final e in ((ch?['extra'] ?? []) as List))
+            Chapter(id: '${e['id']}', name: '${e['name']}', icon: 'mutafarriq'),
+        ],
+        {
+          for (final e in ((ch?['names'] ?? {}) as Map).entries) '${e.key}': '${e.value}',
+        },
+      );
+      final links = ((c['links']?['items'] ?? []) as List)
+          .map((e) => SocialLink.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList();
+      if (links.isNotEmpty) Repository.instance.setSheikhLinks(links);
       notifyListeners();
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('config failed: $e');
+    }
+  }
+
+  Future<String?> setConfig(String id, Map<String, dynamic> data, String logText) async {
+    try {
+      await _db.doc('config/$id').set(data);
+      _log(logText);
+      await loadConfig();
+      return null;
+    } catch (_) {
+      return 'تعذّر الحفظ';
+    }
+  }
+
+  Future<String?> togglePin(String answerId) {
+    final ids = [...pinned];
+    if (!ids.remove(answerId)) ids.insert(0, answerId);
+    return setConfig('pinned', {'ids': ids}, 'تعديل الأجوبة المثبّتة');
   }
 
   Future<String?> setAnnouncement(String text) async {
     try {
       final t = text.trim();
       await _db.doc('config/announcement').set({'text': t, 'active': t.isNotEmpty, 'by': email});
+      _log(t.isEmpty ? 'إزالة الإعلان' : 'نشر إعلان', t);
       announcement = t;
       notifyListeners();
       return null;
@@ -488,15 +605,17 @@ class Cloud extends ChangeNotifier {
   }
 
   // ------------------------------------------------------ Ask the sheikh
-  Future<String?> ask(String text) async {
+  Future<String?> ask(String text, {String chapter = ''}) async {
     final u = user;
     if (!ready || u == null) return 'سجّل الدخول أولاً';
+    if (!askOpen) return 'استقبال الأسئلة متوقف مؤقتاً';
     final t = text.trim();
     if (t.length < 5) return 'اكتب سؤالك';
     try {
       await _db.collection('questions').add({
         'uid': u.uid,
         'text': t,
+        'chapter': chapter,
         'at': FieldValue.serverTimestamp(),
         'status': 'new',
         'reply': '',
@@ -506,6 +625,58 @@ class Cloud extends ChangeNotifier {
     } catch (_) {
       return 'تعذّر إرسال السؤال';
     }
+  }
+
+  // Blocked askers
+  Future<void> blockUser(String uid, String sample) async {
+    try {
+      await _db.doc('blocked/$uid').set({
+        'sample': sample.length > 200 ? sample.substring(0, 200) : sample,
+        'by': email,
+        'at': FieldValue.serverTimestamp(),
+      });
+      _log('حظر سائل', sample);
+    } catch (_) {}
+  }
+
+  Future<void> unblockUser(String uid) async {
+    try {
+      await _db.doc('blocked/$uid').delete();
+      _log('رفع الحظر عن سائل');
+    } catch (_) {}
+  }
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> blockedStream() => _db.collection('blocked').snapshots();
+
+  // Drafts (staff only)
+  Stream<QuerySnapshot<Map<String, dynamic>>> draftsStream() => _db.collection('drafts').snapshots();
+
+  Future<String?> saveDraft(String? id,
+      {required String chapter, required String title, required String question, required String answer}) async {
+    final data = {
+      'chapter': chapter,
+      'title': title.trim(),
+      'question': question.trim(),
+      'answer': answer.trim(),
+      'by': email,
+      'at': FieldValue.serverTimestamp(),
+    };
+    try {
+      if (id == null) {
+        await _db.collection('drafts').add(data);
+      } else {
+        await _db.doc('drafts/$id').set(data);
+      }
+      return null;
+    } catch (_) {
+      return 'تعذّر حفظ المسودة';
+    }
+  }
+
+  Future<void> deleteDraft(String id) async {
+    try {
+      await _db.doc('drafts/$id').delete();
+    } catch (_) {}
   }
 
   Stream<QuerySnapshot<Map<String, dynamic>>> myQuestions() =>
@@ -520,7 +691,8 @@ class Cloud extends ChangeNotifier {
       required String reply,
       required bool publish,
       String chapter = 'mutafarriq',
-      String title = ''}) async {
+      String title = '',
+      String refId = ''}) async {
     if (reply.trim().isEmpty) return 'اكتب الجواب';
     try {
       if (publish) {
@@ -536,8 +708,10 @@ class Cloud extends ChangeNotifier {
         'reply': reply.trim(),
         'status': 'answered',
         'published': publish,
+        'refId': refId,
         'replyAt': FieldValue.serverTimestamp(),
       });
+      _log(publish ? 'رد على سؤال مع النشر' : 'رد خاص على سؤال', questionText);
       return null;
     } catch (_) {
       return 'تعذّر الحفظ';

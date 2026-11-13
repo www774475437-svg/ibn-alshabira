@@ -93,7 +93,13 @@ class _HomeTabState extends State<HomeTab> {
                 child: ListTile(
                   leading: const Icon(Icons.forum_outlined, color: kGold),
                   title: const Text('اسأل الشيخ', style: TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: const Text('أرسل سؤالك ويصلك الجواب'),
+                  subtitle: ListenableBuilder(
+                    listenable: Cloud.instance,
+                    builder: (context, _) => Cloud.instance.unseenReplies > 0
+                        ? const Text('وصلك رد جديد من الشيخ ✉️',
+                            style: TextStyle(color: kGoldChip, fontWeight: FontWeight.bold))
+                        : const Text('أرسل سؤالك ويصلك الجواب'),
+                  ),
                   trailing: const Icon(Icons.chevron_left),
                   onTap: () => Navigator.of(context)
                       .push(MaterialPageRoute(builder: (_) => const AskScreen())),
@@ -367,6 +373,11 @@ class _CloudSections extends StatelessWidget {
                 ),
               ),
             ),
+          if (cloud.pinned.isNotEmpty) ...[
+            const _SectionTitle('أجوبة مختارة'),
+            for (final id in cloud.pinned.take(6))
+              if (Repository.instance.findById(id) case final f?) FatwaTile(fatwa: f),
+          ],
           if (cloud.series.isNotEmpty) ...[
             const _SectionTitle('سلاسل الأجوبة'),
             SizedBox(

@@ -5,6 +5,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../config.dart';
 import '../data/repository.dart';
+import '../services/cloud.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -32,17 +33,7 @@ class AboutSheikhScreen extends StatelessWidget {
           const Text('حفظه الله',
               textAlign: TextAlign.center, style: TextStyle(color: kGoldChip, fontSize: 16)),
           const SizedBox(height: 20),
-          const Card(
-            child: Padding(
-              padding: EdgeInsets.all(16),
-              child: Text(
-                'من محافظة إب باليمن، ومن طلاب الشيخ يحيى بن علي الحجوري.\n\n'
-                'يجمع هذا التطبيق أجوبته ومقالاته وكتبه ورسائله الدعوية، '
-                'مرتّبة على الأبواب ليسهل الرجوع إليها.',
-                style: TextStyle(fontSize: 16, height: 1.9),
-              ),
-            ),
-          ),
+          const _AboutText(),
           const SizedBox(height: 12),
           for (final b in repo.books.where((b) => b.title.contains('ترجمة')))
             Card(
@@ -201,6 +192,58 @@ class ComingSoonScreen extends StatelessWidget {
               style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           Text(text, textAlign: TextAlign.center, style: const TextStyle(fontSize: 16, height: 1.8)),
+        ],
+      ),
+    );
+  }
+}
+
+
+class _AboutText extends StatelessWidget {
+  const _AboutText();
+
+  static const _default = 'من محافظة إب باليمن، ومن طلاب الشيخ يحيى بن علي الحجوري.\n\n'
+      'يجمع هذا التطبيق أجوبته ومقالاته وكتبه ورسائله الدعوية، '
+      'مرتّبة على الأبواب ليسهل الرجوع إليها.';
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: Cloud.instance,
+        builder: (context, _) => Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: SelectableText(
+              Cloud.instance.aboutText.isEmpty ? _default : Cloud.instance.aboutText,
+              style: const TextStyle(fontSize: 16, height: 1.9),
+            ),
+          ),
+        ),
+      );
+}
+
+class PrivacyScreen extends StatelessWidget {
+  const PrivacyScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('سياسة الخصوصية')),
+      body: ListView(
+        padding: const EdgeInsets.all(20),
+        children: const [
+          SelectableText(
+            'تطبيق «ابن الشابرة» تطبيق علمي دعوي مجاني، لا إعلانات فيه، ولا تُباع بيانات مستخدميه ولا تُشارك مع أحد.\n\n'
+            '• دون تسجيل: تُحفظ المحفوظات والإعدادات وسجل القراءة في جوالك فقط.\n\n'
+            '• عند التسجيل: يُحفظ البريد والاسم (وصورة حساب جوجل إن دخلت به) لتعريف حسابك، '
+            'وتُحفظ محفوظاتك وقائمة «اقرأ لاحقاً» على حسابك لترجع إليك في أي جوال.\n\n'
+            '• «اسأل الشيخ»: يُحفظ نص سؤالك ليراه الشيخ والمشرفون ويردّوا عليه. '
+            'وإذا نُشر الجواب في التطبيق فإنه يُنشر دون اسمك أو بريدك.\n\n'
+            '• الإحصائيات: يُحسب عدد مرات فتح كل جواب، وتصويت «هل أفادك الجواب؟»، '
+            'والكلمات التي لا توجد لها نتيجة في البحث، دون ربطها بحسابك.\n\n'
+            '• تُحفظ البيانات في خدمة Firebase من جوجل.\n\n'
+            '• لحذف حسابك وبياناته، راسل المطوّر من «تواصل مع المطوّر».',
+            style: TextStyle(fontSize: 16, height: 1.9),
+          ),
         ],
       ),
     );

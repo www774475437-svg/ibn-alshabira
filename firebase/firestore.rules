@@ -2,10 +2,12 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
-    function isAdmin() {
-      return signedIn() && request.auth.token.email_verified == true && (
-        request.auth.token.email == 'www774475437@gmail.com' ||
-        exists(/databases/$(database)/documents/admins/$(request.auth.token.email)));
+    function verified() { return signedIn() && request.auth.token.email_verified == true; }
+    function isDev() { return verified() && request.auth.token.email == 'www774475437@gmail.com'; }
+    function staffPath() { return /databases/$(database)/documents/admins/$(request.auth.token.email); }
+    function isAdmin() { return isDev() || (verified() && exists(staffPath())); }
+    function isFullAdmin() {
+      return isDev() || (verified() && exists(staffPath()) && get(staffPath()).data.get('role', 'admin') == 'admin');
     }
     function stepOk(field) {
       return request.resource.data.get(field, 0) is int &&
@@ -15,8 +17,11 @@ service cloud.firestore {
     match /titleEdits/{id} { allow read: if true; allow write: if isAdmin(); }
     match /series/{id}     { allow read: if true; allow write: if isAdmin(); }
     match /scholars/{id}   { allow read: if true; allow write: if isAdmin(); }
-    match /config/{id}     { allow read: if true; allow write: if isAdmin(); }
-    match /admins/{email}  { allow read: if signedIn(); allow write: if isAdmin(); }
+    match /drafts/{id}     { allow read, write: if isAdmin(); }
+    match /config/{id}     { allow read: if true; allow write: if isFullAdmin(); }
+    match /admins/{email}  { allow read: if signedIn(); allow write: if isFullAdmin(); }
+    match /blocked/{uid}   { allow read, write: if isAdmin(); }
+    match /log/{id}        { allow create: if isAdmin(); allow read, delete: if isDev(); }
     match /views/{id} {
       allow read: if true;
       allow create, update: if request.resource.data.keys().hasOnly(['count', 'helpful', 'notHelpful'])
@@ -34,7 +39,8 @@ service cloud.firestore {
     }
     match /questions/{id} {
       allow create: if signedIn() && request.resource.data.uid == request.auth.uid
-        && request.resource.data.keys().hasOnly(['uid', 'text', 'at', 'status', 'reply', 'published'])
+        && !exists(/databases/$(database)/documents/blocked/$(request.auth.uid))
+        && request.resource.data.keys().hasOnly(['uid', 'text', 'chapter', 'at', 'status', 'reply', 'published'])
         && request.resource.data.text is string && request.resource.data.text.size() < 3000
         && request.resource.data.status == 'new' && request.resource.data.reply == ''
         && request.resource.data.published == false;

@@ -63,6 +63,7 @@ class Repository extends ChangeNotifier {
 
     final ch = jsonDecode(await rootBundle.loadString('assets/data/chapters.json')) as List;
     chapters = ch.map((e) => Chapter.fromJson(e as Map<String, dynamic>)).toList();
+    _baseChapters = List.of(chapters);
 
     final fw = jsonDecode(await rootBundle.loadString('assets/data/fatwas.json')) as List;
     fatwas = fw.map((e) => Fatwa.fromJson(e as Map<String, dynamic>)).toList();
@@ -129,6 +130,44 @@ class Repository extends ChangeNotifier {
     }
     fatwas = all;
     notifyListeners();
+  }
+
+  List<Chapter> _baseChapters = [];
+
+  /// Renamed chapters and chapters added from the admin panel.
+  void applyChapterConfig(List<Chapter> extra, Map<String, String> names) {
+    chapters = [
+      for (final c in [..._baseChapters, ...extra])
+        Chapter(id: c.id, name: (names[c.id] ?? '').isNotEmpty ? names[c.id]! : c.name, icon: c.icon),
+    ];
+    for (final f in fatwas) {
+      _index(f);
+    }
+    notifyListeners();
+  }
+
+  bool isBaseChapter(String id) => _baseChapters.any((c) => c.id == id);
+
+  void setSheikhLinks(List<SocialLink> links) {
+    sheikhLinks = links;
+    notifyListeners();
+  }
+
+  /// Answers that look like the text of a question being typed.
+  List<Fatwa> similarToText(String text, {int limit = 3}) {
+    final words = normalizeArabic(text)
+        .split(RegExp(r'[^\p{L}]+', unicode: true))
+        .where((w) => w.length > 2 && !_stopWords.contains(w))
+        .map((w) => w.startsWith('ال') && w.length > 4 ? w.substring(2) : w)
+        .toSet();
+    if (words.isEmpty) return [];
+    final scored = <(Fatwa, int)>[];
+    for (final f in fatwas) {
+      final n = _keywords(f).intersection(words).length;
+      if (n >= (words.length >= 3 ? 2 : 1)) scored.add((f, n));
+    }
+    scored.sort((a, b) => b.$2.compareTo(a.$2));
+    return scored.take(limit).map((e) => e.$1).toList();
   }
 
   void setLastBook(String id) {

@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import '../config.dart';
+import '../data/repository.dart';
 import '../services/cloud.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
@@ -20,13 +21,32 @@ class AskScreen extends StatefulWidget {
 class _AskScreenState extends State<AskScreen> {
   final _text = TextEditingController();
   bool _sending = false;
+  String _chapter = '';
+  int _today = 0;
+  static const _dailyLimit = 3;
+
+  @override
+  void initState() {
+    super.initState();
+    _text.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
+  }
 
   void _toast(String t) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t)));
 
   Future<void> _send() async {
     if (_sending) return;
+    if (_today >= _dailyLimit) {
+      _toast('بلغت حدّ الأسئلة اليوم ($_dailyLimit)، أرسل سؤالك غداً بإذن الله');
+      return;
+    }
     setState(() => _sending = true);
-    final err = await Cloud.instance.ask(_text.text);
+    final err = await Cloud.instance.ask(_text.text, chapter: _chapter);
     if (!mounted) return;
     setState(() => _sending = false);
     if (err == null) {
@@ -90,6 +110,10 @@ class _AskScreenState extends State<AskScreen> {
                     }
 
                     docs.sort((a, b) => ms(a).compareTo(ms(b)));
+                    final dayAgo = DateTime.now().millisecondsSinceEpoch - 86400000;
+                    _today = docs.where((d) => ms(d) > dayAgo).length;
+                    WidgetsBinding.instance
+                        .addPostFrameCallback((_) => Cloud.instance.markRepliesSeen());
                     if (docs.isEmpty) {
                       return const EmptyState(
                         icon: Icons.forum_outlined,
@@ -104,48 +128,122 @@ class _AskScreenState extends State<AskScreen> {
                   },
                 ),
               ),
-              SafeArea(
-                top: false,
-                child: Container(
-                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).cardTheme.color,
-                    border: Border(top: BorderSide(color: kGold.withValues(alpha: 0.3))),
+              if (!cloud.askOpen)
+                SafeArea(
+                  top: false,
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    color: kGold.withValues(alpha: 0.15),
+                    child: const Text(
+                      'استقبال الأسئلة متوقف مؤقتاً، ويُفتح قريباً بإذن الله.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 15, height: 1.6),
+                    ),
                   ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _text,
-                          minLines: 1,
-                          maxLines: 5,
-                          maxLength: 1500,
-                          decoration: InputDecoration(
-                            hintText: 'اكتب سؤالك هنا…',
-                            counterText: '',
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(22)),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                          ),
+                )
+              else
+                SafeArea(
+                  top: false,
+                  child: Container(
+                    padding: const EdgeInsets.fromLTRB(10, 6, 10, 8),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).cardTheme.color,
+                      border: Border(top: BorderSide(color: kGold.withValues(alpha: 0.3))),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _Similar(text: _text.text),
+                        Row(
+                          children: [
+                            const Text('الباب:', style: TextStyle(color: Colors.grey)),
+                            const SizedBox(width: 8),
+                            DropdownButton<String>(
+                              value: _chapter,
+                              isDense: true,
+                              underline: const SizedBox(),
+                              items: [
+                                const DropdownMenuItem(value: '', child: Text('لا أدري')),
+                                for (final c in Repository.instance.chapters)
+                                  DropdownMenuItem(value: c.id, child: Text(c.name)),
+                              ],
+                              onChanged: (v) => setState(() => _chapter = v ?? ''),
+                            ),
+                          ],
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      FloatingActionButton.small(
-                        heroTag: 'send-question',
-                        onPressed: _sending ? null : _send,
-                        child: _sending
-                            ? const SizedBox(
-                                width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                            : const Icon(Icons.send),
-                      ),
-                    ],
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _text,
+                                minLines: 1,
+                                maxLines: 5,
+                                maxLength: 1500,
+                                decoration: InputDecoration(
+                                  hintText: 'اكتب سؤالك هنا…',
+                                  counterText: '',
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(22)),
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            FloatingActionButton.small(
+                              heroTag: 'send-question',
+                              onPressed: _sending ? null : _send,
+                              child: _sending
+                                  ? const SizedBox(
+                                      width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                                  : const Icon(Icons.send),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
             ],
           );
         },
       ),
+    );
+  }
+}
+
+/// «هل سؤالك مُجاب؟» — answers that look like the question being typed.
+class _Similar extends StatelessWidget {
+  final String text;
+  const _Similar({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    if (text.trim().length < 8) return const SizedBox.shrink();
+    final items = Repository.instance.similarToText(text);
+    if (items.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('قد تجد جواب سؤالك هنا:', style: TextStyle(color: kGoldChip, fontWeight: FontWeight.bold)),
+        for (final f in items)
+          InkWell(
+            onTap: () => openFatwa(context, f),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 5),
+              child: Row(
+                children: [
+                  const Icon(Icons.article_outlined, size: 18, color: kGold),
+                  const SizedBox(width: 6),
+                  Expanded(child: Text(f.title, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                  const Icon(Icons.chevron_left, size: 18),
+                ],
+              ),
+            ),
+          ),
+        const Divider(height: 10),
+      ],
     );
   }
 }
@@ -159,6 +257,7 @@ class _QuestionBubble extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final reply = '${data['reply'] ?? ''}';
     final published = data['published'] == true;
+    final ref = Repository.instance.findById('${data['refId'] ?? ''}');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -209,6 +308,12 @@ class _QuestionBubble extends StatelessWidget {
                           style: TextStyle(color: kGoldChip, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 4),
                       SelectableText(reply, style: const TextStyle(fontSize: 16, height: 1.8)),
+                      if (ref != null)
+                        TextButton.icon(
+                          icon: const Icon(Icons.open_in_new, size: 18),
+                          label: const Text('فتح الجواب'),
+                          onPressed: () => openFatwa(context, ref),
+                        ),
                       if (published)
                         const Padding(
                           padding: EdgeInsets.only(top: 6),

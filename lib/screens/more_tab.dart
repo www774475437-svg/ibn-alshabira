@@ -34,9 +34,13 @@ class MoreTab extends StatelessWidget {
                 builder: (context, _) {
                   final u = Cloud.instance.user;
                   return ListTile(
-                    leading: const _IconBox(Icons.account_circle_outlined),
+                    leading: Badge(
+                      isLabelVisible: Cloud.instance.newQuestions > 0,
+                      label: Text('${Cloud.instance.newQuestions}'),
+                      child: const _IconBox(Icons.account_circle_outlined),
+                    ),
                     title: Text(u == null ? 'تسجيل الدخول أو إنشاء حساب' : (u.displayName ?? 'حسابي')),
-                    subtitle: u == null ? null : Text(Cloud.instance.isAdmin ? 'مشرف · لوحة الإدارة' : (u.email ?? '')),
+                    subtitle: u == null ? null : Text(Cloud.instance.isAdmin ? (Cloud.instance.isFullAdmin ? 'مشرف · لوحة الإدارة' : 'محرّر · لوحة المحرّر') : (u.email ?? '')),
                     trailing: const Icon(Icons.chevron_left),
                     onTap: () => Navigator.of(context).push(MaterialPageRoute(
                         builder: (_) => kIsWeb ? const AppOnlyScreen(title: 'الحساب') : const AccountScreen())),
@@ -233,6 +237,16 @@ class MoreTab extends StatelessWidget {
               ),
             ]),
             const _Group('عن التطبيق'),
+            _Section(children: [
+              ListTile(
+                leading: const _IconBox(Icons.privacy_tip_outlined),
+                title: const Text('سياسة الخصوصية'),
+                trailing: const Icon(Icons.chevron_left),
+                onTap: () => Navigator.of(context)
+                    .push(MaterialPageRoute(builder: (_) => const PrivacyScreen())),
+              ),
+            ]),
+            const SizedBox(height: 8),
             const _Section(children: [
               Padding(
                 padding: EdgeInsets.all(16),
