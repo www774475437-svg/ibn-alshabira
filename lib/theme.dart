@@ -50,7 +50,6 @@ ThemeData buildTheme(Brightness brightness, [String fontFamily = '', String pale
     pageTransitionsTheme: const PageTransitionsTheme(
       builders: {
         TargetPlatform.android: ZoomPageTransitionsBuilder(),
-        TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
       },
     ),
   );
