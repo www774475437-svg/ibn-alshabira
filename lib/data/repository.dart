@@ -31,6 +31,8 @@ class Repository extends ChangeNotifier {
   List<Fatwa> fatwas = [];
   List<Book> books = [];
   List<SocialLink> sheikhLinks = [];
+  List<Video> videos = [];
+  String lastBookId = '';
   String developerName = '';
   String developerUrl = '';
 
@@ -48,7 +50,7 @@ class Repository extends ChangeNotifier {
   double readingScale = 1.0;
 
   /// Color theme: 'green' (green & gold), 'black' (black & gold), 'paper'.
-  String palette = 'green';
+  String palette = 'teal';
 
   /// Answers opened, per month: {'2026-11': {'id1', 'id2'}}.
   Map<String, Set<String>> readLog = {};
@@ -72,6 +74,14 @@ class Repository extends ChangeNotifier {
     final bk = jsonDecode(await rootBundle.loadString('assets/data/books.json')) as List;
     books = bk.map((e) => Book.fromJson(e as Map<String, dynamic>)).toList();
 
+    try {
+      final vd = jsonDecode(await rootBundle.loadString('assets/data/videos.json')) as List;
+      videos = vd.map((e) => Video.fromJson(e as Map<String, dynamic>)).toList();
+    } catch (_) {
+      videos = [];
+    }
+    lastBookId = prefs.getString('lastBookId') ?? '';
+
     final ln = jsonDecode(await rootBundle.loadString('assets/data/links.json')) as Map<String, dynamic>;
     sheikhLinks = ((ln['sheikh'] ?? []) as List)
         .map((e) => SocialLink.fromJson(e as Map<String, dynamic>))
@@ -89,7 +99,7 @@ class Repository extends ChangeNotifier {
     fontFamily = prefs.getString('fontFamily') ?? 'Amiri';
     readingScale = prefs.getDouble('readingScale') ?? 1.0;
     readLater = (prefs.getStringList('readLater') ?? []).toSet();
-    palette = prefs.getString('palette') ?? 'green';
+    palette = prefs.getString('palette') ?? 'teal';
     try {
       final raw = jsonDecode(prefs.getString('readLog') ?? '{}') as Map<String, dynamic>;
       readLog = raw.map((k, v) => MapEntry(k, (v as List).map((e) => '$e').toSet()));
@@ -119,6 +129,19 @@ class Repository extends ChangeNotifier {
     }
     fatwas = all;
     notifyListeners();
+  }
+
+  void setLastBook(String id) {
+    lastBookId = id;
+    _prefs.setString('lastBookId', id);
+    notifyListeners();
+  }
+
+  Book? get lastBook {
+    for (final b in books) {
+      if (b.id == lastBookId) return b;
+    }
+    return null;
   }
 
   void setBooks(List<Book> list) {

@@ -7,7 +7,7 @@ import '../data/repository.dart';
 IconData chapterIcon(String key) {
   switch (key) {
     case 'aqeedah':
-      return Icons.auto_awesome;
+      return Icons.shield_outlined;
     case 'taharah':
       return Icons.water_drop_outlined;
     case 'salah':

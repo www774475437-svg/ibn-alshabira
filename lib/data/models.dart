@@ -108,3 +108,20 @@ class SocialLink {
         url: (j['url'] ?? '') as String,
       );
 }
+
+class Video {
+  final String id; // YouTube video id
+  final String title;
+  final String published;
+
+  Video({required this.id, required this.title, required this.published});
+
+  factory Video.fromJson(Map<String, dynamic> j) => Video(
+        id: '${j['id']}',
+        title: (j['title'] ?? '') as String,
+        published: (j['published'] ?? '') as String,
+      );
+
+  String get url => 'https://www.youtube.com/watch?v=$id';
+  String get thumbnail => 'https://i.ytimg.com/vi/$id/hqdefault.jpg';
+}
