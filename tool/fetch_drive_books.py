@@ -39,8 +39,15 @@ def list_folder(folder_id: str):
     return entries
 
 
+NOISE = [r"-\s*تنسيق[^-]*-?", r"طبعة\s+جديدة", r"(ال)?معتمدة?", r"\bجديد\b", r"(\s\d+)+$"]
+
+
 def clean_title(name: str) -> str:
-    return re.sub(r"\.(pdf|docx?|epub)$", "", name, flags=re.I).strip()
+    t = re.sub(r"\.(pdf|docx?|epub)$", "", name, flags=re.I)
+    t = t.replace("_", " ")
+    for pat in NOISE:
+        t = re.sub(pat, " ", t)
+    return re.sub(r"\s+", " ", t).strip(" -")
 
 
 def main():

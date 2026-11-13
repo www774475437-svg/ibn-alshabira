@@ -7,6 +7,8 @@ import '../config.dart';
 import '../data/repository.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'book_reader_screen.dart';
 
 /// «عن الشيخ»
 class AboutSheikhScreen extends StatelessWidget {
@@ -36,12 +38,25 @@ class AboutSheikhScreen extends StatelessWidget {
               child: Text(
                 'من محافظة إب باليمن، ومن طلاب الشيخ يحيى بن علي الحجوري.\n\n'
                 'يجمع هذا التطبيق أجوبته ومقالاته وكتبه ورسائله الدعوية، '
-                'مرتّبة على الأبواب ليسهل الرجوع إليها.\n\n'
-                'وسيُضاف هنا تعريف أوسع بالشيخ وطلبه للعلم ومؤلفاته قريباً بإذن الله.',
+                'مرتّبة على الأبواب ليسهل الرجوع إليها.',
                 style: TextStyle(fontSize: 16, height: 1.9),
               ),
             ),
           ),
+          const SizedBox(height: 12),
+          for (final b in repo.books.where((b) => b.title.contains('ترجمة')))
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.menu_book, color: kGold),
+                title: const Text('اقرأ ترجمة الشيخ كاملة'),
+                subtitle: Text(b.title),
+                trailing: const Icon(Icons.chevron_left),
+                onTap: () => kIsWeb
+                    ? openUrl(context, b.previewUrl)
+                    : Navigator.of(context)
+                        .push(MaterialPageRoute(builder: (_) => BookReaderScreen(book: b))),
+              ),
+            ),
           const SizedBox(height: 12),
           for (final l in repo.sheikhLinks)
             Card(
