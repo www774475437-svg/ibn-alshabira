@@ -1,7 +1,7 @@
 name: ibn_alshabira
 description: "تطبيق ابن الشابرة — فتاوى ومقالات وكتب الشيخ قائد بن غانم الشابرة"
 publish_to: 'none'
-version: 1.9.0+1
+version: 1.10.0+1
 
 environment:
   sdk: '>=3.3.0 <4.0.0'

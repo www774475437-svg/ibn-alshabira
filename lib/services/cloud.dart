@@ -388,10 +388,30 @@ class Cloud extends ChangeNotifier {
     if (!ready) return;
     try {
       final answers = await _db.collection('answers').get();
-      remoteIds = {for (final d in answers.docs) d.id};
+      final now = DateTime.now();
+      // Answers scheduled for later stay hidden until their time comes.
+      bool isLater(Map<String, dynamic> m) {
+        final t = m['publishAt'];
+        return t is Timestamp && t.toDate().isAfter(now);
+      }
+
+      final visible = [for (final d in answers.docs) if (!isLater(d.data())) d];
+      scheduled = [
+        for (final d in answers.docs)
+          if (isLater(d.data()))
+            (d.id, '${d.data()['title'] ?? ''}', (d.data()['publishAt'] as Timestamp).toDate()),
+      ]..sort((a, b) => a.$3.compareTo(b.$3));
+      remoteIds = {for (final d in visible) d.id};
       final edits = await _db.collection('titleEdits').get();
       Repository.instance.applyRemote(
-        [for (final d in answers.docs) Fatwa.fromJson({...d.data(), 'id': d.id})],
+        [
+          for (final d in visible)
+            Fatwa.fromJson({
+              for (final e in d.data().entries)
+                if (e.key != 'publishAt') e.key: e.value,
+              'id': d.id,
+            }),
+        ],
         {for (final d in edits.docs) d.id: '${d.data()['title'] ?? ''}'},
       );
     } catch (e) {
@@ -404,21 +424,24 @@ class Cloud extends ChangeNotifier {
     required String title,
     required String question,
     required String answer,
+    List<String> tags = const [],
+    DateTime? publishAt,
   }) async {
     try {
-      final now = DateTime.now();
+      final now = publishAt ?? DateTime.now();
       await _db.collection('answers').add({
+        if (publishAt != null) 'publishAt': Timestamp.fromDate(publishAt),
         'chapter': chapter,
         'type': 'fatwa',
         'title': title.trim(),
         'question': question.trim(),
         'answer': answer.trim(),
-        'tags': <String>[],
+        'tags': tags,
         'date': '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}',
         'source': '',
         'by': email,
       });
-      _log('نشر جواب', title);
+      _log(publishAt == null ? 'نشر جواب' : 'جدولة جواب', title);
       await loadRemoteAnswers();
       return null;
     } catch (_) {
@@ -469,9 +492,14 @@ class Cloud extends ChangeNotifier {
   bool isRemote(String id) => remoteIds.contains(id);
 
   Future<String?> updateAnswer(String id,
-      {required String chapter, required String title, required String question, required String answer}) async {
+      {required String chapter,
+      required String title,
+      required String question,
+      required String answer,
+      List<String>? tags}) async {
     try {
       await _db.doc('answers/$id').update({
+        if (tags != null) 'tags': tags,
         'chapter': chapter,
         'title': title.trim(),
         'question': question.trim(),
@@ -487,12 +515,88 @@ class Cloud extends ChangeNotifier {
 
   Future<String?> deleteAnswer(String id) async {
     try {
+      // Keep a copy in the trash for 30 days.
+      final doc = await _db.doc('answers/$id').get();
+      final data = doc.data();
+      if (data != null) {
+        await _db.doc('drafts/trash_$id').set({
+          ...data,
+          'trash': true,
+          'origId': id,
+          'deletedBy': email,
+          'deletedAt': FieldValue.serverTimestamp(),
+        });
+      }
       await _db.doc('answers/$id').delete();
-      _log('حذف جواب', Repository.instance.findById(id)?.title ?? id);
+      _log('حذف جواب', '${data?['title'] ?? id}');
       await loadRemoteAnswers();
       return null;
     } catch (_) {
       return 'تعذّر الحذف';
+    }
+  }
+
+  /// Answers waiting for their publish time: (id, title, time).
+  List<(String, String, DateTime)> scheduled = [];
+
+  /// Publish a scheduled answer right now.
+  Future<String?> publishNow(String id) async {
+    try {
+      await _db.doc('answers/$id').update({'publishAt': FieldValue.delete()});
+      _log('نشر جواب مجدول');
+      await loadRemoteAnswers();
+      notifyListeners();
+      return null;
+    } catch (_) {
+      return 'تعذّر النشر';
+    }
+  }
+
+  /// Remove a scheduled answer for good (it was never public).
+  Future<void> cancelScheduled(String id) async {
+    try {
+      await _db.doc('answers/$id').delete();
+      await loadRemoteAnswers();
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  /// Bring a deleted answer back from the trash.
+  Future<String?> restoreAnswer(String trashId) async {
+    try {
+      final doc = await _db.doc('drafts/$trashId').get();
+      final data = doc.data();
+      if (data == null) return 'غير موجود';
+      final orig = '${data['origId'] ?? ''}';
+      final clean = {
+        for (final e in data.entries)
+          if (!const ['trash', 'origId', 'deletedBy', 'deletedAt'].contains(e.key)) e.key: e.value,
+      };
+      if (orig.isEmpty) {
+        await _db.collection('answers').add(clean);
+      } else {
+        await _db.doc('answers/$orig').set(clean);
+      }
+      await _db.doc('drafts/$trashId').delete();
+      _log('استرجاع جواب محذوف', '${data['title'] ?? ''}');
+      await loadRemoteAnswers();
+      return null;
+    } catch (_) {
+      return 'تعذّر الاسترجاع';
+    }
+  }
+
+  /// Answers people found most / least helpful: (id, helpful, notHelpful).
+  Future<List<(String, int, int)>> votes() async {
+    if (!ready) return [];
+    try {
+      final q = await _db.collection('views').get();
+      return [
+        for (final d in q.docs)
+          (d.id, (d.data()['helpful'] ?? 0) as int, (d.data()['notHelpful'] ?? 0) as int),
+      ];
+    } catch (_) {
+      return [];
     }
   }
 

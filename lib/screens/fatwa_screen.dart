@@ -10,6 +10,8 @@ import '../services/cloud.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'admin_extra.dart';
+import 'favorites_tab.dart';
+import 'share_card_screen.dart';
 
 /// Shows one answer; swipe (or use the arrows) to move through the other
 /// answers of the same chapter, like turning the pages of a book.
@@ -450,7 +452,14 @@ class _AnswerBody extends StatelessWidget {
           Wrap(
             spacing: 6,
             runSpacing: 6,
-            children: [for (final t in fatwa.tags) Chip(label: Text('#$t'))],
+            children: [
+              for (final t in fatwa.tags)
+                ActionChip(
+                  label: Text('#$t'),
+                  onPressed: () => Navigator.of(context)
+                      .push(MaterialPageRoute(builder: (_) => TagScreen(tag: t))),
+                ),
+            ],
           ),
         ],
         if (fatwa.date.isNotEmpty) ...[
@@ -482,6 +491,17 @@ class _AnswerBody extends StatelessWidget {
         Wrap(
           alignment: WrapAlignment.center,
           children: [
+            TextButton.icon(
+              icon: const Icon(Icons.image_outlined, size: 20),
+              label: const Text('بطاقة مصوّرة'),
+              onPressed: () => Navigator.of(context)
+                  .push(MaterialPageRoute(builder: (_) => ShareCardScreen(fatwa: fatwa))),
+            ),
+            TextButton.icon(
+              icon: const Icon(Icons.create_new_folder_outlined, size: 20),
+              label: const Text('أضف إلى مجلد'),
+              onPressed: () => showFolderSheet(context, fatwa),
+            ),
             TextButton.icon(
               icon: const Icon(Icons.flag_outlined, size: 20),
               label: const Text('الإبلاغ عن خطأ'),
