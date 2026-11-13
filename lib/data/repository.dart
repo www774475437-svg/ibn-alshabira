@@ -142,8 +142,7 @@ class Repository extends ChangeNotifier {
   static VoidCallback? onSavedListsChanged;
 
   void _index(Fatwa f) {
-    f.searchText = normalizeArabic(
-        '${f.title} ${f.question} ${f.answer} ${f.tags.join(' ')} ${chapterName(f.chapter)}');
+    f.resetSearch(chapterName(f.chapter));
   }
 
   /// Merges answers published from inside the app and edited titles.

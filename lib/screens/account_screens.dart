@@ -792,7 +792,12 @@ class _AdminsTabState extends State<_AdminsTab> {
                         ? Icons.admin_panel_settings
                         : Icons.edit),
                     title: Text(d.id, textDirection: TextDirection.ltr),
-                    subtitle: Text((d.data()['role'] ?? 'admin') == 'admin' ? 'مشرف كامل' : 'محرّر'),
+                    subtitle: Text(((d.data()['role'] ?? 'admin') == 'admin' ? 'مشرف كامل' : 'محرّر') +
+                        (cloud.isDeveloper ? ' · اضغط لترى نشاطه' : '')),
+                    onTap: cloud.isDeveloper
+                        ? () => Navigator.of(context)
+                            .push(MaterialPageRoute(builder: (_) => StaffActivityScreen(email: d.id)))
+                        : null,
                     trailing: IconButton(
                       icon: const Icon(Icons.remove_circle_outline, color: Colors.red),
                       onPressed: () => cloud.removeAdmin(d.id),

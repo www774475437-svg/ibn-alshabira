@@ -1,12 +1,14 @@
 [
-  {"id": "aqeedah",    "name": "العقيدة",            "icon": "aqeedah"},
-  {"id": "taharah",    "name": "الطهارة",            "icon": "taharah"},
-  {"id": "salah",      "name": "الصلاة",             "icon": "salah"},
-  {"id": "zakah",      "name": "الزكاة",             "icon": "zakah"},
-  {"id": "siyam",      "name": "الصيام",             "icon": "siyam"},
-  {"id": "hajj",       "name": "الحج",               "icon": "hajj"},
-  {"id": "muamalat",   "name": "المعاملات",          "icon": "muamalat"},
-  {"id": "nikah",      "name": "النكاح",             "icon": "nikah"},
-  {"id": "akhlaq",     "name": "الأخلاق والآداب",    "icon": "akhlaq"},
-  {"id": "mutafarriq", "name": "متفرقات",            "icon": "mutafarriq"}
+  {"id": "aqeedah", "name": "العقيدة", "icon": "aqeedah"},
+  {"id": "manhaj", "name": "المنهج والردود", "icon": "manhaj"},
+  {"id": "taharah", "name": "الطهارة", "icon": "taharah"},
+  {"id": "salah", "name": "الصلاة", "icon": "salah"},
+  {"id": "zakah", "name": "الزكاة", "icon": "zakah"},
+  {"id": "siyam", "name": "الصيام", "icon": "siyam"},
+  {"id": "hajj", "name": "الحج", "icon": "hajj"},
+  {"id": "muamalat", "name": "المعاملات", "icon": "muamalat"},
+  {"id": "nikah", "name": "النكاح", "icon": "nikah"},
+  {"id": "akhlaq", "name": "الأخلاق والآداب", "icon": "akhlaq"},
+  {"id": "mawaiz", "name": "المواعظ والرقائق", "icon": "mawaiz"},
+  {"id": "mutafarriq", "name": "متفرقات", "icon": "mutafarriq"}
 ]
