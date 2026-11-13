@@ -9,6 +9,7 @@ import '../services/books_store.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'book_reader_screen.dart';
+import 'reading_plan.dart';
 
 /// The sheikh's books (from his Google Drive folder). Inside the app a book
 /// is downloaded and read here, without showing any outside link.
@@ -52,6 +53,10 @@ class _BooksTabState extends State<BooksTab> {
           ? const EmptyState(icon: Icons.menu_book_outlined, text: 'ستُضاف كتب الشيخ هنا قريباً بإذن الله.')
           : CustomScrollView(
               slivers: [
+                if (!kIsWeb)
+                  SliverToBoxAdapter(
+                    child: ReadingPlanCard(onOpen: _open, onChanged: () => setState(() {})),
+                  ),
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),

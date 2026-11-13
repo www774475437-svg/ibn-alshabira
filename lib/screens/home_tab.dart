@@ -379,17 +379,62 @@ class _CloudSections extends StatelessWidget {
             for (final id in cloud.pinned.take(6))
               if (Repository.instance.findById(id) case final f?) FatwaTile(fatwa: f),
           ],
-          if (cloud.series.isNotEmpty) ...[
+          if (cloud.tracks.isNotEmpty) ...[
+            const _SectionTitle('مسارات التعلّم'),
+            SizedBox(
+              height: 96,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                itemCount: cloud.tracks.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 10),
+                itemBuilder: (context, i) {
+                  final s = cloud.tracks[i];
+                  return SizedBox(
+                    width: 190,
+                    child: Card(
+                      margin: EdgeInsets.zero,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(18),
+                        onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => SeriesScreen(seriesId: s.id))),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Row(children: [
+                                const Icon(Icons.route_outlined, color: kGold, size: 20),
+                                const SizedBox(width: 6),
+                                Text('${s.ids.where(Repository.instance.everRead.contains).length} من ${s.ids.length}', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                              ]),
+                              const SizedBox(height: 6),
+                              Text(s.title,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+          if (cloud.plainSeries.isNotEmpty) ...[
             const _SectionTitle('سلاسل الأجوبة'),
             SizedBox(
               height: 96,
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 12),
-                itemCount: cloud.series.length,
+                itemCount: cloud.plainSeries.length,
                 separatorBuilder: (_, __) => const SizedBox(width: 10),
                 itemBuilder: (context, i) {
-                  final s = cloud.series[i];
+                  final s = cloud.plainSeries[i];
                   return SizedBox(
                     width: 190,
                     child: Card(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/models.dart';
 import '../data/repository.dart';
+import '../services/cloud.dart';
 import '../widgets/common.dart';
 
 class ChapterScreen extends StatefulWidget {
@@ -16,6 +17,7 @@ class _ChapterScreenState extends State<ChapterScreen> {
   String _filter = 'all'; // all | fatwa | article | letter
   String _sort = 'new'; // new | old | alpha
   bool _unreadOnly = false;
+  String _sub = '';
 
   @override
   Widget build(BuildContext context) {
@@ -38,12 +40,18 @@ class _ChapterScreenState extends State<ChapterScreen> {
         ],
       ),
       body: ListenableBuilder(
-        listenable: repo,
+        listenable: Listenable.merge([repo, Cloud.instance]),
         builder: (context, _) {
           final all = repo.byChapter(widget.chapter.id);
           final read = repo.everRead;
           final readCount = all.where((f) => read.contains(f.id)).length;
+          final subs = [
+            ...?Cloud.instance.subs[widget.chapter.id],
+            for (final f in all)
+              if (f.sub.isNotEmpty) f.sub,
+          ].toSet().toList();
           var items = _filter == 'all' ? all : all.where((f) => f.type == _filter).toList();
+          if (_sub.isNotEmpty) items = items.where((f) => f.sub == _sub).toList();
           if (_unreadOnly) items = items.where((f) => !read.contains(f.id)).toList();
           if (_sort == 'new') {
             items = items.reversed.toList();
@@ -52,6 +60,26 @@ class _ChapterScreenState extends State<ChapterScreen> {
           }
           return Column(
             children: [
+              if (subs.isNotEmpty)
+                SizedBox(
+                  height: 54,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+                    children: [
+                      for (final name in ['', ...subs])
+                        Padding(
+                          padding: const EdgeInsetsDirectional.only(end: 8),
+                          child: ChoiceChip(
+                            avatar: name.isEmpty ? null : const Icon(Icons.subdirectory_arrow_left, size: 16),
+                            label: Text(name.isEmpty ? 'كل الباب' : name),
+                            selected: _sub == name,
+                            onSelected: (_) => setState(() => _sub = name),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
               if (all.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),

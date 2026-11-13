@@ -19,7 +19,10 @@ service cloud.firestore {
     match /scholars/{id}   { allow read: if true; allow write: if isAdmin(); }
     match /drafts/{id}     { allow read, write: if isAdmin(); }
     match /config/{id}     { allow read: if true; allow write: if isFullAdmin(); }
-    match /admins/{email}  { allow read: if signedIn(); allow write: if isFullAdmin(); }
+    match /admins/{email}  {
+      allow read: if isAdmin() || (signedIn() && request.auth.token.email == email);
+      allow write: if isFullAdmin();
+    }
     match /blocked/{uid}   { allow read, write: if isAdmin(); }
     match /log/{id}        { allow create: if isAdmin(); allow read, delete: if isDev(); }
     match /views/{id} {

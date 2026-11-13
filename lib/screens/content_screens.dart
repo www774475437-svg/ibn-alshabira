@@ -31,6 +31,8 @@ class SeriesScreen extends StatelessWidget {
           for (final id in series.ids)
             if (repo.findById(id) case final f?) f,
         ];
+        final read = repo.everRead;
+        final done = items.where((f) => read.contains(f.id)).length;
         return Scaffold(
           appBar: AppBar(
             title: Text(series.title),
@@ -47,12 +49,52 @@ class SeriesScreen extends StatelessWidget {
             ],
           ),
           body: items.isEmpty
-              ? const EmptyState(icon: Icons.collections_bookmark_outlined, text: 'لا توجد أجوبة في هذه السلسلة بعد')
+              ? const EmptyState(icon: Icons.collections_bookmark_outlined, text: 'لا توجد أجوبة هنا بعد')
               : ListView.builder(
-                  itemCount: items.length,
-                  itemBuilder: (context, i) => Stack(
+                  itemCount: items.length + (series.track ? 1 : 0),
+                  itemBuilder: (context, index) {
+                    if (series.track && index == 0) {
+                      return Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(
+                                done == items.length
+                                    ? 'أتممت المسار، بارك الله فيك 🎉'
+                                    : 'أنجزت $done من ${items.length} خطوة',
+                                style: const TextStyle(fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 6),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(6),
+                              child: LinearProgressIndicator(value: done / items.length, minHeight: 8),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+                    final i = series.track ? index - 1 : index;
+                    return Stack(
                     children: [
-                      FatwaTile(fatwa: items[i]),
+                      if (series.track)
+                        Row(
+                          children: [
+                            Padding(
+                              padding: const EdgeInsetsDirectional.only(start: 14),
+                              child: CircleAvatar(
+                                radius: 14,
+                                backgroundColor: read.contains(items[i].id) ? Colors.green : kGold,
+                                child: read.contains(items[i].id)
+                                    ? const Icon(Icons.check, size: 16, color: Colors.white)
+                                    : Text('${i + 1}',
+                                        style: const TextStyle(color: Colors.white, fontSize: 13)),
+                              ),
+                            ),
+                            Expanded(child: FatwaTile(fatwa: items[i])),
+                          ],
+                        )
+                      else
+                        FatwaTile(fatwa: items[i]),
                       if (cloud.isAdmin)
                         PositionedDirectional(
                           end: 16,
@@ -64,7 +106,8 @@ class SeriesScreen extends StatelessWidget {
                           ),
                         ),
                     ],
-                  ),
+                  );
+                  },
                 ),
         );
       },
