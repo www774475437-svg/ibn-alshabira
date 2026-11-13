@@ -61,6 +61,7 @@ class Cloud extends ChangeNotifier {
       });
       await loadRemoteAnswers();
       loadConfig();
+      countVisit();
       loadSeries();
     } catch (e) {
       debugPrint('Cloud init failed: $e');
@@ -495,9 +496,20 @@ class Cloud extends ChangeNotifier {
 
   /// Title, chapter and sub-chapter of an answer that came with the app
   /// (e.g. from the sheikh's channel).
-  Future<String?> editBundled(String id, {required String title, required String chapter, required String sub}) async {
+  Future<String?> editBundled(String id,
+      {required String title, required String chapter, required String sub, String? question, String? answer}) async {
     try {
-      await _db.doc('titleEdits/$id').set({'title': title.trim(), 'chapter': chapter, 'sub': sub.trim(), 'by': email});
+      await _db.doc('titleEdits/$id').set({
+        'title': title.trim(),
+        'chapter': chapter,
+        'sub': sub.trim(),
+        if (answer != null && answer.trim().isNotEmpty) ...{
+          'question': (question ?? '').trim(),
+          'answer': answer.trim(),
+        },
+        'verified': true,
+        'by': email,
+      }, SetOptions(merge: true));
       _log('تعديل جواب', title);
       await loadRemoteAnswers();
       return null;
@@ -521,8 +533,9 @@ class Cloud extends ChangeNotifier {
   /// Move an answer to a chapter with one tap (the review page).
   Future<String?> setChapter(String id, String chapter, [String title = '']) async {
     try {
-      await _db.doc('titleEdits/$id').set({'chapter': chapter, 'by': email}, SetOptions(merge: true));
+      await _db.doc('titleEdits/$id').set({'chapter': chapter, 'verified': true, 'by': email}, SetOptions(merge: true));
       _log('نقل إلى باب', title);
+      Repository.instance.verifiedIds.add(id);
       final f = Repository.instance.findById(id);
       if (f != null) f.chapter = chapter;
       Repository.instance.sortedIds.add(id);
@@ -530,6 +543,58 @@ class Cloud extends ChangeNotifier {
     } catch (_) {
       return 'تعذّر الحفظ';
     }
+  }
+
+  /// Mark an answer as checked by the sheikh / staff (or undo it).
+  Future<String?> setVerified(String id, bool v, [String title = '']) async {
+    try {
+      await _db.doc('titleEdits/$id').set({'verified': v, 'by': email}, SetOptions(merge: true));
+      _log(v ? 'تحقق من جواب' : 'إلغاء التحقق', title);
+      if (v) {
+        Repository.instance.verifiedIds.add(id);
+      } else {
+        Repository.instance.verifiedIds.remove(id);
+      }
+      notifyListeners();
+      return null;
+    } catch (_) {
+      return 'تعذّر الحفظ';
+    }
+  }
+
+  // ---- «اسأل الشيخ» settings: open/closed and how many questions a day
+  int askLimit = 3;
+  Map<String, int> askLimits = {}; // uid → that person's own daily limit
+
+  int askLimitFor(String? uid) => askLimits[uid] ?? askLimit;
+
+  Future<String?> saveAsk({bool? open, int? limit, String? uid, int? userLimit, String logText = 'تعديل إعدادات الأسئلة'}) {
+    final per = {...askLimits};
+    if (uid != null) {
+      if (userLimit == null) {
+        per.remove(uid);
+      } else {
+        per[uid] = userLimit;
+      }
+    }
+    return setConfig('ask', {'open': open ?? askOpen, 'limit': limit ?? askLimit, 'limits': per}, logText);
+  }
+
+  /// The sheikh's lessons timetable (free text; hidden while empty).
+  String schedule = '';
+
+  /// Counts this device once a day, so the staff see how many *readers*
+  /// came (not how many pages were opened).
+  Future<void> countVisit() async {
+    if (!ready) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final now = DateTime.now().toUtc();
+      final day = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      if (prefs.getString('visitDay') == day) return;
+      await _db.doc('views/_day_$day').set({'count': FieldValue.increment(1)}, SetOptions(merge: true));
+      await prefs.setString('visitDay', day);
+    } catch (_) {}
   }
 
   /// A reader's suggestion for the developer (arrives with the reports).
@@ -566,9 +631,19 @@ class Cloud extends ChangeNotifier {
     try {
       final views = await _db.collection('views').get();
       var total = 0, helpful = 0, notHelpful = 0, shares = 0, answersViewed = 0;
+      var readersToday = 0, readersWeek = 0;
       for (final d in views.docs) {
         if (d.id.startsWith('_')) {
           if (d.id == '_appShare') shares = (d.data()['count'] ?? 0) as int;
+          if (d.id.startsWith('_day_')) {
+            final day = DateTime.tryParse('${d.id.substring(5)}T00:00:00Z');
+            final c = (d.data()['count'] ?? 0) as int;
+            if (day != null) {
+              final age = DateTime.now().toUtc().difference(day).inDays;
+              if (age == 0) readersToday = c;
+              if (age >= 0 && age < 7) readersWeek += c;
+            }
+          }
           continue;
         }
         answersViewed++;
@@ -582,6 +657,8 @@ class Cloud extends ChangeNotifier {
         'views': total,
         'answersViewed': answersViewed,
         'shares': shares,
+        'readersToday': readersToday,
+        'readersWeek': readersWeek,
         'helpful': helpful,
         'notHelpful': notHelpful,
         'reports': reports.count ?? 0,
@@ -727,6 +804,13 @@ class Cloud extends ChangeNotifier {
       final an = c['announcement'];
       announcement = an != null && an['active'] == true ? '${an['text'] ?? ''}' : '';
       askOpen = c['ask']?['open'] != false;
+      final lim = c['ask']?['limit'];
+      askLimit = lim is int && lim > 0 ? lim : 3;
+      askLimits = {
+        for (final e in ((c['ask']?['limits'] ?? {}) as Map).entries)
+          if (e.value is int) '${e.key}': e.value as int,
+      };
+      schedule = '${c['schedule']?['text'] ?? ''}';
       subs = {
         for (final e in ((c['subs']?['map'] ?? {}) as Map).entries)
           '${e.key}': ((e.value ?? []) as List).map((x) => '$x').toList(),
@@ -921,7 +1005,7 @@ class Cloud extends ChangeNotifier {
   }
 
   // ------------------------------------------------------ Ask the sheikh
-  Future<String?> ask(String text, {String chapter = ''}) async {
+  Future<String?> ask(String text, {String chapter = '', String name = ''}) async {
     final u = user;
     if (!ready || u == null) return 'سجّل الدخول أولاً';
     if (!askOpen) return 'استقبال الأسئلة متوقف مؤقتاً';
@@ -932,6 +1016,7 @@ class Cloud extends ChangeNotifier {
         'uid': u.uid,
         'text': t,
         'chapter': chapter,
+        if (name.trim().isNotEmpty) 'name': name.trim(),
         'at': FieldValue.serverTimestamp(),
         'status': 'new',
         'reply': '',

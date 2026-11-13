@@ -188,55 +188,8 @@ class _FatwaScreenState extends State<FatwaScreen> {
     );
   }
 
-  /// Title, chapter and sub-chapter of an answer that came with the app.
-  void _editTitle() {
-    final f = current;
-    final c = TextEditingController(text: f.title);
-    var chapter = f.chapter;
-    var sub = f.sub;
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setS) => AlertDialog(
-          title: const Text('تعديل الجواب'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                    controller: c,
-                    maxLines: 3,
-                    decoration: const InputDecoration(labelText: 'العنوان', border: OutlineInputBorder())),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: repo.chapters.any((x) => x.id == chapter) ? chapter : repo.chapters.last.id,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'الباب', border: OutlineInputBorder()),
-                  items: [for (final x in repo.chapters) DropdownMenuItem(value: x.id, child: Text(x.name))],
-                  onChanged: (v) => setS(() {
-                    chapter = v ?? chapter;
-                    sub = '';
-                  }),
-                ),
-                SubPicker(chapterId: chapter, value: sub, onChanged: (v) => setS(() => sub = v)),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
-            FilledButton(
-              onPressed: () async {
-                Navigator.pop(ctx);
-                final err = await Cloud.instance.editBundled(f.id, title: c.text, chapter: chapter, sub: sub);
-                if (mounted) _toast(err ?? 'تم الحفظ ✅');
-              },
-              child: const Text('حفظ'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  /// Correct an answer that came with the app (title, chapter, text).
+  void _editTitle() => showBundledEdit(context, current);
 
   @override
   Widget build(BuildContext context) {
@@ -292,6 +245,17 @@ class _FatwaScreenState extends State<FatwaScreen> {
                                 if (mounted) _toast(err ?? (was ? 'أُزيل التثبيت' : 'ثُبّت في الرئيسية ✅'));
                               },
                             ),
+                          IconButton(
+                            tooltip: repo.verifiedIds.contains(current.id) ? 'تم التحقق (اضغط للإلغاء)' : 'تحقّقت منه',
+                            icon: Icon(Icons.verified,
+                                color: repo.verifiedIds.contains(current.id) ? Colors.lightBlueAccent : Colors.white38),
+                            onPressed: () async {
+                              final f = current;
+                              final was = repo.verifiedIds.contains(f.id);
+                              final err = await Cloud.instance.setVerified(f.id, !was, f.title);
+                              if (mounted) _toast(err ?? (was ? 'أُلغي التحقق' : 'عُلّم أنه تم التحقق منه ✅'));
+                            },
+                          ),
                           IconButton(
                             tooltip: 'إخفاء من التطبيق',
                             icon: const Icon(Icons.visibility_off_outlined),
@@ -535,6 +499,7 @@ class _AnswerBodyState extends State<_AnswerBody> {
             chip(Icons.folder_outlined, repo.chapterName(fatwa.chapter)),
             if (fatwa.sub.isNotEmpty) chip(Icons.subdirectory_arrow_left, fatwa.sub),
             chip(isArticle ? Icons.article_outlined : Icons.question_answer_outlined, isArticle ? 'مقال' : 'جواب'),
+            if (Cloud.instance.isAdmin && repo.verifiedIds.contains(fatwa.id)) chip(Icons.verified, 'تم التحقق'),
             chip(Icons.schedule, '$minutes د قراءة'),
             if (fatwa.date.isNotEmpty)
               chip(Icons.event_outlined, Hijri.parse(fatwa.date) == null ? fatwa.date : '${Hijri.parse(fatwa.date)} · ${fatwa.date}'),

@@ -15,7 +15,7 @@ from telegram_to_fatwas import norm
 DATA = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'assets', 'data')
 
 # The word «الجواب» (with و/ف, optional colon) standing at the start of a line.
-ANSWER_LINE = re.compile(r'(?m)^[^\w\n]*(?:(?:[وف]?\s*الجواب|الإجابة)[ \t]*(?:[:：/]|$)|ج[ \t]*[:：/])[ \t]*\n?', re.U)
+ANSWER_LINE = re.compile(r'(?m)^[^\w\n]*(?:(?:[وف]?\s*الجواب|الإجابة)[^\w\n]*(?:[:：/][^\w\n]*|$)|ج[ \t]*[:：/]|فأجبت(?:ه|ها|هم)?[ \t]*[:：])[ \t]*\n?', re.U)
 QUESTION_START = re.compile(r'^[^\w\n]*(?:السؤال|سؤال|س)\s*[:：/]\s*|^[^\w\n]*(?:يقول\s*(?:السائل)?\s*[:：]?)\s*', re.U)
 HASHTAG_LINE = re.compile(r'(?m)^\s*(?:#\S+\s*)+$')
 LINK_ONLY = re.compile(r'^\s*(?:https?://\S+\s*)+$')
@@ -111,6 +111,12 @@ def split(text):
     q = QUESTION_START.sub('', text[:m.start()], count=1).strip()
     a = text[m.end():].strip()
     if len(q) < 8 or len(a) < 8:
+        return None
+    # Split only when it is clearly one question and its answer. Anything
+    # doubtful stays whole as an article, so no word lands in the wrong box.
+    if len(q) > 900 or len(a) < 60 or len(ANSWER_LINE.findall(text)) > 1:
+        return None
+    if len(a) < 300 and 'http' in a:
         return None
     return q, a
 

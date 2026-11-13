@@ -43,7 +43,8 @@ service cloud.firestore {
     match /questions/{id} {
       allow create: if signedIn() && request.resource.data.uid == request.auth.uid
         && !exists(/databases/$(database)/documents/blocked/$(request.auth.uid))
-        && request.resource.data.keys().hasOnly(['uid', 'text', 'chapter', 'at', 'status', 'reply', 'published'])
+        && request.resource.data.keys().hasOnly(['uid', 'text', 'chapter', 'name', 'at', 'status', 'reply', 'published'])
+        && request.resource.data.get('name', '') is string && request.resource.data.get('name', '').size() < 60
         && request.resource.data.text is string && request.resource.data.text.size() < 3000
         && request.resource.data.status == 'new' && request.resource.data.reply == ''
         && request.resource.data.published == false;

@@ -21,8 +21,8 @@ class Fatwa {
   String chapter;
   final String type; // fatwa | article | letter
   String title;
-  final String question;
-  final String answer;
+  String question;
+  String answer;
   final List<String> tags;
   final String date;
   final String source;

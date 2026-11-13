@@ -101,8 +101,22 @@ class _QuestionsTabState extends State<QuestionsTab> {
               title: const Text('استقبال الأسئلة من الناس'),
               subtitle: Text(cloud.askOpen ? 'مفتوح' : 'متوقف مؤقتاً'),
               value: cloud.askOpen,
-              onChanged: (v) => cloud.setConfig(
-                  'ask', {'open': v}, v ? 'فتح استقبال الأسئلة' : 'إيقاف استقبال الأسئلة'),
+              onChanged: (v) =>
+                  cloud.saveAsk(open: v, logText: v ? 'فتح استقبال الأسئلة' : 'إيقاف استقبال الأسئلة'),
+            ),
+          ),
+        if (cloud.isFullAdmin)
+          ListenableBuilder(
+            listenable: cloud,
+            builder: (context, _) => ListTile(
+              dense: true,
+              title: const Text('عدد الأسئلة المسموح للشخص في اليوم'),
+              trailing: DropdownButton<int>(
+                value: const [1, 2, 3, 5, 10, 20].contains(cloud.askLimit) ? cloud.askLimit : 3,
+                underline: const SizedBox(),
+                items: [for (final n in const [1, 2, 3, 5, 10, 20]) DropdownMenuItem(value: n, child: Text('$n'))],
+                onChanged: (n) => cloud.saveAsk(limit: n ?? 3),
+              ),
             ),
           ),
         SingleChildScrollView(
@@ -157,6 +171,16 @@ class _QuestionsTabState extends State<QuestionsTab> {
                                     child: Text('باب ${repo.chapterName(chapter)}',
                                         style: const TextStyle(color: kGoldChip, fontSize: 12)),
                                   ),
+                                if ('${q['name'] ?? ''}'.isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 6),
+                                    child: Row(children: [
+                                      const Icon(Icons.person_outline, size: 16, color: kGoldChip),
+                                      const SizedBox(width: 4),
+                                      Text('${q['name']}',
+                                          style: const TextStyle(fontWeight: FontWeight.bold, color: kGoldChip)),
+                                    ]),
+                                  ),
                                 SelectableText(text, style: const TextStyle(fontSize: 16, height: 1.7)),
                                 if (reply.isNotEmpty) ...[
                                   const Divider(height: 20),
@@ -198,6 +222,35 @@ class _QuestionsTabState extends State<QuestionsTab> {
                                         icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
                                         label: const Text('حذف نهائي', style: TextStyle(color: Colors.red)),
                                         onPressed: () => cloud.deleteQuestion(d.id),
+                                      ),
+                                      TextButton.icon(
+                                        icon: const Icon(Icons.speed, size: 18),
+                                        label: Text(cloud.askLimits.containsKey('${q['uid']}')
+                                            ? 'حدّه اليومي: ${cloud.askLimits['${q['uid']}']}'
+                                            : 'حدّه اليومي'),
+                                        onPressed: () async {
+                                          final uid = '${q['uid']}';
+                                          final n = await showDialog<int>(
+                                            context: context,
+                                            builder: (ctx) => SimpleDialog(
+                                              title: const Text('كم سؤالاً يُسمح لهذا السائل في اليوم؟'),
+                                              children: [
+                                                SimpleDialogOption(
+                                                  onPressed: () => Navigator.pop(ctx, 0),
+                                                  child: Text('مثل الجميع (${cloud.askLimit})'),
+                                                ),
+                                                for (final v in const [1, 2, 5, 10, 20, 50])
+                                                  SimpleDialogOption(
+                                                    onPressed: () => Navigator.pop(ctx, v),
+                                                    child: Text('$v'),
+                                                  ),
+                                              ],
+                                            ),
+                                          );
+                                          if (n == null) return;
+                                          final err = await cloud.saveAsk(uid: uid, userLimit: n == 0 ? null : n);
+                                          if (context.mounted) _toast(context, err ?? 'تم الحفظ ✅');
+                                        },
                                       ),
                                       TextButton.icon(
                                         icon: const Icon(Icons.block, size: 18, color: Colors.red),
@@ -385,6 +438,7 @@ class AnnouncementTab extends StatefulWidget {
 
 class _AnnouncementTabState extends State<AnnouncementTab> {
   late final _text = TextEditingController(text: Cloud.instance.announcement);
+  late final _schedule = TextEditingController(text: Cloud.instance.schedule);
 
   Future<void> _save(String text) async {
     final err = await Cloud.instance.setAnnouncement(text);
@@ -415,6 +469,22 @@ class _AnnouncementTabState extends State<AnnouncementTab> {
             _text.clear();
             _save('');
           },
+        ),
+        const Divider(height: 36),
+        const Text('جدول دروس الشيخ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        const SizedBox(height: 4),
+        const Text('اكتب الأيام والأوقات والروابط. إن تركته فارغاً لا يظهر للناس.',
+            style: TextStyle(color: Colors.grey, fontSize: 13)),
+        const SizedBox(height: 8),
+        TextField(controller: _schedule, maxLines: 6, decoration: _deco('الجدول')),
+        const SizedBox(height: 8),
+        FilledButton.tonal(
+          onPressed: () async {
+            final err = await Cloud.instance
+                .setConfig('schedule', {'text': _schedule.text.trim()}, 'تعديل جدول الدروس');
+            if (context.mounted) _toast(context, err ?? 'حُفظ الجدول ✅');
+          },
+          child: const Text('حفظ الجدول'),
         ),
         if (Cloud.instance.isDeveloper) ...[
           const Divider(height: 36),
@@ -1195,4 +1265,71 @@ class _StaffActivityScreenState extends State<StaffActivityScreen> {
       ),
     );
   }
+}
+
+
+/// Staff: correct an answer that came with the app (from the channel):
+/// its title, chapter, and the place where the question ends and the
+/// answer begins. Saving also marks it as checked.
+Future<void> showBundledEdit(BuildContext context, Fatwa f) async {
+  final repo = Repository.instance;
+  final title = TextEditingController(text: f.title);
+  final question = TextEditingController(text: f.question);
+  final answer = TextEditingController(text: f.answer);
+  var chapter = repo.chapters.any((x) => x.id == f.chapter) ? f.chapter : repo.chapters.last.id;
+  var sub = f.sub;
+  await Navigator.of(context).push(MaterialPageRoute(
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setS) => Scaffold(
+        appBar: AppBar(title: const Text('تصحيح الجواب')),
+        body: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            TextField(controller: title, maxLines: 2, decoration: _deco('العنوان')),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: chapter,
+              isExpanded: true,
+              decoration: _deco('الباب'),
+              items: [for (final x in repo.chapters) DropdownMenuItem(value: x.id, child: Text(x.name))],
+              onChanged: (v) => setS(() {
+                chapter = v ?? chapter;
+                sub = '';
+              }),
+            ),
+            SubPicker(chapterId: chapter, value: sub, onChanged: (v) => setS(() => sub = v)),
+            const SizedBox(height: 12),
+            TextField(controller: question, maxLines: 5, decoration: _deco('السؤال (اتركه فارغاً إن كان مقالاً)')),
+            const SizedBox(height: 12),
+            TextField(controller: answer, maxLines: 14, decoration: _deco('الجواب')),
+            const SizedBox(height: 6),
+            const Text('انقل الكلام بين الخانتين إن كان التقسيم خطأ. لا تحذف من كلام الشيخ شيئاً.',
+                style: TextStyle(color: Colors.grey, fontSize: 12)),
+            const SizedBox(height: 14),
+            FilledButton.icon(
+              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
+              icon: const Icon(Icons.verified),
+              label: const Text('حفظ وتحقّق'),
+              onPressed: () async {
+                if (answer.text.trim().isEmpty) {
+                  _toast(ctx, 'خانة الجواب فارغة');
+                  return;
+                }
+                final changed = question.text.trim() != f.question.trim() || answer.text.trim() != f.answer.trim();
+                final err = await Cloud.instance.editBundled(f.id,
+                    title: title.text,
+                    chapter: chapter,
+                    sub: sub,
+                    question: changed ? question.text : null,
+                    answer: changed ? answer.text : null);
+                if (!ctx.mounted) return;
+                _toast(ctx, err ?? 'تم الحفظ ✅');
+                if (err == null) Navigator.pop(ctx);
+              },
+            ),
+          ],
+        ),
+      ),
+    ),
+  ));
 }

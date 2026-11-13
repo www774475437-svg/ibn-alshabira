@@ -32,6 +32,14 @@ class MoreTab extends StatelessWidget {
             _ReaderStats(count: repo.readThisMonth),
             const _Group('الحساب'),
             _Section(children: [
+              ListTile(
+                leading: const _IconBox(Icons.insights_outlined),
+                title: const Text('قراءتي'),
+                subtitle: const Text('كم قرأت، وكم بقي في كل باب'),
+                trailing: const Icon(Icons.chevron_left),
+                onTap: () => Navigator.of(context)
+                    .push(MaterialPageRoute(builder: (_) => const MyReadingScreen())),
+              ),
               ListenableBuilder(
                 listenable: Cloud.instance,
                 builder: (context, _) {
@@ -63,8 +71,8 @@ class MoreTab extends StatelessWidget {
               _Section(children: [
                 ListTile(
                   leading: const _IconBox(Icons.rule_folder_outlined),
-                  title: const Text('مراجعة ترتيب المنشورات'),
-                  subtitle: const Text('انقل كل منشور إلى بابه بضغطة'),
+                  title: const Text('لم يُتحقق منها'),
+                  subtitle: const Text('راجع المنشورات واحداً واحداً: صحّح، انقل، ثم تحقّق'),
                   trailing: const Icon(Icons.chevron_left),
                   onTap: () => Navigator.of(context)
                       .push(MaterialPageRoute(builder: (_) => const ReviewScreen())),
@@ -78,7 +86,7 @@ class MoreTab extends StatelessWidget {
                 ),
               ]),
             ],
-            const _Group('الشيخ'),
+            const _Group('التعريف بالشيخ وحساباته'),
             _Section(children: [
               ListTile(
                 leading: const _IconBox(Icons.person_outline),
@@ -115,18 +123,38 @@ class MoreTab extends StatelessWidget {
                 onTap: () => Navigator.of(context)
                     .push(MaterialPageRoute(builder: (_) => const ScholarsScreen())),
               ),
-            ]),
-            const _Group('حسابات الشيخ'),
-            _Section(children: [
-              for (final l in repo.sheikhLinks)
+              if (Cloud.instance.schedule.trim().isNotEmpty)
                 ListTile(
-                  leading: _IconBox(platformIcon(l.platform)),
-                  title: Text(l.name),
-                  subtitle: l.url.isEmpty ? const Text('يُضاف قريباً') : null,
+                  leading: const _IconBox(Icons.event_available_outlined),
+                  title: const Text('جدول دروس الشيخ'),
                   trailing: const Icon(Icons.chevron_left),
-                  enabled: l.url.isNotEmpty,
-                  onTap: () => openUrl(context, l.url),
+                  onTap: () => showDialog(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('جدول دروس الشيخ'),
+                      content: SingleChildScrollView(
+                        child: SelectableText(Cloud.instance.schedule, style: const TextStyle(height: 1.9)),
+                      ),
+                      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إغلاق'))],
+                    ),
+                  ),
                 ),
+              ExpansionTile(
+                leading: const _IconBox(Icons.link),
+                title: const Text('حسابات الشيخ الرسمية'),
+                shape: const Border(),
+                children: [
+                  for (final l in repo.sheikhLinks)
+                    ListTile(
+                      leading: _IconBox(platformIcon(l.platform)),
+                      title: Text(l.name),
+                      subtitle: l.url.isEmpty ? const Text('يُضاف قريباً') : null,
+                      trailing: const Icon(Icons.chevron_left),
+                      enabled: l.url.isNotEmpty,
+                      onTap: () => openUrl(context, l.url),
+                    ),
+                ],
+              ),
             ]),
             const _Group('التواصل'),
             _Section(children: [

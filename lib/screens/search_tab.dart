@@ -26,6 +26,8 @@ class _SearchTabState extends State<SearchTab> {
   final _controller = TextEditingController();
   String _query = '';
   bool _listening = false;
+  bool _byMeaning = false;
+  String _type = '';
 
   Future<void> _voice() async {
     if (_listening) {
@@ -124,12 +126,28 @@ class _SearchTabState extends State<SearchTab> {
   @override
   Widget build(BuildContext context) {
     final repo = Repository.instance;
-    final results = repo.search(_query);
-    // A question in plain words: also show the closest answers by meaning.
-    final strictIds = {for (final f in results) f.id};
-    final near = _query.trim().length < 3 || results.length >= 12
+    // Exact search first. Search by meaning only when the reader asks for it.
+    final ranked = repo.searchRanked(_query, type: _type);
+    var results = ranked.strong;
+    var weak = ranked.weak;
+    if (results.isEmpty && weak.isEmpty && _type.isEmpty) {
+      results = repo.search(_query); // words the staff linked (e.g. الحواجب → النمص)
+    }
+    final have = {for (final f in results) f.id, for (final f in weak) f.id};
+    final near = !_byMeaning || _query.trim().length < 3
         ? const <Fatwa>[]
-        : repo.smartSearch(_query).where((f) => !strictIds.contains(f.id)).toList();
+        : repo
+            .smartSearch(_query)
+            .where((f) => !have.contains(f.id) && (_type.isEmpty || f.type == _type))
+            .toList();
+    // One list: results, then (labelled) passing mentions, then by-meaning.
+    final rows = <Object>[
+      ...results,
+      if (weak.isNotEmpty) 'ذُكرت الكلمة عرضاً في (${weak.length})',
+      ...weak,
+      if (near.isNotEmpty) 'أقرب كلام الشيخ إلى سؤالك بالمعنى (${near.length})',
+      ...near,
+    ];
     return Scaffold(
       appBar: AppBar(
         title: const Text('البحث'),
@@ -151,7 +169,7 @@ class _SearchTabState extends State<SearchTab> {
               onChanged: (v) => setState(() => _query = v),
               onSubmitted: (v) {
                 repo.addRecentSearch(v);
-                if (v.trim().length > 1 && repo.search(v).isEmpty && repo.smartSearch(v).isEmpty) {
+                if (v.trim().length > 1 && repo.search(v).isEmpty) {
                   Cloud.instance.logMiss(v);
                 }
               },
@@ -188,38 +206,54 @@ class _SearchTabState extends State<SearchTab> {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Align(
                 alignment: AlignmentDirectional.centerStart,
-                child: Text(
-                    near.isEmpty
-                        ? 'عدد النتائج: ${results.length}'
-                        : 'عدد النتائج: ${results.length} · وأقرب الأجوبة لسؤالك: ${near.length}',
-                    style: const TextStyle(color: Colors.grey)),
+                child: Text('عدد النتائج: ${results.length}', style: const TextStyle(color: Colors.grey)),
+              ),
+            ),
+          if (_query.trim().isNotEmpty)
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+              child: Row(
+                children: [
+                  for (final (id, label) in const [('', 'الكل'), ('fatwa', 'أجوبة'), ('article', 'مقالات')])
+                    Padding(
+                      padding: const EdgeInsetsDirectional.only(end: 6),
+                      child: ChoiceChip(
+                        label: Text(label),
+                        selected: _type == id,
+                        onSelected: (_) => setState(() => _type = id),
+                      ),
+                    ),
+                  FilterChip(
+                    avatar: const Icon(Icons.auto_awesome, size: 16),
+                    label: const Text('بحث بالمعنى'),
+                    selected: _byMeaning,
+                    onSelected: (v) => setState(() => _byMeaning = v),
+                  ),
+                ],
               ),
             ),
           Expanded(
             child: _query.trim().isEmpty
                 ? _EmptySearch(onPick: _search, onIndex: _openIndex)
-                : results.isEmpty && near.isEmpty
-                    ? const EmptyState(icon: Icons.search_off, text: 'لا توجد نتائج. جرّب كلمات أخرى، أو أرسل سؤالك من «اسأل الشيخ».')
+                : rows.isEmpty
+                    ? const EmptyState(
+                        icon: Icons.search_off,
+                        text: 'لا توجد نتائج. جرّب كلمة أخرى، أو فعّل «بحث بالمعنى»، أو أرسل سؤالك من «اسأل الشيخ».')
                     : ListView.builder(
-                        itemCount: results.length + near.length + (near.isEmpty ? 0 : 1),
+                        itemCount: rows.length,
                         itemBuilder: (context, i) {
-                          if (i == results.length && near.isNotEmpty) {
-                            return const Padding(
-                              padding: EdgeInsets.fromLTRB(16, 14, 16, 4),
-                              child: Row(children: [
-                                Icon(Icons.auto_awesome, size: 18, color: kGold),
-                                SizedBox(width: 6),
-                                Expanded(
-                                  child: Text('أقرب كلام الشيخ إلى سؤالك (بنصّه)',
-                                      style: TextStyle(fontWeight: FontWeight.bold, color: kGoldChip)),
-                                ),
-                              ]),
+                          final row = rows[i];
+                          if (row is String) {
+                            return Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                              child: Text(row,
+                                  style: const TextStyle(fontWeight: FontWeight.bold, color: kGoldChip)),
                             );
                           }
-                          final f = i < results.length ? results[i] : near[i - results.length - 1];
                           return GestureDetector(
                             onTapDown: (_) => repo.addRecentSearch(_query),
-                            child: FatwaTile(fatwa: f),
+                            child: FatwaTile(fatwa: row as Fatwa),
                           );
                         },
                       ),

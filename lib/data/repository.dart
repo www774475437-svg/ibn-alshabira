@@ -161,6 +161,9 @@ class Repository extends ChangeNotifier {
   /// Answers the staff hid from the app (still listed for them to restore).
   List<Fatwa> hidden = [];
 
+  /// Answers the sheikh or a staff member checked themselves.
+  Set<String> verifiedIds = {};
+
   /// Answers whose chapter a staff member already chose by hand.
   Set<String> sortedIds = {};
 
@@ -263,6 +266,11 @@ class Repository extends ChangeNotifier {
         final c = '${e['chapter'] ?? ''}';
         if (c.isNotEmpty && known.contains(c)) f.chapter = c;
         if (e['sub'] != null) f.sub = '${e['sub']}';
+        // Text corrected by the staff (e.g. a wrongly split question).
+        if (e['answer'] is String && (e['answer'] as String).trim().isNotEmpty) {
+          f.question = '${e['question'] ?? ''}';
+          f.answer = e['answer'] as String;
+        }
       }
       _index(f);
     }
@@ -270,6 +278,7 @@ class Repository extends ChangeNotifier {
     final hiddenIds = {for (final f in hidden) f.id};
     fatwas = hiddenIds.isEmpty ? all : all.where((f) => !hiddenIds.contains(f.id)).toList();
     sortedIds = {for (final e in edits.entries) if ('${e.value['chapter'] ?? ''}'.isNotEmpty) e.key};
+    verifiedIds = {for (final e in edits.entries) if (e.value['verified'] == true) e.key};
     notifyListeners();
   }
 
@@ -401,6 +410,47 @@ class Repository extends ChangeNotifier {
     add(_builtinSynonyms);
     add(extraSynonyms);
     return out.where((e) => e.isNotEmpty).toList();
+  }
+
+  static int _count(String text, String word) {
+    var n = 0, i = 0;
+    while ((i = text.indexOf(word, i)) != -1) {
+      n++;
+      i += word.length;
+    }
+    return n;
+  }
+
+  /// Exact search, best first. [strong]: the answer is about the words
+  /// (they are in its title or question, or repeated in it). [weak]: the
+  /// words are only mentioned in passing inside a long text.
+  ({List<Fatwa> strong, List<Fatwa> weak}) searchRanked(String query, {String type = ''}) {
+    final words = normalizeArabic(query).split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+    if (words.isEmpty) return (strong: <Fatwa>[], weak: <Fatwa>[]);
+    var pool = fatwas.where((f) => words.every(f.searchText.contains));
+    if (type.isNotEmpty) pool = pool.where((f) => f.type == type);
+    final score = <String, int>{};
+    final strong = <Fatwa>[], weak = <Fatwa>[];
+    for (final f in pool) {
+      final inTitle = words.every(f.titleNorm.contains);
+      var least = 1 << 30;
+      for (final w in words) {
+        final c = _count(f.searchText, w);
+        if (c < least) least = c;
+      }
+      final short = f.searchText.length < 700;
+      final s = (inTitle ? 1000 : 0) + (f.type == 'fatwa' ? 200 : 0) + (least > 50 ? 50 : least) + (short ? 20 : 0);
+      score[f.id] = s;
+      if (inTitle || least >= 3 || short) {
+        strong.add(f);
+      } else {
+        weak.add(f);
+      }
+    }
+    int by(Fatwa a, Fatwa b) => score[b.id]!.compareTo(score[a.id]!);
+    strong.sort(by);
+    weak.sort(by);
+    return (strong: strong, weak: weak);
   }
 
   List<Fatwa> search(String query) {

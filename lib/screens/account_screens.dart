@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart' show Timestamp;
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config.dart';
 import '../data/repository.dart';
@@ -63,6 +64,8 @@ class AccountScreen extends StatelessWidget {
                         .push(MaterialPageRoute(builder: (_) => const AdminScreen())),
                   ),
                 ],
+                const SizedBox(height: 20),
+                const _AskName(),
                 const SizedBox(height: 24),
                 OutlinedButton.icon(
                   icon: const Icon(Icons.logout),
@@ -330,6 +333,8 @@ class _StatsTab extends StatelessWidget {
           crossAxisCount: 2,
           childAspectRatio: 1.25,
           children: [
+            tile(Icons.person_outline, 'قرّاء اليوم', s['readersToday'] ?? 0),
+            tile(Icons.groups_outlined, 'قرّاء آخر 7 أيام', s['readersWeek'] ?? 0),
             tile(Icons.visibility, 'مجموع المشاهدات', s['views'] ?? 0),
             tile(Icons.article, 'عدد الأجوبة في التطبيق', repo.fatwas.length),
             tile(Icons.auto_stories, 'أجوبة قُرئت', s['answersViewed'] ?? 0),
@@ -349,6 +354,58 @@ class _StatsTab extends StatelessWidget {
 }
 
 /// Which answers helped people most, and which need improving.
+/// Optional name or kunya the asker wants the sheikh to see with their
+/// questions. Only the sheikh and the staff ever see it.
+class _AskName extends StatefulWidget {
+  const _AskName();
+
+  @override
+  State<_AskName> createState() => _AskNameState();
+}
+
+class _AskNameState extends State<_AskName> {
+  final _c = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    SharedPreferences.getInstance().then((p) {
+      if (mounted) _c.text = p.getString('askName') ?? '';
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          controller: _c,
+          maxLength: 40,
+          decoration: InputDecoration(
+            labelText: 'اسمك أو كنيتك (اختياري)',
+            hintText: 'مثل: أبو عبد الرحمن',
+            helperText: 'يراه الشيخ والمشرفون فقط مع أسئلتك، ولا يظهر لأحد غيرهم ولا في الأجوبة المنشورة.',
+            helperMaxLines: 3,
+            border: const OutlineInputBorder(),
+            suffixIcon: IconButton(
+              tooltip: 'حفظ',
+              icon: const Icon(Icons.check),
+              onPressed: () async {
+                final p = await SharedPreferences.getInstance();
+                await p.setString('askName', _c.text.trim());
+                if (!context.mounted) return;
+                FocusScope.of(context).unfocus();
+                _toast(context, 'حُفظ الاسم');
+              },
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _VotesLists extends StatelessWidget {
   const _VotesLists();
 

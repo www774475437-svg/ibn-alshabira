@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/models.dart';
 
@@ -26,7 +27,7 @@ class _AskScreenState extends State<AskScreen> {
   bool _sending = false;
   String _chapter = '';
   int _today = 0;
-  static const _dailyLimit = 3;
+  int get _dailyLimit => Cloud.instance.askLimitFor(Cloud.instance.user?.uid);
 
   @override
   void initState() {
@@ -54,7 +55,8 @@ class _AskScreenState extends State<AskScreen> {
       return;
     }
     setState(() => _sending = true);
-    final err = await Cloud.instance.ask(_text.text, chapter: _chapter);
+    final prefs = await SharedPreferences.getInstance();
+    final err = await Cloud.instance.ask(_text.text, chapter: _chapter, name: prefs.getString('askName') ?? '');
     if (!mounted) return;
     setState(() => _sending = false);
     if (err == null) {
