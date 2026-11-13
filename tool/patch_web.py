@@ -13,10 +13,15 @@ h = index.read_text(encoding="utf-8")
 h = re.sub(r"<html[^>]*>", '<html lang="ar" dir="rtl">', h, count=1)
 h = re.sub(r"<title>.*?</title>", f"<title>{TITLE}</title>", h, count=1, flags=re.S)
 h = re.sub(r'<meta name="description" content="[^"]*">', f'<meta name="description" content="{DESC}">', h, count=1)
+SITE = "https://www774475437-svg.github.io/ibn-alshabira/"
 if 'property="og:title"' not in h:
     h = h.replace("</head>",
                   f'  <meta property="og:title" content="{TITLE}">\n'
-                  f'  <meta property="og:description" content="{DESC}">\n</head>', 1)
+                  f'  <meta property="og:description" content="{DESC}">\n'
+                  f'  <meta property="og:image" content="{SITE}icons/Icon-512.png">\n'
+                  f'  <meta property="og:url" content="{SITE}">\n'
+                  f'  <meta property="og:type" content="website">\n'
+                  f'  <meta name="twitter:card" content="summary">\n</head>', 1)
 h = h.replace('content="ibn_alshabira"', 'content="ابن الشابرة"')
 index.write_text(h, encoding="utf-8")
 

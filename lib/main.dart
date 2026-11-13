@@ -6,6 +6,7 @@ import 'data/repository.dart';
 import 'screens/fatwa_screen.dart';
 import 'screens/home_shell.dart';
 import 'screens/onboarding_screen.dart';
+import 'screens/splash_screen.dart';
 import 'services/notifications.dart';
 import 'theme.dart';
 
@@ -57,9 +58,11 @@ class IbnAlshabiraApp extends StatelessWidget {
           GlobalWidgetsLocalizations.delegate,
           GlobalCupertinoLocalizations.delegate,
         ],
-        theme: buildTheme(Brightness.light, repo.fontFamily),
-        darkTheme: buildTheme(Brightness.dark, repo.fontFamily),
-        themeMode: repo.themeMode,
+        theme: buildTheme(Brightness.light, repo.fontFamily, repo.palette),
+        darkTheme: buildTheme(Brightness.dark, repo.fontFamily, repo.palette),
+        themeMode: repo.palette == 'black'
+            ? ThemeMode.dark
+            : (repo.palette == 'paper' ? ThemeMode.light : repo.themeMode),
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context).copyWith(
             textScaler: TextScaler.linear(repo.fontScale),
@@ -81,7 +84,14 @@ class IbnAlshabiraApp extends StatelessWidget {
               ];
             }
           }
-          return [onGenerateRoute(const RouteSettings(name: '/'))!];
+          return [
+            MaterialPageRoute(
+              settings: const RouteSettings(name: '/'),
+              builder: (_) => SplashScreen(
+                next: Repository.instance.onboarded ? const HomeShell() : const OnboardingScreen(),
+              ),
+            ),
+          ];
         },
       ),
     );

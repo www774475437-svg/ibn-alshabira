@@ -8,6 +8,7 @@ import '../data/repository.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'ask_screen.dart';
+import 'extra_screens.dart';
 
 class MoreTab extends StatelessWidget {
   const MoreTab({super.key});
@@ -22,6 +23,26 @@ class MoreTab extends StatelessWidget {
         builder: (context, _) => ListView(
           padding: const EdgeInsets.symmetric(vertical: 8),
           children: [
+            _ReaderStats(count: repo.readThisMonth),
+            const _Group('الحساب'),
+            _Section(children: [
+              _soon(context, Icons.account_circle_outlined, 'الدخول بحساب جوجل',
+                  'تدخل بحساب جوجل فتُحفظ محفوظاتك وأسئلتك، وترجع إليك إذا غيّرت جوالك.'),
+              _soon(context, Icons.trending_up, 'الأكثر قراءة',
+                  'قائمة بالأجوبة التي يقرؤها الناس أكثر من غيرها، مع عدد المشاهدات.'),
+              _soon(context, Icons.admin_panel_settings_outlined, 'إدارة المشرفين',
+                  'صفحة خاصة بالمطوّر يضيف منها حسابات المشرفين الذين يستطيعون نشر الأجوبة وتعديلها.'),
+            ]),
+            const _Group('الشيخ'),
+            _Section(children: [
+              ListTile(
+                leading: const _IconBox(Icons.person_outline),
+                title: const Text('عن الشيخ'),
+                trailing: const Icon(Icons.chevron_left),
+                onTap: () => Navigator.of(context)
+                    .push(MaterialPageRoute(builder: (_) => const AboutSheikhScreen())),
+              ),
+            ]),
             const _Group('حسابات الشيخ'),
             _Section(children: [
               for (final l in repo.sheikhLinks)
@@ -84,6 +105,20 @@ class MoreTab extends StatelessWidget {
                 ),
               ],
               ListTile(
+                leading: const _IconBox(Icons.palette_outlined),
+                title: const Text('ألوان التطبيق'),
+                trailing: DropdownButton<String>(
+                  value: repo.palette,
+                  underline: const SizedBox(),
+                  onChanged: (p) => repo.setPalette(p ?? 'green'),
+                  items: const [
+                    DropdownMenuItem(value: 'green', child: Text('أخضر وذهبي')),
+                    DropdownMenuItem(value: 'black', child: Text('أسود وذهبي')),
+                    DropdownMenuItem(value: 'paper', child: Text('ورقي هادئ')),
+                  ],
+                ),
+              ),
+              ListTile(
                 leading: const _IconBox(Icons.font_download_outlined),
                 title: const Text('نوع الخط'),
                 trailing: DropdownButton<String>(
@@ -125,6 +160,20 @@ class MoreTab extends StatelessWidget {
             ]),
             const _Group('التطبيق والموقع'),
             _Section(children: [
+              ListTile(
+                leading: const _IconBox(Icons.qr_code_2),
+                title: const Text('رمز الموقع (QR) ونشر التطبيق'),
+                trailing: const Icon(Icons.chevron_left),
+                onTap: () => Navigator.of(context)
+                    .push(MaterialPageRoute(builder: (_) => const QrScreen())),
+              ),
+              ListTile(
+                leading: const _IconBox(Icons.backup_outlined),
+                title: const Text('النسخة الاحتياطية'),
+                trailing: const Icon(Icons.chevron_left),
+                onTap: () => Navigator.of(context)
+                    .push(MaterialPageRoute(builder: (_) => const BackupScreen())),
+              ),
               ListTile(
                 leading: const _IconBox(Icons.android),
                 title: const Text('تحميل التطبيق لأندرويد'),
@@ -169,6 +218,51 @@ class MoreTab extends StatelessWidget {
       ),
     );
   }
+}
+
+Widget _soon(BuildContext context, IconData icon, String title, String text) => ListTile(
+      leading: _IconBox(icon),
+      title: Text(title),
+      trailing: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: kGold.withValues(alpha: 0.18),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: const Text('قريباً', style: TextStyle(fontSize: 12, color: kGoldChip)),
+      ),
+      onTap: () => Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => ComingSoonScreen(title: title, icon: icon, text: text))),
+    );
+
+class _ReaderStats extends StatelessWidget {
+  final int count;
+  const _ReaderStats({required this.count});
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+        child: Card(
+          color: kGreen,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                const Icon(Icons.auto_stories, color: kGold, size: 34),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text(
+                    count == 0
+                        ? 'لم تقرأ أي جواب هذا الشهر بعد'
+                        : 'الأجوبة التي قرأتها هذا الشهر: $count\nبارك الله فيك',
+                    style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.6),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
 }
 
 class _Group extends StatelessWidget {

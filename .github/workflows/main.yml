@@ -27,7 +27,19 @@ jobs:
       - name: Create Android platform files
         run: flutter create --org com.ibnalshabira --project-name ibn_alshabira --platforms android .
 
-      - name: Patch Android (name, permissions, notifications)
+      - name: Permanent signing key (from the KEY_PASSWORD secret)
+        env:
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEY_PASSWORD" ]; then
+            openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in signing/upload.jks.enc -out android/app/upload.jks -pass env:KEY_PASSWORD
+            printf "storeFile=upload.jks\nstorePassword=%s\nkeyAlias=upload\nkeyPassword=%s\n" "$KEY_PASSWORD" "$KEY_PASSWORD" > android/key.properties
+            echo "Signing with the permanent key"
+          else
+            echo "KEY_PASSWORD secret not set - using debug key"
+          fi
+
+      - name: Patch Android (name, permissions, notifications, signing)
         run: python3 tool/patch_android.py
 
       - run: flutter pub get
