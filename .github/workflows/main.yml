@@ -67,6 +67,11 @@ jobs:
           make_latest: true
           files: ibn-alshabira.apk
 
+      - name: Remove a withdrawn build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release delete build-23 --cleanup-tag --yes -R ${{ github.repository }} || true
+
   website:
     runs-on: ubuntu-latest
     steps:
