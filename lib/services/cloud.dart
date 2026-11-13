@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 import '../data/models.dart';
 import '../data/repository.dart';
@@ -69,21 +70,48 @@ class Cloud extends ChangeNotifier {
   }
 
   // ---------------------------------------------------------------- Auth
+  static const _webClientId =
+      '402664894391-nlspbi9qo7lc65qkcngbufdh15n255jb.apps.googleusercontent.com';
+  bool _googleReady = false;
+  bool _signingIn = false;
+
+  Future<void> _ensureGoogle() async {
+    if (_googleReady) return;
+    await GoogleSignIn.instance.initialize(serverClientId: _webClientId);
+    _googleReady = true;
+  }
+
+  /// Native Google account picker (no browser).
   Future<String?> signIn() async {
     if (!ready) return 'الخدمة غير متاحة الآن، تأكد من الاتصال بالإنترنت';
+    if (_signingIn) return null;
+    _signingIn = true;
     try {
-      await FirebaseAuth.instance.signInWithProvider(GoogleAuthProvider());
+      await _ensureGoogle();
+      final account = await GoogleSignIn.instance.authenticate();
+      final idToken = account.authentication.idToken;
+      if (idToken == null) return 'تعذّر تسجيل الدخول (no-token)';
+      await FirebaseAuth.instance
+          .signInWithCredential(GoogleAuthProvider.credential(idToken: idToken));
       return null;
+    } on GoogleSignInException catch (e) {
+      if (e.code == GoogleSignInExceptionCode.canceled) return 'أُلغي تسجيل الدخول';
+      return 'تعذّر تسجيل الدخول (${e.code.name})';
     } on FirebaseAuthException catch (e) {
-      if (e.code == 'web-context-canceled' || e.code == 'canceled') return 'أُلغي تسجيل الدخول';
       return 'تعذّر تسجيل الدخول (${e.code})';
     } catch (e) {
       return 'تعذّر تسجيل الدخول';
+    } finally {
+      _signingIn = false;
     }
   }
 
   Future<void> signOut() async {
     if (!ready) return;
+    try {
+      await _ensureGoogle();
+      await GoogleSignIn.instance.signOut();
+    } catch (_) {}
     await FirebaseAuth.instance.signOut();
   }
 
