@@ -43,7 +43,7 @@ class MoreTab extends StatelessWidget {
                     subtitle: u == null ? null : Text(Cloud.instance.isAdmin ? (Cloud.instance.isFullAdmin ? 'مشرف · لوحة الإدارة' : 'محرّر · لوحة المحرّر') : (u.email ?? '')),
                     trailing: const Icon(Icons.chevron_left),
                     onTap: () => Navigator.of(context).push(MaterialPageRoute(
-                        builder: (_) => kIsWeb ? const AppOnlyScreen(title: 'الحساب') : const AccountScreen())),
+                        builder: (_) => const AccountScreen())),
                   );
                 },
               ),
@@ -52,7 +52,7 @@ class MoreTab extends StatelessWidget {
                 title: const Text('الأكثر قراءة'),
                 trailing: const Icon(Icons.chevron_left),
                 onTap: () => Navigator.of(context).push(MaterialPageRoute(
-                    builder: (_) => kIsWeb ? const AppOnlyScreen(title: 'الأكثر قراءة') : const MostReadScreen())),
+                    builder: (_) => const MostReadScreen())),
               ),
             ]),
             const _Group('الشيخ'),

@@ -1,5 +1,4 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import '../config.dart';
@@ -66,15 +65,6 @@ class _AskScreenState extends State<AskScreen> {
       body: ListenableBuilder(
         listenable: cloud,
         builder: (context, _) {
-          if (kIsWeb) {
-            return _Info(
-              icon: Icons.android,
-              title: 'هذه الخدمة في تطبيق أندرويد',
-              text: 'حمّل التطبيق لترسل سؤالك إلى الشيخ ويصلك الجواب.',
-              button: 'تحميل التطبيق',
-              onTap: () => openUrl(context, AppConfig.apkUrl),
-            );
-          }
           if (!cloud.ready) {
             return const _Info(
               icon: Icons.wifi_off,

@@ -10,7 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
 
-/// Online features (Android app only): Google sign-in, admins, views,
+/// Online features (app and website): Google sign-in, admins, views,
 /// «هل أفادك الجواب؟», error reports, published answers and title edits.
 /// The website works without it.
 class Cloud extends ChangeNotifier {
@@ -39,7 +39,6 @@ class Cloud extends ChangeNotifier {
   FirebaseFirestore get _db => FirebaseFirestore.instance;
 
   Future<void> init() async {
-    if (kIsWeb) return;
     try {
       await Firebase.initializeApp(
         options: const FirebaseOptions(
@@ -47,6 +46,7 @@ class Cloud extends ChangeNotifier {
           appId: '1:402664894391:android:b09cad286f2dd5a1604232',
           messagingSenderId: '402664894391',
           projectId: 'ibn-alshabira',
+          authDomain: 'ibn-alshabira.firebaseapp.com',
           storageBucket: 'ibn-alshabira.firebasestorage.app',
         ),
       );
@@ -156,6 +156,10 @@ class Cloud extends ChangeNotifier {
     if (_signingIn) return null;
     _signingIn = true;
     try {
+      if (kIsWeb) {
+        await FirebaseAuth.instance.signInWithPopup(GoogleAuthProvider());
+        return null;
+      }
       await _ensureGoogle();
       final account = await GoogleSignIn.instance.authenticate();
       final idToken = account.authentication.idToken;
@@ -243,10 +247,12 @@ class Cloud extends ChangeNotifier {
 
   Future<void> signOut() async {
     if (!ready) return;
-    try {
-      await _ensureGoogle();
-      await GoogleSignIn.instance.signOut();
-    } catch (_) {}
+    if (!kIsWeb) {
+      try {
+        await _ensureGoogle();
+        await GoogleSignIn.instance.signOut();
+      } catch (_) {}
+    }
     await FirebaseAuth.instance.signOut();
   }
 

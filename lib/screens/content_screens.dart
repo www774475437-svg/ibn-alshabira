@@ -1,5 +1,4 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import '../data/models.dart';
@@ -239,9 +238,9 @@ class ScholarsScreen extends StatelessWidget {
                 label: const Text('إضافة شيخ'),
               )
             : null,
-        body: kIsWeb || !cloud.ready
+        body: !cloud.ready
             ? const EmptyState(
-                icon: Icons.groups_outlined, text: 'تظهر هذه القائمة في تطبيق أندرويد عند الاتصال بالإنترنت.')
+                icon: Icons.groups_outlined, text: 'تظهر هذه القائمة عند الاتصال بالإنترنت.')
             : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                 stream: cloud.scholarsStream(),
                 builder: (context, snap) {

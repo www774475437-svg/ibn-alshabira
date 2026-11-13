@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
@@ -420,7 +419,7 @@ class _AnswerBody extends StatelessWidget {
           const SizedBox(height: 12),
           Text('تاريخ النشر: ${fatwa.date}', style: const TextStyle(color: Colors.grey)),
         ],
-        if (!kIsWeb) _CloudPanel(fatwa: fatwa),
+        _CloudPanel(fatwa: fatwa),
         const SizedBox(height: 22),
         Row(
           children: [
