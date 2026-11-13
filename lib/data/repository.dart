@@ -92,6 +92,12 @@ class Repository extends ChangeNotifier {
     developerUrl = (dev['url'] ?? '') as String;
 
     favorites = (prefs.getStringList('favorites') ?? []).toSet();
+    try {
+      final raw = jsonDecode(prefs.getString('folders') ?? '{}') as Map<String, dynamic>;
+      folders = raw.map((k, v) => MapEntry(k, (v as List).map((e) => '$e').toList()));
+    } catch (_) {
+      folders = {};
+    }
     themeMode = ThemeMode.values[prefs.getInt('themeMode') ?? ThemeMode.system.index];
     fontScale = prefs.getDouble('fontScale') ?? 1.0;
     dailyNotification = prefs.getBool('dailyNotification') ?? true;
@@ -415,6 +421,40 @@ class Repository extends ChangeNotifier {
     _prefs.setBool('dailyNotification', v);
     notifyListeners();
   }
+
+  // ---- Folders of saved answers (named by the reader) -------------------
+  Map<String, List<String>> folders = {};
+
+  void _saveFolders() {
+    _prefs.setString('folders', jsonEncode(folders));
+    notifyListeners();
+  }
+
+  bool addFolder(String name) {
+    final n = name.trim();
+    if (n.isEmpty || folders.containsKey(n)) return false;
+    folders[n] = [];
+    _saveFolders();
+    return true;
+  }
+
+  void deleteFolder(String name) {
+    folders.remove(name);
+    _saveFolders();
+  }
+
+  void toggleInFolder(String name, String id) {
+    final list = folders.putIfAbsent(name, () => []);
+    if (!list.remove(id)) list.add(id);
+    _saveFolders();
+  }
+
+  List<Fatwa> folderFatwas(String name) {
+    final ids = folders[name] ?? const [];
+    return fatwas.where((f) => ids.contains(f.id)).toList();
+  }
+
+  List<Fatwa> byTag(String tag) => fatwas.where((f) => f.tags.contains(tag)).toList();
 
   bool isFavorite(String id) => favorites.contains(id);
 

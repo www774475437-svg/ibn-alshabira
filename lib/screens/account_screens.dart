@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart' show Timestamp;
 import 'package:flutter/material.dart';
 
 import '../config.dart';
@@ -6,6 +7,7 @@ import '../services/cloud.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'admin_extra.dart';
+import 'fatwa_screen.dart';
 
 void _toast(BuildContext context, String t) =>
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t)));
@@ -319,7 +321,11 @@ class _StatsTab extends StatelessWidget {
                 ),
               ),
             );
-        return GridView.count(
+        return ListView(
+          children: [
+            GridView.count(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
           padding: const EdgeInsets.all(12),
           crossAxisCount: 2,
           childAspectRatio: 1.25,
@@ -331,6 +337,64 @@ class _StatsTab extends StatelessWidget {
             tile(Icons.thumb_up, 'أفادهم الجواب', s['helpful'] ?? 0),
             tile(Icons.thumb_down, 'لم يُفدهم', s['notHelpful'] ?? 0),
             tile(Icons.flag, 'البلاغات', s['reports'] ?? 0),
+          ],
+            ),
+            const _VotesLists(),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Which answers helped people most, and which need improving.
+class _VotesLists extends StatelessWidget {
+  const _VotesLists();
+
+  @override
+  Widget build(BuildContext context) {
+    final repo = Repository.instance;
+    return FutureBuilder(
+      future: Cloud.instance.votes(),
+      builder: (context, snap) {
+        final all = snap.data ?? [];
+        final best = all.where((e) => e.$2 > 0).toList()..sort((a, b) => b.$2.compareTo(a.$2));
+        final worst = all.where((e) => e.$3 > 0).toList()..sort((a, b) => b.$3.compareTo(a.$3));
+        Widget section(String title, IconData icon, List<(String, int, int)> items, bool good) => Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                  child: Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+                ),
+                if (items.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                    child: Text('لا تقييمات بعد', style: TextStyle(color: Colors.grey)),
+                  ),
+                for (final e in items.take(10))
+                  ListTile(
+                    dense: true,
+                    leading: Icon(icon, color: good ? kGold : Colors.grey),
+                    title: Text(repo.findById(e.$1)?.title ?? '(جواب محذوف)',
+                        maxLines: 2, overflow: TextOverflow.ellipsis),
+                    trailing: Text('${good ? e.$2 : e.$3}',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    onTap: () {
+                      final f = repo.findById(e.$1);
+                      if (f != null) {
+                        Navigator.of(context).push(MaterialPageRoute(builder: (_) => FatwaScreen(fatwa: f)));
+                      }
+                    },
+                  ),
+              ],
+            );
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            section('أكثر الأجوبة نفعاً', Icons.thumb_up, best, true),
+            section('أجوبة قيل فيها «لم يفدني»', Icons.thumb_down, worst, false),
+            const SizedBox(height: 20),
           ],
         );
       },
@@ -349,6 +413,8 @@ class _PublishTabState extends State<_PublishTab> {
   final _title = TextEditingController();
   final _question = TextEditingController();
   final _answer = TextEditingController();
+  final _tags = TextEditingController();
+  DateTime? _publishAt;
   String _chapter = Repository.instance.chapters.first.id;
   String? _draftId;
   bool _busy = false;
@@ -357,6 +423,8 @@ class _PublishTabState extends State<_PublishTab> {
     _title.clear();
     _question.clear();
     _answer.clear();
+    _tags.clear();
+    _publishAt = null;
     _draftId = null;
   }
 
@@ -366,15 +434,36 @@ class _PublishTabState extends State<_PublishTab> {
       return;
     }
     setState(() => _busy = true);
+    final later = _publishAt != null && _publishAt!.isAfter(DateTime.now());
     final err = await Cloud.instance.publishAnswer(
-        chapter: _chapter, title: _title.text, question: _question.text, answer: _answer.text);
+        chapter: _chapter,
+        title: _title.text,
+        question: _question.text,
+        answer: _answer.text,
+        tags: parseTags(_tags.text),
+        publishAt: later ? _publishAt : null);
     if (err == null && _draftId != null) await Cloud.instance.deleteDraft(_draftId!);
     if (!mounted) return;
     setState(() {
       _busy = false;
       if (err == null) _clear();
     });
-    _toast(context, err ?? 'تم النشر ✅ يظهر الآن لكل مستخدمي التطبيق');
+    _toast(context, err ?? (later ? 'جُدول الجواب ✅ ويظهر للناس في وقته' : 'تم النشر ✅ يظهر الآن لكل مستخدمي التطبيق'));
+  }
+
+  Future<void> _pickTime() async {
+    final now = DateTime.now();
+    final day = await showDatePicker(
+        context: context, initialDate: now, firstDate: now, lastDate: now.add(const Duration(days: 365)));
+    if (day == null || !mounted) return;
+    final time = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(now));
+    if (time == null || !mounted) return;
+    setState(() => _publishAt = DateTime(day.year, day.month, day.day, time.hour, time.minute));
+  }
+
+  String _fmt(DateTime t) {
+    final h = t.hour % 12 == 0 ? 12 : t.hour % 12;
+    return '${t.day}/${t.month}/${t.year} الساعة $h:${t.minute.toString().padLeft(2, '0')} ${t.hour < 12 ? 'ص' : 'م'}';
   }
 
   Future<void> _saveDraft() async {
@@ -416,7 +505,22 @@ class _PublishTabState extends State<_PublishTab> {
         TextField(controller: _question, maxLines: 3, decoration: deco('السؤال (اختياري)')),
         const SizedBox(height: 12),
         TextField(controller: _answer, maxLines: 10, decoration: deco('الجواب')),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
+        TextField(controller: _tags, decoration: deco('الوسوم (اختياري، افصل بينها بفاصلة)')),
+        const SizedBox(height: 6),
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: const Icon(Icons.schedule, color: kGold),
+          title: Text(_publishAt == null ? 'وقت النشر: الآن' : 'يُنشر في ${_fmt(_publishAt!)}'),
+          trailing: _publishAt == null
+              ? TextButton(onPressed: _pickTime, child: const Text('جدولة'))
+              : IconButton(
+                  tooltip: 'إلغاء الجدولة',
+                  icon: const Icon(Icons.close),
+                  onPressed: () => setState(() => _publishAt = null)),
+          onTap: _pickTime,
+        ),
+        const SizedBox(height: 10),
         Row(
           children: [
             Expanded(
@@ -434,7 +538,7 @@ class _PublishTabState extends State<_PublishTab> {
                 icon: _busy
                     ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                     : const Icon(Icons.publish),
-                label: const Text('نشر'),
+                label: Text(_publishAt == null ? 'نشر' : 'جدولة'),
                 onPressed: _busy ? null : _publish,
               ),
             ),
@@ -446,15 +550,24 @@ class _PublishTabState extends State<_PublishTab> {
         StreamBuilder(
           stream: Cloud.instance.draftsStream(),
           builder: (context, snap) {
-            final docs = snap.data?.docs ?? [];
-            if (docs.isEmpty) {
-              return const Padding(
-                padding: EdgeInsets.all(12),
-                child: Text('لا توجد مسودات', style: TextStyle(color: Colors.grey)),
-              );
+            final all = snap.data?.docs ?? [];
+            final docs = all.where((d) => d.data()['trash'] != true).toList();
+            final trash = all.where((d) => d.data()['trash'] == true).toList();
+            // Empty the trash of anything older than 30 days.
+            for (final d in trash) {
+              final at = d.data()['deletedAt'];
+              if (at is Timestamp && DateTime.now().difference(at.toDate()).inDays >= 30) {
+                Cloud.instance.deleteDraft(d.id);
+              }
             }
             return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                if (docs.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: Text('لا توجد مسودات', style: TextStyle(color: Colors.grey)),
+                  ),
                 for (final d in docs)
                   Card(
                     margin: const EdgeInsets.symmetric(vertical: 4),
@@ -478,6 +591,75 @@ class _PublishTabState extends State<_PublishTab> {
                       }),
                     ),
                   ),
+                if (Cloud.instance.scheduled.isNotEmpty) ...[
+                  const Divider(height: 30),
+                  const Text('أجوبة مجدولة', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  for (final (id, title, at) in Cloud.instance.scheduled)
+                    Card(
+                      margin: const EdgeInsets.symmetric(vertical: 4),
+                      child: ListTile(
+                        leading: const Icon(Icons.schedule, color: kGold),
+                        title: Text(title, maxLines: 2, overflow: TextOverflow.ellipsis),
+                        subtitle: Text('يُنشر في ${_fmt(at)}'),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              tooltip: 'انشره الآن',
+                              icon: const Icon(Icons.publish),
+                              onPressed: () async {
+                                final err = await Cloud.instance.publishNow(id);
+                                if (!context.mounted) return;
+                                _toast(context, err ?? 'نُشر الآن ✅');
+                                setState(() {});
+                              },
+                            ),
+                            IconButton(
+                              tooltip: 'إلغاء وحذف',
+                              icon: const Icon(Icons.delete_outline),
+                              onPressed: () async {
+                                await Cloud.instance.cancelScheduled(id);
+                                if (mounted) setState(() {});
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+                if (trash.isNotEmpty) ...[
+                  const Divider(height: 30),
+                  const Text('سلة المحذوفات', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const Text('تُحذف نهائياً بعد 30 يوماً', style: TextStyle(color: Colors.grey, fontSize: 13)),
+                  for (final d in trash)
+                    Card(
+                      margin: const EdgeInsets.symmetric(vertical: 4),
+                      child: ListTile(
+                        leading: const Icon(Icons.delete_sweep_outlined, color: Colors.grey),
+                        title: Text('${d.data()['title'] ?? ''}', maxLines: 2, overflow: TextOverflow.ellipsis),
+                        subtitle: Text('حذفه: ${d.data()['deletedBy'] ?? ''}'),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              tooltip: 'استرجاع',
+                              icon: const Icon(Icons.restore),
+                              onPressed: () async {
+                                final err = await Cloud.instance.restoreAnswer(d.id);
+                                if (!context.mounted) return;
+                                _toast(context, err ?? 'استُرجع الجواب ✅');
+                              },
+                            ),
+                            IconButton(
+                              tooltip: 'حذف نهائي',
+                              icon: const Icon(Icons.delete_forever_outlined),
+                              onPressed: () => Cloud.instance.deleteDraft(d.id),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
               ],
             );
           },

@@ -11,6 +11,14 @@ import '../widgets/common.dart';
 void _toast(BuildContext context, String t) =>
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t)));
 
+/// «رمضان، السفر» → ['رمضان', 'السفر']
+List<String> parseTags(String text) => text
+    .split(RegExp('[,،#\\n]'))
+    .map((e) => e.trim())
+    .where((e) => e.isNotEmpty)
+    .toSet()
+    .toList();
+
 InputDecoration _deco(String label) =>
     InputDecoration(labelText: label, border: const OutlineInputBorder(), alignLabelWithHint: true);
 
@@ -484,6 +492,7 @@ class _EditAnswerScreenState extends State<EditAnswerScreen> {
   late final _question = TextEditingController(text: widget.fatwa.question);
   late final _answer = TextEditingController(text: widget.fatwa.answer);
   late String _chapter = widget.fatwa.chapter;
+  late final _tags = TextEditingController(text: widget.fatwa.tags.join('، '));
 
   @override
   Widget build(BuildContext context) {
@@ -502,7 +511,7 @@ class _EditAnswerScreenState extends State<EditAnswerScreen> {
                 context: context,
                 builder: (ctx) => AlertDialog(
                   title: const Text('حذف الجواب؟'),
-                  content: const Text('يُحذف من التطبيق عند الجميع، ولا يمكن التراجع.'),
+                  content: const Text('يُحذف من التطبيق عند الجميع، ويبقى في سلة المحذوفات 30 يوماً يمكن استرجاعه فيها.'),
                   actions: [
                     TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
                     FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('حذف')),
@@ -533,6 +542,8 @@ class _EditAnswerScreenState extends State<EditAnswerScreen> {
           TextField(controller: _question, maxLines: 3, decoration: _deco('السؤال')),
           const SizedBox(height: 12),
           TextField(controller: _answer, maxLines: 12, decoration: _deco('الجواب')),
+          const SizedBox(height: 12),
+          TextField(controller: _tags, decoration: _deco('الوسوم (افصل بينها بفاصلة)')),
           const SizedBox(height: 16),
           FilledButton.icon(
             style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
@@ -545,6 +556,7 @@ class _EditAnswerScreenState extends State<EditAnswerScreen> {
                 title: _title.text,
                 question: _question.text,
                 answer: _answer.text,
+                tags: parseTags(_tags.text),
               );
               if (!context.mounted) return;
               _toast(context, err ?? 'تم الحفظ ✅');
