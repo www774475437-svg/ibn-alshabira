@@ -506,6 +506,49 @@ class Cloud extends ChangeNotifier {
     }
   }
 
+  /// Hide an answer from the app (or show it again). Nothing is deleted.
+  Future<String?> setHidden(String id, bool hidden, [String title = '']) async {
+    try {
+      await _db.doc('titleEdits/$id').set({'hidden': hidden, 'by': email}, SetOptions(merge: true));
+      _log(hidden ? 'إخفاء جواب' : 'إظهار جواب', title);
+      await loadRemoteAnswers();
+      return null;
+    } catch (_) {
+      return 'تعذّر الحفظ';
+    }
+  }
+
+  /// Move an answer to a chapter with one tap (the review page).
+  Future<String?> setChapter(String id, String chapter, [String title = '']) async {
+    try {
+      await _db.doc('titleEdits/$id').set({'chapter': chapter, 'by': email}, SetOptions(merge: true));
+      _log('نقل إلى باب', title);
+      final f = Repository.instance.findById(id);
+      if (f != null) f.chapter = chapter;
+      Repository.instance.sortedIds.add(id);
+      return null;
+    } catch (_) {
+      return 'تعذّر الحفظ';
+    }
+  }
+
+  /// A reader's suggestion for the developer (arrives with the reports).
+  Future<String?> suggest(String text) async {
+    if (!ready) return 'يحتاج اتصالاً بالإنترنت';
+    try {
+      await _db.collection('reports').add({
+        'answerId': 'suggestion',
+        'title': 'اقتراح للمطوّر',
+        'note': text.trim(),
+        'by': email ?? '',
+        'at': FieldValue.serverTimestamp(),
+      });
+      return null;
+    } catch (_) {
+      return 'تعذّر الإرسال';
+    }
+  }
+
   Future<String?> editTitle(String id, String title) async {
     try {
       await _db.doc('titleEdits/$id').set({'title': title.trim(), 'by': email}, SetOptions(merge: true));

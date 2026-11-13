@@ -8,6 +8,7 @@ import 'screens/home_shell.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/splash_screen.dart';
 import 'services/cloud.dart';
+import 'services/fresh_posts.dart';
 import 'services/notifications.dart';
 import 'theme.dart';
 
@@ -18,6 +19,7 @@ Future<void> main() async {
   Repository.onSavedListsChanged = () => Cloud.instance.pushUserData();
   runApp(const IbnAlshabiraApp());
   Cloud.instance.init();
+  loadFreshPosts();
   // Set up the daily notification after the first frame; never blocks startup.
   DailyNotifications.init().then(
     (_) => DailyNotifications.setEnabled(

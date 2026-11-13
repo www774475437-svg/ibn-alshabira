@@ -27,7 +27,7 @@ class AboutSheikhScreen extends StatelessWidget {
             child: ClipOval(child: Image.asset('assets/icon/icon.png', width: 110, height: 110)),
           ),
           const SizedBox(height: 16),
-          const Text('الشيخ قائد بن غانم الشابرة',
+          const Text('الشيخ قايد بن غانم الشابرة',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
           const Text('حفظه الله',
@@ -119,7 +119,7 @@ class QrScreen extends StatelessWidget {
 }
 
 String shareAppText() => '📚 تطبيق «ابن الشابرة»\n'
-    'أجوبة ومقالات وكتب الشيخ قائد بن غانم الشابرة حفظه الله\n\n'
+    'أجوبة ومقالات وكتب الشيخ قايد بن غانم الشابرة حفظه الله\n\n'
     '🌐 الموقع:\n${AppConfig.siteUrl}\n\n'
     '📱 تحميل التطبيق لأندرويد:\n${AppConfig.apkUrl}';
 
@@ -205,7 +205,7 @@ class ComingSoonScreen extends StatelessWidget {
 class _AboutText extends StatelessWidget {
   const _AboutText();
 
-  static const _default = 'من محافظة إب باليمن، ومن طلاب الشيخ يحيى بن علي الحجوري.\n\n'
+  static const _default = 'من اليمن، ومن طلاب الشيخ يحيى بن علي الحجوري.\n\n'
       'يجمع هذا التطبيق أجوبته ومقالاته وكتبه ورسائله الدعوية، '
       'مرتّبة على الأبواب ليسهل الرجوع إليها.';
 
@@ -255,6 +255,20 @@ class PrivacyScreen extends StatelessWidget {
 
 /// «ما الجديد»: what each version added, newest first.
 const whatsNew = <(String, List<String>)>[
+  (
+    '2.0.0',
+    [
+      'اكتب سؤالك بكلامك العادي، فيعرض لك التطبيق أقرب كلام الشيخ إليه بنصّه.',
+      'البحث الصوتي: اضغط الميكروفون وقل سؤالك.',
+      '«اقرأ لي»: يقرأ لك الجواب بصوت الهاتف.',
+      'الوِرد اليومي من الأجوبة مع عدد أيامك المتتالية.',
+      'ملاحظاتك الخاصة على أي جواب.',
+      'التاريخ الهجري، و«أُضيف حديثاً» في الرئيسية.',
+      'زر «الخط الكبير» في الإعدادات.',
+      'منشورات الشيخ الجديدة تصل كل يوم دون تحديث التطبيق.',
+      'صندوق «اقتراح للمطوّر» في صفحة المزيد.',
+    ]
+  ),
   (
     '1.14.0',
     [

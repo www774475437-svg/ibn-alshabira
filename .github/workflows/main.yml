@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  # Every day: refresh the site with the sheikh's newest channel posts.
+  schedule:
+    - cron: '17 3 * * *'
 
 permissions:
   contents: write
@@ -21,9 +24,12 @@ jobs:
           path: |
             assets/data/fatwas.json
             assets/data/channel.json
+            assets/data/latest.json
 
   android:
     needs: data
+    # The daily refresh updates the site only; no new APK release.
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

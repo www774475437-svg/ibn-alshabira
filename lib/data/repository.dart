@@ -113,6 +113,19 @@ class Repository extends ChangeNotifier {
 
     favorites = (prefs.getStringList('favorites') ?? []).toSet();
     try {
+      final raw = jsonDecode(prefs.getString('notes') ?? '{}') as Map<String, dynamic>;
+      notes = raw.map((k, v) => MapEntry(k, '$v'));
+    } catch (_) {
+      notes = {};
+    }
+    try {
+      final raw = jsonDecode(prefs.getString('dayLog') ?? '{}') as Map<String, dynamic>;
+      dayLog = raw.map((k, v) => MapEntry(k, (v as List).map((e) => '$e').toSet()));
+    } catch (_) {
+      dayLog = {};
+    }
+    wirdTarget = prefs.getInt('wirdTarget') ?? 0;
+    try {
       final raw = jsonDecode(prefs.getString('folders') ?? '{}') as Map<String, dynamic>;
       folders = raw.map((k, v) => MapEntry(k, (v as List).map((e) => '$e').toList()));
     } catch (_) {
@@ -145,6 +158,99 @@ class Repository extends ChangeNotifier {
     f.resetSearch(chapterName(f.chapter));
   }
 
+  /// Answers the staff hid from the app (still listed for them to restore).
+  List<Fatwa> hidden = [];
+
+  /// Answers whose chapter a staff member already chose by hand.
+  Set<String> sortedIds = {};
+
+  /// Newest answers by date (for «أُضيف حديثاً»).
+  List<Fatwa> latest({int limit = 10}) {
+    final list = fatwas.where((f) => f.date.isNotEmpty).toList()..sort((a, b) => b.date.compareTo(a.date));
+    return list.take(limit).toList();
+  }
+
+  /// Posts published after this build was made, fetched from the site.
+  void addFresh(List<Fatwa> items) {
+    final have = {for (final f in _bundled) f.id};
+    final fresh = items.where((f) => !have.contains(f.id)).toList();
+    if (fresh.isEmpty) return;
+    for (final f in fresh) {
+      _index(f);
+    }
+    _bundled = [..._bundled, ...fresh];
+    fatwas = [...fatwas, ...fresh];
+    notifyListeners();
+  }
+
+  // ---- «اسأل المكتبة»: ranked search for a question in plain words ------
+  static const _stop = {
+    'ما', 'ماذا', 'هل', 'في', 'من', 'عن', 'على', 'الى', 'ان', 'او', 'ام', 'هو', 'هي', 'هذا', 'هذه', 'ذلك',
+    'حكم', 'يجوز', 'لا', 'كيف', 'اذا', 'لي', 'انا', 'مع', 'ثم', 'قد', 'كان', 'التي', 'الذي', 'يا', 'لو',
+    'بعد', 'قبل', 'عند', 'شيخ', 'شيخنا', 'السلام', 'عليكم', 'ورحمه', 'الله', 'وبركاته', 'وهل', 'فهل', 'لم',
+    'لن', 'كل', 'بعض', 'غير', 'حتى', 'لان', 'ولا', 'وما', 'فما', 'اريد', 'عندي', 'فيه', 'فيها', 'به',
+  };
+
+  static String _stem(String w) {
+    var s = w;
+    if (s.length > 4 && (s.startsWith('و') || s.startsWith('ف'))) s = s.substring(1);
+    if (s.length > 4 && (s.startsWith('ب') || s.startsWith('ل') || s.startsWith('ك'))) {
+      if (s.substring(1).startsWith('ال')) s = s.substring(1);
+    }
+    if (s.length > 4 && s.startsWith('ال')) s = s.substring(2);
+    if (s.length > 4 && s.startsWith('لل')) s = s.substring(2);
+    for (final suf in const ['هما', 'هم', 'ها', 'كم', 'نا', 'ات', 'ين', 'ون', 'ه', 'ي']) {
+      if (s.length - suf.length >= 3 && s.endsWith(suf)) {
+        s = s.substring(0, s.length - suf.length);
+        break;
+      }
+    }
+    return s;
+  }
+
+  /// The sheikh's answers closest to a question written in everyday words.
+  /// Only ranks existing texts; never writes anything of its own.
+  List<Fatwa> smartSearch(String query, {int limit = 20}) {
+    final words =
+        normalizeArabic(query).split(RegExp(r'\s+')).where((w) => w.length > 1 && !_stop.contains(w)).toList();
+    if (words.isEmpty) return [];
+    final groups = <List<String>>[
+      for (final w in words) {for (final f in _forms(w)) _stem(f)}.where((e) => e.length >= 3).toList(),
+    ].where((g) => g.isNotEmpty).toList();
+    if (groups.isEmpty) return [];
+    final n = fatwas.length;
+    final hits = List.generate(groups.length, (_) => <int>[]);
+    for (var i = 0; i < n; i++) {
+      final t = fatwas[i].searchText;
+      for (var g = 0; g < groups.length; g++) {
+        if (groups[g].any(t.contains)) hits[g].add(i);
+      }
+    }
+    final score = <int, double>{};
+    final matched = <int, int>{};
+    for (var g = 0; g < groups.length; g++) {
+      if (hits[g].isEmpty) continue;
+      // Rare words tell more about the question than common ones.
+      final ratio = n / hits[g].length;
+      final w = ratio > 200 ? 4.0 : ratio > 40 ? 3.0 : ratio > 8 ? 2.0 : 1.0;
+      for (final i in hits[g]) {
+        final title = fatwas[i].titleNorm;
+        score[i] = (score[i] ?? 0) + w * (groups[g].any(title.contains) ? 2.5 : 1.0);
+        matched[i] = (matched[i] ?? 0) + 1;
+      }
+    }
+    final live = hits.where((h) => h.isNotEmpty).length;
+    final need = live <= 2 ? live : (live + 1) ~/ 2;
+    final order = score.keys.where((i) => (matched[i] ?? 0) >= need).toList()
+      ..sort((a, b) {
+        final c = score[b]!.compareTo(score[a]!);
+        if (c != 0) return c;
+        // Real answers before general articles.
+        return (fatwas[a].type == 'fatwa' ? 0 : 1).compareTo(fatwas[b].type == 'fatwa' ? 0 : 1);
+      });
+    return [for (final i in order.take(limit)) fatwas[i]];
+  }
+
   /// Merges answers published from inside the app and edited titles.
   void applyRemote(List<Fatwa> published, Map<String, Map<String, dynamic>> edits) {
     final all = [..._bundled, ...published];
@@ -160,7 +266,10 @@ class Repository extends ChangeNotifier {
       }
       _index(f);
     }
-    fatwas = all;
+    hidden = [for (final f in all) if (edits[f.id]?['hidden'] == true) f];
+    final hiddenIds = {for (final f in hidden) f.id};
+    fatwas = hiddenIds.isEmpty ? all : all.where((f) => !hiddenIds.contains(f.id)).toList();
+    sortedIds = {for (final e in edits.entries) if ('${e.value['chapter'] ?? ''}'.isNotEmpty) e.key};
     notifyListeners();
   }
 
@@ -385,7 +494,66 @@ class Repository extends ChangeNotifier {
 
   static String _monthKey(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}';
 
+  // ---- Personal notes (kept on this device) ----------------------------
+  Map<String, String> notes = {};
+
+  void setNote(String id, String text) {
+    final t = text.trim();
+    if (t.isEmpty) {
+      notes.remove(id);
+    } else {
+      notes[id] = t;
+    }
+    _prefs.setString('notes', jsonEncode(notes));
+    notifyListeners();
+  }
+
+  // ---- Daily reading (وِرد) and streak ---------------------------------
+  Map<String, Set<String>> dayLog = {};
+  int wirdTarget = 0; // answers a day; 0 = off
+
+  static String _dayKey(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  void setWirdTarget(int n) {
+    wirdTarget = n;
+    _prefs.setInt('wirdTarget', n);
+    notifyListeners();
+  }
+
+  int get readToday => dayLog[_dayKey(DateTime.now())]?.length ?? 0;
+
+  /// Days in a row (ending today or yesterday) the daily target was met.
+  int get streak {
+    final need = wirdTarget > 0 ? wirdTarget : 1;
+    var d = DateTime.now();
+    if ((dayLog[_dayKey(d)]?.length ?? 0) < need) d = d.subtract(const Duration(days: 1));
+    var n = 0;
+    while ((dayLog[_dayKey(d)]?.length ?? 0) >= need) {
+      n++;
+      d = d.subtract(const Duration(days: 1));
+    }
+    return n;
+  }
+
+  void _logDay(String id) {
+    final key = _dayKey(DateTime.now());
+    final set = dayLog.putIfAbsent(key, () => <String>{});
+    if (!set.add(id)) return;
+    // Keep about three months.
+    if (dayLog.length > 100) {
+      final keys = dayLog.keys.toList()..sort();
+      for (final k in keys.take(dayLog.length - 100)) {
+        dayLog.remove(k);
+      }
+    }
+    _prefs.setString('dayLog', jsonEncode(dayLog.map((k, v) => MapEntry(k, v.toList()))));
+    // Deferred: this can be called while a screen is being built.
+    Future.microtask(notifyListeners);
+  }
+
   void markRead(String id) {
+    _logDay(id);
     final key = _monthKey(DateTime.now());
     final set = readLog.putIfAbsent(key, () => <String>{});
     if (set.add(id)) {

@@ -9,6 +9,8 @@ import '../data/repository.dart';
 import '../services/cloud.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../data/hijri.dart';
+import '../services/voice.dart';
 import 'admin_extra.dart';
 import 'ask_screen.dart';
 import 'favorites_tab.dart';
@@ -55,6 +57,7 @@ class _FatwaScreenState extends State<FatwaScreen> {
 
   @override
   void dispose() {
+    Reader.instance.stop();
     _pager.dispose();
     super.dispose();
   }
@@ -290,6 +293,30 @@ class _FatwaScreenState extends State<FatwaScreen> {
                               },
                             ),
                           IconButton(
+                            tooltip: 'إخفاء من التطبيق',
+                            icon: const Icon(Icons.visibility_off_outlined),
+                            onPressed: () async {
+                              final f = current;
+                              final ok = await showDialog<bool>(
+                                context: context,
+                                builder: (ctx) => AlertDialog(
+                                  title: const Text('إخفاء هذا المنشور؟'),
+                                  content: const Text(
+                                      'يختفي من التطبيق والموقع عند الجميع، ولا يُحذف. تعيده من «المزيد ← المنشورات المخفية».'),
+                                  actions: [
+                                    TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+                                    FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('إخفاء')),
+                                  ],
+                                ),
+                              );
+                              if (ok != true) return;
+                              final err = await Cloud.instance.setHidden(f.id, true, f.title);
+                              if (!mounted) return;
+                              _toast(err ?? 'أُخفي من التطبيق');
+                              if (err == null) Navigator.of(context).maybePop();
+                            },
+                          ),
+                          IconButton(
                             tooltip: 'إضافة إلى سلسلة',
                             icon: const Icon(Icons.playlist_add),
                             onPressed: () => showSeriesSheet(context, current),
@@ -336,6 +363,7 @@ class _FatwaScreenState extends State<FatwaScreen> {
                   : const PageScrollPhysics(),
               itemCount: _pages.length,
               onPageChanged: (i) {
+                Reader.instance.stop();
                 setState(() => _index = i);
                 repo.markRead(_pages[i].id);
                 Cloud.instance.addView(_pages[i].id);
@@ -508,7 +536,8 @@ class _AnswerBodyState extends State<_AnswerBody> {
             if (fatwa.sub.isNotEmpty) chip(Icons.subdirectory_arrow_left, fatwa.sub),
             chip(isArticle ? Icons.article_outlined : Icons.question_answer_outlined, isArticle ? 'مقال' : 'جواب'),
             chip(Icons.schedule, '$minutes د قراءة'),
-            if (fatwa.date.isNotEmpty) chip(Icons.event_outlined, fatwa.date),
+            if (fatwa.date.isNotEmpty)
+              chip(Icons.event_outlined, Hijri.parse(fatwa.date) == null ? fatwa.date : '${Hijri.parse(fatwa.date)} · ${fatwa.date}'),
           ],
         ),
         const SizedBox(height: 14),
@@ -552,6 +581,7 @@ class _AnswerBodyState extends State<_AnswerBody> {
             ],
           ),
         ],
+        _NoteCard(fatwa: fatwa),
         _CloudPanel(fatwa: fatwa),
         const SizedBox(height: 22),
         Row(
@@ -583,6 +613,21 @@ class _AnswerBodyState extends State<_AnswerBody> {
                 label: const Text('استمع للجواب'),
                 onPressed: () => openUrl(context, fatwa.audio),
               ),
+            ListenableBuilder(
+              listenable: Reader.instance,
+              builder: (context, _) {
+                final on = Reader.instance.playing == fatwa.id;
+                return FilledButton.tonalIcon(
+                  icon: Icon(on ? Icons.stop : Icons.volume_up, size: 20),
+                  label: Text(on ? 'إيقاف القراءة' : 'اقرأ لي'),
+                  onPressed: () => Reader.instance.toggle(
+                      fatwa.id,
+                      stripTashkeel(fatwa.question.isEmpty
+                          ? '${fatwa.title}.\n${fatwa.answer}'
+                          : 'السؤال.\n${fatwa.question}\nالجواب.\n${fatwa.answer}')),
+                );
+              },
+            ),
             TextButton.icon(
               icon: const Icon(Icons.contact_support_outlined, size: 20),
               label: const Text('اسأل عن هذا الجواب'),
@@ -845,6 +890,67 @@ List<TextSpan> _styledSpans(String text) {
   }
   if (last < text.length) spans.add(TextSpan(text: text.substring(last)));
   return spans;
+}
+
+/// The reader's own private note on an answer (kept on this device).
+class _NoteCard extends StatelessWidget {
+  final Fatwa fatwa;
+  const _NoteCard({required this.fatwa});
+
+  Future<void> _edit(BuildContext context) async {
+    final repo = Repository.instance;
+    final c = TextEditingController(text: repo.notes[fatwa.id] ?? '');
+    final text = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('ملاحظتي'),
+        content: TextField(
+          controller: c,
+          autofocus: true,
+          maxLines: 6,
+          decoration: const InputDecoration(
+              hintText: 'اكتب ملاحظتك هنا. لا يراها أحد غيرك.', border: OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, c.text), child: const Text('حفظ')),
+        ],
+      ),
+    );
+    if (text != null) repo.setNote(fatwa.id, text);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final repo = Repository.instance;
+    return ListenableBuilder(
+      listenable: repo,
+      builder: (context, _) {
+        final note = repo.notes[fatwa.id];
+        if (note == null) {
+          return Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: TextButton.icon(
+              icon: const Icon(Icons.edit_note, size: 20),
+              label: const Text('أضف ملاحظة خاصة بي'),
+              onPressed: () => _edit(context),
+            ),
+          );
+        }
+        return Card(
+          margin: const EdgeInsets.only(top: 10),
+          color: kGold.withValues(alpha: 0.10),
+          child: ListTile(
+            leading: const Icon(Icons.sticky_note_2_outlined, color: kGoldChip),
+            title: const Text('ملاحظتي', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            subtitle: Text(note, style: const TextStyle(height: 1.7)),
+            trailing: const Icon(Icons.edit, size: 18),
+            onTap: () => _edit(context),
+          ),
+        );
+      },
+    );
+  }
 }
 
 /// «ـــــ ◆ الجواب ◆ ـــــ»

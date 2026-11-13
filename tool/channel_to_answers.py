@@ -142,6 +142,9 @@ def convert(posts):
         json.dump(answers, f, ensure_ascii=False)
     with open(os.path.join(DATA, 'channel.json'), 'w', encoding='utf-8') as f:
         json.dump(rest, f, ensure_ascii=False)
+    # The newest answers, for apps installed before these were posted.
+    with open(os.path.join(DATA, 'latest.json'), 'w', encoding='utf-8') as f:
+        json.dump(answers[-80:], f, ensure_ascii=False)
     by = {}
     for a in answers:
         by[a['chapter']] = by.get(a['chapter'], 0) + 1

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../data/models.dart';
 import '../data/repository.dart';
+import '../services/voice.dart';
 import '../services/cloud.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
@@ -23,6 +25,31 @@ class SearchTab extends StatefulWidget {
 class _SearchTabState extends State<SearchTab> {
   final _controller = TextEditingController();
   String _query = '';
+  bool _listening = false;
+
+  Future<void> _voice() async {
+    if (_listening) {
+      await Listener1.stop();
+      if (mounted) setState(() => _listening = false);
+      return;
+    }
+    setState(() => _listening = true);
+    final ok = await Listener1.start(
+      onText: (t) {
+        if (!mounted || t.isEmpty) return;
+        _controller.text = t;
+        setState(() => _query = t);
+      },
+      onDone: () {
+        if (mounted) setState(() => _listening = false);
+      },
+    );
+    if (!ok && mounted) {
+      setState(() => _listening = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('البحث الصوتي غير متاح على هذا الجهاز، أو لم يُسمح بالميكروفون')));
+    }
+  }
 
   @override
   void dispose() {
@@ -98,6 +125,11 @@ class _SearchTabState extends State<SearchTab> {
   Widget build(BuildContext context) {
     final repo = Repository.instance;
     final results = repo.search(_query);
+    // A question in plain words: also show the closest answers by meaning.
+    final strictIds = {for (final f in results) f.id};
+    final near = _query.trim().length < 3 || results.length >= 12
+        ? const <Fatwa>[]
+        : repo.smartSearch(_query).where((f) => !strictIds.contains(f.id)).toList();
     return Scaffold(
       appBar: AppBar(
         title: const Text('البحث'),
@@ -119,20 +151,31 @@ class _SearchTabState extends State<SearchTab> {
               onChanged: (v) => setState(() => _query = v),
               onSubmitted: (v) {
                 repo.addRecentSearch(v);
-                if (v.trim().length > 1 && repo.search(v).isEmpty) Cloud.instance.logMiss(v);
+                if (v.trim().length > 1 && repo.search(v).isEmpty && repo.smartSearch(v).isEmpty) {
+                  Cloud.instance.logMiss(v);
+                }
               },
               decoration: InputDecoration(
-                hintText: 'اكتب المسألة… مثل: النمص، الوضوء، الربا',
+                hintText: 'اكتب سؤالك أو المسألة… مثل: هل يجوز النمص',
                 prefixIcon: const Icon(Icons.search),
-                suffixIcon: _query.isEmpty
-                    ? null
-                    : IconButton(
+                suffixIcon: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_query.isNotEmpty)
+                      IconButton(
                         icon: const Icon(Icons.close),
                         onPressed: () => setState(() {
                           _controller.clear();
                           _query = '';
                         }),
                       ),
+                    IconButton(
+                      tooltip: 'بحث صوتي',
+                      icon: Icon(_listening ? Icons.mic : Icons.mic_none, color: _listening ? Colors.red : null),
+                      onPressed: _voice,
+                    ),
+                  ],
+                ),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
               ),
             ),
@@ -145,21 +188,40 @@ class _SearchTabState extends State<SearchTab> {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Align(
                 alignment: AlignmentDirectional.centerStart,
-                child: Text('عدد النتائج: ${results.length}',
+                child: Text(
+                    near.isEmpty
+                        ? 'عدد النتائج: ${results.length}'
+                        : 'عدد النتائج: ${results.length} · وأقرب الأجوبة لسؤالك: ${near.length}',
                     style: const TextStyle(color: Colors.grey)),
               ),
             ),
           Expanded(
             child: _query.trim().isEmpty
                 ? _EmptySearch(onPick: _search, onIndex: _openIndex)
-                : results.isEmpty
-                    ? const EmptyState(icon: Icons.search_off, text: 'لا توجد نتائج لهذه الكلمة')
+                : results.isEmpty && near.isEmpty
+                    ? const EmptyState(icon: Icons.search_off, text: 'لا توجد نتائج. جرّب كلمات أخرى، أو أرسل سؤالك من «اسأل الشيخ».')
                     : ListView.builder(
-                        itemCount: results.length,
-                        itemBuilder: (context, i) => GestureDetector(
-                          onTapDown: (_) => repo.addRecentSearch(_query),
-                          child: FatwaTile(fatwa: results[i]),
-                        ),
+                        itemCount: results.length + near.length + (near.isEmpty ? 0 : 1),
+                        itemBuilder: (context, i) {
+                          if (i == results.length && near.isNotEmpty) {
+                            return const Padding(
+                              padding: EdgeInsets.fromLTRB(16, 14, 16, 4),
+                              child: Row(children: [
+                                Icon(Icons.auto_awesome, size: 18, color: kGold),
+                                SizedBox(width: 6),
+                                Expanded(
+                                  child: Text('أقرب كلام الشيخ إلى سؤالك (بنصّه)',
+                                      style: TextStyle(fontWeight: FontWeight.bold, color: kGoldChip)),
+                                ),
+                              ]),
+                            );
+                          }
+                          final f = i < results.length ? results[i] : near[i - results.length - 1];
+                          return GestureDetector(
+                            onTapDown: (_) => repo.addRecentSearch(_query),
+                            child: FatwaTile(fatwa: f),
+                          );
+                        },
                       ),
           ),
         ],

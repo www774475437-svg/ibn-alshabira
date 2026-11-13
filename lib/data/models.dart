@@ -40,9 +40,13 @@ class Fatwa {
   String get searchText => _search ??= normalizeArabic('$title $question $answer ${tags.join(' ')} $_chapterName');
   set searchText(String v) => _search = v;
 
+  String? _titleNorm;
+  String get titleNorm => _titleNorm ??= normalizeArabic('$title $question');
+
   void resetSearch(String chapterName) {
     _chapterName = chapterName;
     _search = null;
+    _titleNorm = null;
   }
 
   Fatwa({
@@ -88,7 +92,7 @@ class Fatwa {
     final b = StringBuffer('📜 $title\n\n');
     if (question.isNotEmpty) b.write('❓ السؤال:\n$question\n\n');
     b.write(question.isNotEmpty ? '✅ الجواب:\n$answer\n\n' : '$answer\n\n');
-    b.write('— الشيخ قائد بن غانم الشابرة حفظه الله\n\n');
+    b.write('— الشيخ قايد بن غانم الشابرة حفظه الله\n\n');
     b.write('🔗 رابط الجواب:\n${AppConfig.fatwaLink(id)}');
     return b.toString();
   }

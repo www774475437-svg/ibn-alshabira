@@ -12,10 +12,20 @@ permissions = [
     "android.permission.INTERNET",
     "android.permission.POST_NOTIFICATIONS",
     "android.permission.RECEIVE_BOOT_COMPLETED",
+    "android.permission.RECORD_AUDIO",
 ]
 for p in permissions:
     if p not in m:
         m = m.replace("<application", f'<uses-permission android:name="{p}"/>\n    <application', 1)
+
+# Voice search and «اقرأ لي» need to see the phone's speech services.
+if "android.speech.RecognitionService" not in m:
+    q = ('<intent><action android:name="android.speech.RecognitionService"/></intent>'
+         '<intent><action android:name="android.intent.action.TTS_SERVICE"/></intent>')
+    if "<queries>" in m:
+        m = m.replace("<queries>", "<queries>" + q, 1)
+    else:
+        m = m.replace("<application", "<queries>" + q + "</queries>\n    <application", 1)
 
 receivers = """
         <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />

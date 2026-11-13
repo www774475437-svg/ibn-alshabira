@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../config.dart';
 import '../services/update_check.dart';
 
+import '../data/hijri.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
 import '../theme.dart';
@@ -68,6 +69,7 @@ class _HomeTabState extends State<HomeTab> {
                 url: AppConfig.apkUrl,
               ),
             ),
+          SliverToBoxAdapter(child: _TodayStrip(onSetWird: widget.onOpenMore)),
           if (repo.fatwaOfDay != null)
             SliverToBoxAdapter(child: _FatwaOfDay(fatwa: repo.fatwaOfDay!)),
           SliverToBoxAdapter(
@@ -109,6 +111,52 @@ class _HomeTabState extends State<HomeTab> {
               ),
             ),
           ),
+          if (repo.latest().isNotEmpty) ...[
+            const SliverToBoxAdapter(child: _SectionTitle('أُضيف حديثاً')),
+            SliverToBoxAdapter(
+              child: SizedBox(
+                height: 132,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  itemCount: repo.latest().length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 10),
+                  itemBuilder: (context, i) {
+                    final f = repo.latest()[i];
+                    return SizedBox(
+                      width: 240,
+                      child: Card(
+                        margin: EdgeInsets.zero,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(18),
+                          onTap: () => openFatwa(context, f),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('${repo.chapterName(f.chapter)} · ${Hijri.parse(f.date) ?? f.date}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(color: kGoldChip, fontSize: 12)),
+                                const SizedBox(height: 6),
+                                Expanded(
+                                  child: Text(f.title,
+                                      maxLines: 3,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(height: 1.6, fontWeight: FontWeight.w600)),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
           const SliverToBoxAdapter(child: _SectionTitle('الأبواب')),
           SliverPadding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -288,7 +336,7 @@ class _Header extends StatelessWidget {
                   style: TextStyle(
                       fontFamily: 'Amiri', color: kGoldChip, fontSize: 19, fontWeight: FontWeight.bold)),
               const SizedBox(height: 2),
-              Text('قائد بن غانم الشابرة',
+              Text('قايد بن غانم الشابرة',
                   style: TextStyle(
                       fontFamily: 'Tajawal', color: ink, fontSize: 29, fontWeight: FontWeight.bold, height: 1.5)),
               const SizedBox(height: 8),
@@ -640,6 +688,89 @@ class _SectionTitle extends StatelessWidget {
               style: const TextStyle(fontFamily: 'Tajawal', fontSize: 19, fontWeight: FontWeight.bold)),
           const Spacer(),
           if (action != null) TextButton(onPressed: onAction, child: Text(action!)),
+        ],
+      ),
+    );
+  }
+}
+
+
+/// Today's Hijri date, a greeting on Ramadan and the Eids, and the
+/// reader's daily reading with their streak.
+class _TodayStrip extends StatelessWidget {
+  final VoidCallback onSetWird;
+  const _TodayStrip({required this.onSetWird});
+
+  @override
+  Widget build(BuildContext context) {
+    final repo = Repository.instance;
+    final today = Hijri.from(DateTime.now());
+    final greeting = today.greeting;
+    final target = repo.wirdTarget;
+    final done = repo.readToday;
+    final streak = repo.streak;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (greeting != null)
+            Card(
+              color: kGold.withValues(alpha: 0.16),
+              margin: const EdgeInsets.only(bottom: 8),
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Row(children: [
+                  const Icon(Icons.celebration_outlined, color: kGoldChip),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(greeting,
+                        style: const TextStyle(fontWeight: FontWeight.bold, height: 1.7, color: kGoldChip)),
+                  ),
+                ]),
+              ),
+            ),
+          Card(
+            margin: EdgeInsets.zero,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(18),
+              onTap: target == 0 ? onSetWird : null,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(children: [
+                      const Icon(Icons.calendar_month_outlined, size: 18, color: kGold),
+                      const SizedBox(width: 6),
+                      Expanded(child: Text('$today', style: const TextStyle(fontWeight: FontWeight.w600))),
+                      if (streak > 0) ...[
+                        const Icon(Icons.local_fire_department, size: 18, color: Colors.deepOrange),
+                        Text(' $streak ${streak == 1 ? 'يوم' : streak == 2 ? 'يومان' : streak <= 10 ? 'أيام' : 'يوماً'} متتالية',
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                      ],
+                    ]),
+                    const SizedBox(height: 8),
+                    if (target == 0)
+                      const Text('اجعل لك وِرداً يومياً من الأجوبة: اضغط هنا ثم اختره من الإعدادات.',
+                          style: TextStyle(color: Colors.grey, fontSize: 13))
+                    else ...[
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: LinearProgressIndicator(value: (done / target).clamp(0.0, 1.0), minHeight: 7),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                          done >= target
+                              ? 'أتممت وِرد اليوم ✅ ($done من $target)'
+                              : 'وِرد اليوم: قرأت $done من $target',
+                          style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
