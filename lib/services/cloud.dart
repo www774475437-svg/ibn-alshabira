@@ -31,6 +31,11 @@ class Cloud extends ChangeNotifier {
 
   bool get isDeveloper => isFullAdmin && email == developerEmail;
 
+  /// The sheikh's own account: with the developer, the only ones who add or
+  /// remove admins and editors.
+  bool isOwner = false;
+  bool get canManageStaff => isDeveloper || isOwner;
+
   int newQuestions = 0; // for staff
   int unseenReplies = 0; // for the asker
   int _answeredCount = 0;
@@ -75,6 +80,7 @@ class Cloud extends ChangeNotifier {
   Future<void> _checkAdmin() async {
     isAdmin = false;
     isFullAdmin = false;
+    isOwner = false;
     final e = email;
     // Staff rights need a verified email (Google accounts always are).
     if (e == null || user?.emailVerified != true) return;
@@ -88,6 +94,7 @@ class Cloud extends ChangeNotifier {
       if (d.exists) {
         isAdmin = true;
         isFullAdmin = (d.data()?['role'] ?? 'admin') == 'admin';
+        isOwner = isFullAdmin && d.data()?['owner'] == true;
         // Record each visit once per session, so the developer sees
         // when this staff member came in, and from where.
         if (_visitLogged != e) {
@@ -414,6 +421,17 @@ class Cloud extends ChangeNotifier {
       return null;
     } catch (_) {
       return 'تعذّرت الإضافة';
+    }
+  }
+
+  /// Developer only: let this admin manage the staff (or stop them).
+  Future<String?> setOwner(String email, bool v) async {
+    try {
+      await _db.doc('admins/$email').set({'owner': v}, SetOptions(merge: true));
+      _log(v ? 'منح صلاحية إدارة المشرفين' : 'سحب صلاحية إدارة المشرفين', email);
+      return null;
+    } catch (_) {
+      return 'تعذّر الحفظ';
     }
   }
 

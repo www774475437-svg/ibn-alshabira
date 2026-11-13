@@ -9,6 +9,9 @@ service cloud.firestore {
     function isFullAdmin() {
       return isDev() || (verified() && exists(staffPath()) && get(staffPath()).data.get('role', 'admin') == 'admin');
     }
+    function isOwner() {
+      return isFullAdmin() && exists(staffPath()) && get(staffPath()).data.get('owner', false) == true;
+    }
     function stepOk(field) {
       return request.resource.data.get(field, 0) is int &&
         request.resource.data.get(field, 0) - (resource == null ? 0 : resource.data.get(field, 0)) in [0, 1];
@@ -21,7 +24,10 @@ service cloud.firestore {
     match /config/{id}     { allow read: if true; allow write: if isFullAdmin(); }
     match /admins/{email}  {
       allow read: if isAdmin() || (signedIn() && request.auth.token.email == email);
-      allow write: if isFullAdmin();
+      // Only the developer and the sheikh's own account manage the staff;
+      // only the developer decides who that account is.
+      allow create, update: if isDev() || (isOwner() && request.resource.data.get('owner', false) == false);
+      allow delete: if isDev() || (isOwner() && resource.data.get('owner', false) == false);
     }
     match /blocked/{uid}   { allow read, write: if isAdmin(); }
     match /log/{id}        { allow create: if isAdmin(); allow read, delete: if isDev(); }

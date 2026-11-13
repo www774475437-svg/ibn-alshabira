@@ -11,6 +11,7 @@ import 'extra_screens.dart';
 import 'favorites_tab.dart';
 import 'home_tab.dart';
 import 'more_tab.dart';
+import 'quran_screen.dart';
 import 'search_tab.dart';
 
 class HomeShell extends StatefulWidget {
@@ -22,6 +23,7 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   String _tab = 'home';
+  bool _quranOpened = false;
 
   void _goTo(String id) => setState(() => _tab = id);
 
@@ -75,18 +77,26 @@ class _HomeShellState extends State<HomeShell> {
           return const MustUpdateScreen();
         }
         final staff = cloud.ready && cloud.isAdmin;
-        final ids = ['home', 'search', 'books', if (staff) 'admin', 'saved', 'more'];
+        // Staff see new questions on «المزيد»; askers see new replies.
+        final badge = staff ? cloud.newQuestions : cloud.unseenReplies;
+        const ids = ['home', 'quran', 'saved', 'books', 'more'];
         var index = ids.indexOf(_tab);
         if (index < 0) index = 0;
+        if (_tab == 'quran') _quranOpened = true;
         return Scaffold(
           body: IndexedStack(
             index: index,
             children: [
-              HomeTab(onOpenSearch: () => _goTo('search'), onOpenMore: () => _goTo('more')),
-              const SearchTab(),
-              const BooksTab(),
-              if (staff) const AdminScreen(),
+              HomeTab(
+                // Search opens as a full page over home, with a back arrow.
+                onOpenSearch: () =>
+                    Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SearchTab())),
+                onOpenMore: () => _goTo('more'),
+              ),
+              // The mushaf loads its text only when first opened.
+              _quranOpened ? const QuranScreen() : const SizedBox.shrink(),
               const FavoritesTab(),
+              const BooksTab(),
               const MoreTab(),
             ],
           ),
@@ -96,22 +106,20 @@ class _HomeShellState extends State<HomeShell> {
             destinations: [
               const NavigationDestination(
                   icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'الرئيسية'),
-              const NavigationDestination(icon: Icon(Icons.search), label: 'البحث'),
               const NavigationDestination(
-                  icon: Icon(Icons.menu_book_outlined), selectedIcon: Icon(Icons.menu_book), label: 'الكتب'),
-              if (staff)
-                NavigationDestination(
-                  icon: Badge(
-                    isLabelVisible: cloud.newQuestions > 0,
-                    label: Text('${cloud.newQuestions}'),
-                    child: const Icon(Icons.admin_panel_settings_outlined),
-                  ),
-                  selectedIcon: const Icon(Icons.admin_panel_settings),
-                  label: 'الإدارة',
-                ),
+                  icon: Icon(Icons.auto_stories_outlined), selectedIcon: Icon(Icons.auto_stories), label: 'المصحف'),
               const NavigationDestination(
                   icon: Icon(Icons.bookmark_border), selectedIcon: Icon(Icons.bookmark), label: 'المحفوظات'),
-              const NavigationDestination(icon: Icon(Icons.more_horiz), label: 'المزيد'),
+              const NavigationDestination(
+                  icon: Icon(Icons.menu_book_outlined), selectedIcon: Icon(Icons.menu_book), label: 'الكتب'),
+              NavigationDestination(
+                icon: Badge(
+                  isLabelVisible: badge > 0,
+                  label: Text('$badge'),
+                  child: const Icon(Icons.more_horiz),
+                ),
+                label: 'المزيد',
+              ),
             ],
           ),
         );

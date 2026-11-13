@@ -18,7 +18,16 @@ class AppConfig {
   /// Set at build time: --dart-define=BUILD_NUMBER=<run number>.
   static const buildNumber = int.fromEnvironment('BUILD_NUMBER', defaultValue: 0);
 
-  static const version = '2.1.0';
+  static const version = '3.0.0';
 
-  static String fatwaLink(String id) => '$siteUrl#/fatwa/$id';
+  /// Short link: channel answers are «…/#/a/<number>».
+  static String fatwaLink(String id) =>
+      id.startsWith('tg-') ? '$siteUrl#/a/${id.substring(3)}' : '$siteUrl#/fatwa/$id';
+
+  /// The answer id a route points to, or null.
+  static String? idFromRoute(String route) {
+    if (route.startsWith('/a/')) return 'tg-${route.substring(3)}';
+    if (route.startsWith('/fatwa/')) return Uri.decodeComponent(route.substring(7));
+    return null;
+  }
 }

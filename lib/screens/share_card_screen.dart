@@ -2,6 +2,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../config.dart';
@@ -239,14 +240,17 @@ class _Card extends StatelessWidget {
                 child: Text(t, textAlign: TextAlign.justify, style: body),
               ),
             const SizedBox(height: 8),
-            const Text('الشيخ قايد بن غانم الشابرة حفظه الله',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontFamily: 'Amiri', fontWeight: FontWeight.bold, fontSize: 13, color: ink)),
-            const SizedBox(height: 4),
-            Text(link,
-                textAlign: TextAlign.center,
-                textDirection: TextDirection.ltr,
-                style: const TextStyle(fontSize: 8.5, color: Colors.grey)),
+            Row(
+              children: [
+                const Expanded(
+                  child: Text('الشيخ قايد بن غانم الشابرة حفظه الله',
+                      style: TextStyle(fontFamily: 'Amiri', fontWeight: FontWeight.bold, fontSize: 13, color: ink)),
+                ),
+                // Scan to open the answer (no written link on the picture).
+                if (page == pages)
+                  QrImageView(data: link, size: 52, padding: EdgeInsets.zero, backgroundColor: Colors.white),
+              ],
+            ),
           ],
         ),
       ),

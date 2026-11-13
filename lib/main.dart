@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'config.dart';
 import 'data/repository.dart';
 import 'screens/fatwa_screen.dart';
 import 'screens/home_shell.dart';
@@ -33,8 +34,9 @@ Future<void> main() async {
 /// Routes: "/" home, "/fatwa/<id>" a single fatwa (shareable web link).
 Route<dynamic>? onGenerateRoute(RouteSettings settings) {
   final name = settings.name ?? '/';
-  if (name.startsWith('/fatwa/')) {
-    final f = Repository.instance.findById(Uri.decodeComponent(name.substring(7)));
+  final routeId = AppConfig.idFromRoute(name);
+  if (routeId != null) {
+    final f = Repository.instance.findById(routeId);
     if (f != null) {
       return MaterialPageRoute(settings: settings, builder: (_) => FatwaScreen(fatwa: f));
     }
@@ -77,8 +79,9 @@ class IbnAlshabiraApp extends StatelessWidget {
         onGenerateRoute: onGenerateRoute,
         // A shared link to one fatwa opens it directly, with home underneath.
         onGenerateInitialRoutes: (initial) {
-          if (initial.startsWith('/fatwa/')) {
-            final f = Repository.instance.findById(Uri.decodeComponent(initial.substring(7)));
+          final initialId = AppConfig.idFromRoute(initial);
+          if (initialId != null) {
+            final f = Repository.instance.findById(initialId);
             if (f != null) {
               return [
                 MaterialPageRoute(
