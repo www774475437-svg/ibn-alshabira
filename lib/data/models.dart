@@ -75,19 +75,24 @@ class Fatwa {
 }
 
 class Book {
-  final String id;
+  final String id; // Google Drive file id
   final String title;
-  final String description;
-  final String url;
+  final String folder;
 
-  Book({required this.id, required this.title, required this.description, required this.url});
+  Book({required this.id, required this.title, required this.folder});
 
   factory Book.fromJson(Map<String, dynamic> j) => Book(
         id: '${j['id']}',
         title: (j['title'] ?? '') as String,
-        description: (j['description'] ?? '') as String,
-        url: (j['url'] ?? '') as String,
+        folder: (j['folder'] ?? '') as String,
       );
+
+  /// Direct download (used inside the app; the link is never shown).
+  String get downloadUrl =>
+      'https://drive.usercontent.google.com/download?id=$id&export=download&confirm=t';
+
+  /// On the website, books open in Google's viewer.
+  String get previewUrl => 'https://drive.google.com/file/d/$id/view';
 }
 
 class SocialLink {

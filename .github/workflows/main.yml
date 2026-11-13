@@ -42,6 +42,9 @@ jobs:
       - name: Patch Android (name, permissions, notifications, signing)
         run: python3 tool/patch_android.py
 
+      - name: Books list from the sheikh's Google Drive
+        run: python3 tool/fetch_drive_books.py
+
       - run: flutter pub get
 
       - name: App icon (logo)
@@ -78,6 +81,9 @@ jobs:
 
       - name: Web page title and description
         run: python3 tool/patch_web.py
+
+      - name: Books list from the sheikh's Google Drive
+        run: python3 tool/fetch_drive_books.py
 
       - name: Build website
         run: flutter build web --release --base-href /ibn-alshabira/ --dart-define=BUILD_NUMBER=0

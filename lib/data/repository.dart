@@ -121,6 +121,11 @@ class Repository extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setBooks(List<Book> list) {
+    books = list;
+    notifyListeners();
+  }
+
   void replaceSavedLists(Set<String> favs, Set<String> later) {
     favorites = favs;
     readLater = later;
