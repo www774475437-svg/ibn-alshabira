@@ -39,6 +39,12 @@ IconData platformIcon(String p) {
       return Icons.facebook;
     case 'x':
       return Icons.alternate_email;
+    case 'whatsapp':
+      return Icons.chat;
+    case 'audio':
+      return Icons.headphones;
+    case 'group':
+      return Icons.groups;
     default:
       return Icons.link;
   }

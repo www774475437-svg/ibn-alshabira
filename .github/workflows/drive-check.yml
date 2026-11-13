@@ -1,0 +1,10 @@
+name: Drive books check
+on:
+  push:
+    paths: ['tool/fetch_drive_books.py', '.github/workflows/drive-check.yml']
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tool/fetch_drive_books.py
