@@ -18,7 +18,7 @@ class Chapter {
 /// A fatwa, article or دعوية letter.
 class Fatwa {
   final String id;
-  final String chapter;
+  String chapter;
   final String type; // fatwa | article | letter
   String title;
   final String question;
@@ -28,7 +28,7 @@ class Fatwa {
   final String source;
 
   /// Sub-chapter name inside the chapter ('' = none).
-  final String sub;
+  String sub;
 
   /// Link to a voice recording of the answer ('' = none).
   final String audio;
@@ -127,7 +127,10 @@ class ChannelPost {
   final String date;
   late final String searchText = normalizeArabic(text);
 
-  ChannelPost({required this.id, required this.text, required this.date});
+  /// When the post became an answer in the app, its id.
+  final String fatwaId;
+
+  ChannelPost({required this.id, required this.text, required this.date, this.fatwaId = ''});
 
   factory ChannelPost.fromJson(Map<String, dynamic> j) =>
       ChannelPost(id: (j['id'] as num).toInt(), text: '${j['text'] ?? ''}', date: '${j['date'] ?? ''}');

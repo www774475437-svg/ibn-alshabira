@@ -185,24 +185,52 @@ class _FatwaScreenState extends State<FatwaScreen> {
     );
   }
 
+  /// Title, chapter and sub-chapter of an answer that came with the app.
   void _editTitle() {
-    final c = TextEditingController(text: current.title);
+    final f = current;
+    final c = TextEditingController(text: f.title);
+    var chapter = f.chapter;
+    var sub = f.sub;
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('تعديل العنوان'),
-        content: TextField(controller: c, maxLines: 3, decoration: const InputDecoration(border: OutlineInputBorder())),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
-          FilledButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              final err = await Cloud.instance.editTitle(current.id, c.text);
-              if (mounted) _toast(err ?? 'تم حفظ العنوان ✅');
-            },
-            child: const Text('حفظ'),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          title: const Text('تعديل الجواب'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                    controller: c,
+                    maxLines: 3,
+                    decoration: const InputDecoration(labelText: 'العنوان', border: OutlineInputBorder())),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: repo.chapters.any((x) => x.id == chapter) ? chapter : repo.chapters.last.id,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'الباب', border: OutlineInputBorder()),
+                  items: [for (final x in repo.chapters) DropdownMenuItem(value: x.id, child: Text(x.name))],
+                  onChanged: (v) => setS(() {
+                    chapter = v ?? chapter;
+                    sub = '';
+                  }),
+                ),
+                SubPicker(chapterId: chapter, value: sub, onChanged: (v) => setS(() => sub = v)),
+              ],
+            ),
           ),
-        ],
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+            FilledButton(
+              onPressed: () async {
+                Navigator.pop(ctx);
+                final err = await Cloud.instance.editBundled(f.id, title: c.text, chapter: chapter, sub: sub);
+                if (mounted) _toast(err ?? 'تم الحفظ ✅');
+              },
+              child: const Text('حفظ'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -429,24 +457,60 @@ class _AnswerBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final repo = Repository.instance;
+    final words = '${fatwa.question} ${fatwa.answer}'.split(RegExp(r'\s+')).length;
+    final minutes = (words / 180).ceil().clamp(1, 999);
+    final isArticle = fatwa.type == 'article';
+    Widget chip(IconData icon, String text) => Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: kGold.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, size: 14, color: kGoldChip),
+            const SizedBox(width: 4),
+            Text(text, style: const TextStyle(fontSize: 12.5, color: kGoldChip, fontWeight: FontWeight.w600)),
+          ]),
+        );
     return ListView(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
       children: [
-        Text('باب ${repo.chapterName(fatwa.chapter)}',
-            style: const TextStyle(color: kGoldChip, fontWeight: FontWeight.w600)),
-        const SizedBox(height: 8),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            chip(Icons.folder_outlined, repo.chapterName(fatwa.chapter)),
+            if (fatwa.sub.isNotEmpty) chip(Icons.subdirectory_arrow_left, fatwa.sub),
+            chip(isArticle ? Icons.article_outlined : Icons.question_answer_outlined, isArticle ? 'مقال' : 'جواب'),
+            chip(Icons.schedule, '$minutes د قراءة'),
+            if (fatwa.date.isNotEmpty) chip(Icons.event_outlined, fatwa.date),
+          ],
+        ),
+        const SizedBox(height: 14),
         SelectableText(fatwa.title,
-            style: TextStyle(fontSize: 22 * scale, fontWeight: FontWeight.bold, height: 1.5)),
+            style: TextStyle(
+                fontFamily: 'Tajawal', fontSize: 21 * scale, fontWeight: FontWeight.bold, height: 1.6)),
         const SizedBox(height: 16),
         if (fatwa.question.isNotEmpty) ...[
-          _Block(label: 'السؤال', text: fatwa.question, highlight: true, scale: scale, find: find),
-          const SizedBox(height: 14),
+          _Block(label: 'السؤال', icon: Icons.help_outline, text: fatwa.question, highlight: true, scale: scale, find: find),
+          const SizedBox(height: 18),
+          const _Ornament(label: 'الجواب'),
+          const SizedBox(height: 6),
         ],
-        _Block(label: fatwa.question.isNotEmpty ? 'الجواب' : null, text: fatwa.answer, scale: scale, find: find),
+        _Block(text: fatwa.answer, plain: true, scale: scale, find: find),
+        if (fatwa.source.startsWith('http'))
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: TextButton.icon(
+              icon: const Icon(Icons.campaign_outlined, size: 18),
+              label: const Text('المصدر: قناة الشيخ على تيليجرام'),
+              onPressed: () => openUrl(context, fatwa.source),
+            ),
+          ),
         const Padding(
-          padding: EdgeInsets.only(top: 6),
+          padding: EdgeInsets.only(top: 4),
           child: Text('قرّب إصبعيك أو باعدهما لتكبير الخط · واسحب يميناً أو يساراً للجواب التالي',
-              textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Colors.grey)),
+              textAlign: TextAlign.center, style: TextStyle(fontSize: 11.5, color: Colors.grey)),
         ),
         if (fatwa.tags.isNotEmpty) ...[
           const SizedBox(height: 18),
@@ -462,10 +526,6 @@ class _AnswerBody extends StatelessWidget {
                 ),
             ],
           ),
-        ],
-        if (fatwa.date.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          Text('تاريخ النشر: ${fatwa.date}', style: const TextStyle(color: Colors.grey)),
         ],
         _CloudPanel(fatwa: fatwa),
         const SizedBox(height: 22),
@@ -762,34 +822,87 @@ List<TextSpan> _styledSpans(String text) {
   return spans;
 }
 
+/// «ـــــ ◆ الجواب ◆ ـــــ»
+class _Ornament extends StatelessWidget {
+  final String label;
+  const _Ornament({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    Widget line() => Expanded(child: Container(height: 1, color: kGold.withValues(alpha: 0.5)));
+    return Row(
+      children: [
+        line(),
+        const Padding(padding: EdgeInsets.symmetric(horizontal: 6), child: Icon(Icons.diamond, size: 10, color: kGold)),
+        Text(label,
+            style: const TextStyle(
+                fontFamily: 'Tajawal', fontWeight: FontWeight.bold, fontSize: 16, color: kGoldChip)),
+        const Padding(padding: EdgeInsets.symmetric(horizontal: 6), child: Icon(Icons.diamond, size: 10, color: kGold)),
+        line(),
+      ],
+    );
+  }
+}
+
 class _Block extends StatelessWidget {
   final String? label;
+  final IconData? icon;
   final String text;
   final bool highlight;
+  final bool plain;
   final double scale;
   final String find;
-  const _Block({this.label, required this.text, this.highlight = false, this.scale = 1.0, this.find = ''});
+  const _Block(
+      {this.label,
+      this.icon,
+      required this.text,
+      this.highlight = false,
+      this.plain = false,
+      this.scale = 1.0,
+      this.find = ''});
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final base = TextStyle(fontSize: 17 * scale, height: 1.9, color: scheme.onSurface);
+    final base = TextStyle(fontSize: 17.5 * scale, height: 2.0, color: scheme.onSurface);
+    // Paragraphs get their own space, so long answers read easily.
+    final paragraphs = text.split(RegExp(r'\n\s*\n')).map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+    final body = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < paragraphs.length; i++)
+          Padding(
+            padding: EdgeInsets.only(bottom: i == paragraphs.length - 1 ? 0 : 14),
+            child: SelectableText.rich(
+              TextSpan(style: base, children: highlightSpans(paragraphs[i], base, find)),
+              textAlign: TextAlign.justify,
+            ),
+          ),
+      ],
+    );
+    if (plain) return Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: body);
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
       decoration: BoxDecoration(
         color: highlight ? kGold.withValues(alpha: 0.10) : null,
-        borderRadius: BorderRadius.circular(14),
-        border: highlight ? null : Border.all(color: scheme.outlineVariant),
+        borderRadius: BorderRadius.circular(16),
+        border: BorderDirectional(
+          start: BorderSide(color: highlight ? kGold : scheme.outlineVariant, width: 4),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (label != null) ...[
-            Text(label!, style: TextStyle(color: scheme.primary, fontWeight: FontWeight.bold)),
+            Row(children: [
+              if (icon != null) ...[Icon(icon, size: 18, color: kGoldChip), const SizedBox(width: 6)],
+              Text(label!,
+                  style: const TextStyle(fontFamily: 'Tajawal', color: kGoldChip, fontWeight: FontWeight.bold)),
+            ]),
             const SizedBox(height: 6),
           ],
-          SelectableText.rich(TextSpan(style: base, children: highlightSpans(text, base, find))),
+          body,
         ],
       ),
     );

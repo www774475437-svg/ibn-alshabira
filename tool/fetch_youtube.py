@@ -21,7 +21,16 @@ def fetch(url):
 
 
 try:
-    page = fetch(f"https://www.youtube.com/@{HANDLE}")
+    page = ""
+    for url in (f"https://www.youtube.com/@{HANDLE}/videos", f"https://www.youtube.com/@{HANDLE}",
+                f"https://m.youtube.com/@{HANDLE}", f"https://www.youtube.com/c/{HANDLE}",
+                f"https://www.youtube.com/user/{HANDLE}"):
+        try:
+            page = fetch(url)
+            if "UC" in page:
+                break
+        except Exception as e:
+            print("tried", url, "->", e)
     m = (re.search(r'"channelId":"(UC[\w-]{22})"', page)
          or re.search(r'channel_id=(UC[\w-]{22})', page)
          or re.search(r'"externalId":"(UC[\w-]{22})"', page))

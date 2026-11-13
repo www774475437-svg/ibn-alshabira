@@ -9,9 +9,11 @@ import sys
 import time
 import urllib.request
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 CHANNEL = 'qaidghsh'
 OUT = os.path.join(os.path.dirname(__file__), '..', 'assets', 'data', 'channel.json')
-MAX_PAGES = 120
+MAX_PAGES = 1500
 
 msg_re = re.compile(r'<div class="tgme_widget_message_wrap.*?(?=<div class="tgme_widget_message_wrap|\Z)', re.S)
 post_re = re.compile(r'data-post="%s/(\d+)"' % CHANNEL)
@@ -65,14 +67,14 @@ def main():
         before = low
         if low <= 1:
             break
-        time.sleep(0.4)
+        time.sleep(0.15)
     if not posts:
         print('no posts fetched; keeping the existing file')
         return
     items = sorted(posts.values(), key=lambda p: -p['id'])
-    with open(OUT, 'w', encoding='utf-8') as f:
-        json.dump(items, f, ensure_ascii=False)
     print('channel posts:', len(items), 'pages:', page + 1)
+    import channel_to_answers
+    channel_to_answers.convert(items)
 
 
 if __name__ == '__main__':

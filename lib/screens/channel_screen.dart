@@ -71,8 +71,7 @@ class _PostCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       child: InkWell(
         borderRadius: BorderRadius.circular(18),
-        onTap: () => Navigator.of(context)
-            .push(MaterialPageRoute(builder: (_) => ChannelPostScreen(post: post))),
+        onTap: () => openChannelPost(context, post),
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(
@@ -94,6 +93,16 @@ class _PostCard extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// A post that became an answer opens as that answer; others as a post.
+void openChannelPost(BuildContext context, ChannelPost post) {
+  final f = post.fatwaId.isEmpty ? null : Repository.instance.findById(post.fatwaId);
+  if (f != null) {
+    openFatwa(context, f);
+  } else {
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => ChannelPostScreen(post: post)));
   }
 }
 

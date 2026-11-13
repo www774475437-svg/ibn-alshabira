@@ -169,8 +169,7 @@ class _HomeTabState extends State<HomeTab> {
                         margin: EdgeInsets.zero,
                         child: InkWell(
                           borderRadius: BorderRadius.circular(18),
-                          onTap: () => Navigator.of(context)
-                              .push(MaterialPageRoute(builder: (_) => ChannelPostScreen(post: p))),
+                          onTap: () => openChannelPost(context, p),
                           child: Padding(
                             padding: const EdgeInsets.all(12),
                             child: Column(

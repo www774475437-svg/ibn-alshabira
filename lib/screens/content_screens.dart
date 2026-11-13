@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 
 import '../data/models.dart';
 import '../data/repository.dart';
@@ -115,50 +116,204 @@ class SeriesScreen extends StatelessWidget {
   }
 }
 
-/// The sheikh's latest YouTube videos.
+/// The sheikh's YouTube videos, played inside the app.
 class VideosScreen extends StatelessWidget {
   const VideosScreen({super.key});
 
+  static String? videoIdFrom(String text) {
+    final t = text.trim();
+    final m = RegExp(r'(?:v=|youtu\.be/|shorts/|embed/|live/)([\w-]{11})').firstMatch(t);
+    if (m != null) return m.group(1);
+    return RegExp(r'^[\w-]{11}$').hasMatch(t) ? t : null;
+  }
+
+  Future<void> _add(BuildContext context) async {
+    final link = TextEditingController();
+    final title = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('إضافة مقطع'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+                controller: link,
+                textDirection: TextDirection.ltr,
+                decoration: const InputDecoration(labelText: 'رابط المقطع في يوتيوب')),
+            TextField(controller: title, decoration: const InputDecoration(labelText: 'العنوان')),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('إضافة')),
+        ],
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+    final id = videoIdFrom(link.text);
+    if (id == null || title.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('تأكد من الرابط والعنوان')));
+      return;
+    }
+    final now = DateTime.now();
+    final v = Video(
+        id: id,
+        title: title.text.trim(),
+        published: '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}');
+    final err = await Cloud.instance.setVideos([v, ...Cloud.instance.extraVideos], 'إضافة مقطع');
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err ?? 'أُضيف المقطع ✅')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final videos = Repository.instance.videos;
+    final cloud = Cloud.instance;
+    return ListenableBuilder(
+      listenable: Listenable.merge([Repository.instance, cloud]),
+      builder: (context, _) {
+        final videos = Repository.instance.videos;
+        final staff = cloud.ready && cloud.isFullAdmin;
+        return Scaffold(
+          appBar: AppBar(title: const Text('المرئيات')),
+          floatingActionButton: staff
+              ? FloatingActionButton.extended(
+                  icon: const Icon(Icons.add),
+                  label: const Text('إضافة مقطع'),
+                  onPressed: () => _add(context),
+                )
+              : null,
+          body: videos.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.play_circle_outline, size: 64, color: kGold),
+                      const SizedBox(height: 12),
+                      const YouTubeButton(url: 'https://youtube.com/@qaidghsh', label: 'فتح قناة الشيخ في يوتيوب'),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
+                  itemCount: videos.length + 1,
+                  itemBuilder: (context, i) {
+                    if (i == videos.length) {
+                      return const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        child: YouTubeButton(url: 'https://youtube.com/@qaidghsh', label: 'كل المقاطع في قناة الشيخ'),
+                      );
+                    }
+                    final v = videos[i];
+                    final added = cloud.extraVideos.any((x) => x.id == v.id);
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Stack(
+                        children: [
+                          VideoCard(video: v),
+                          if (staff && added)
+                            PositionedDirectional(
+                              top: 6,
+                              end: 6,
+                              child: IconButton.filledTonal(
+                                tooltip: 'حذف المقطع',
+                                icon: const Icon(Icons.delete_outline),
+                                onPressed: () => cloud.setVideos(
+                                    cloud.extraVideos.where((x) => x.id != v.id).toList(), 'حذف مقطع'),
+                              ),
+                            ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+        );
+      },
+    );
+  }
+}
+
+/// A red «يوتيوب» box, for those who prefer to watch there.
+class YouTubeButton extends StatelessWidget {
+  final String url;
+  final String label;
+  const YouTubeButton({super.key, required this.url, this.label = 'مشاهدة على يوتيوب'});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: const Color(0xFFE62117),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => openUrl(context, url),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.smart_display, color: Colors.white),
+              const SizedBox(width: 8),
+              Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Plays one video inside the app (and on the website).
+class VideoPlayerScreen extends StatefulWidget {
+  final Video video;
+  const VideoPlayerScreen({super.key, required this.video});
+
+  @override
+  State<VideoPlayerScreen> createState() => _VideoPlayerScreenState();
+}
+
+class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
+  late final YoutubePlayerController _c = YoutubePlayerController.fromVideoId(
+    videoId: widget.video.id,
+    autoPlay: true,
+    params: const YoutubePlayerParams(showFullscreenButton: true, strictRelatedVideos: true),
+  );
+
+  @override
+  void dispose() {
+    _c.close();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final v = widget.video;
     return Scaffold(
       appBar: AppBar(title: const Text('المرئيات')),
-      body: videos.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.play_circle_outline, size: 64, color: kGold),
-                  const SizedBox(height: 12),
-                  FilledButton.icon(
-                    icon: const Icon(Icons.open_in_new),
-                    label: const Text('فتح قناة الشيخ في يوتيوب'),
-                    onPressed: () => openUrl(context, 'https://youtube.com/@qaidghsh'),
-                  ),
+      body: ListView(
+        children: [
+          YoutubePlayer(controller: _c, aspectRatio: 16 / 9),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(v.title,
+                    style: const TextStyle(fontFamily: 'Tajawal', fontSize: 19, fontWeight: FontWeight.bold, height: 1.6)),
+                if (v.published.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(v.published, style: const TextStyle(color: Colors.grey)),
                 ],
-              ),
-            )
-          : ListView.builder(
-              padding: const EdgeInsets.all(12),
-              itemCount: videos.length + 1,
-              itemBuilder: (context, i) {
-                if (i == videos.length) {
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    child: OutlinedButton.icon(
-                      icon: const Icon(Icons.open_in_new),
-                      label: const Text('كل المقاطع في قناة الشيخ'),
-                      onPressed: () => openUrl(context, 'https://youtube.com/@qaidghsh'),
-                    ),
-                  );
-                }
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: VideoCard(video: videos[i]),
-                );
-              },
+                const SizedBox(height: 18),
+                YouTubeButton(url: v.url),
+              ],
             ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -176,7 +331,8 @@ class VideoCard extends StatelessWidget {
         margin: EdgeInsets.zero,
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          onTap: () => openUrl(context, video.url),
+          onTap: () => Navigator.of(context)
+              .push(MaterialPageRoute(builder: (_) => VideoPlayerScreen(video: video))),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
