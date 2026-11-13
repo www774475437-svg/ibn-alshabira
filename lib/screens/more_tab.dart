@@ -8,6 +8,8 @@ import '../data/repository.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'ask_screen.dart';
+import 'audio_library.dart';
+import 'channel_screen.dart';
 import 'account_screens.dart';
 import 'content_screens.dart';
 import 'extra_screens.dart';
@@ -63,6 +65,20 @@ class MoreTab extends StatelessWidget {
                 trailing: const Icon(Icons.chevron_left),
                 onTap: () => Navigator.of(context)
                     .push(MaterialPageRoute(builder: (_) => const AboutSheikhScreen())),
+              ),
+              ListTile(
+                leading: const _IconBox(Icons.campaign_outlined),
+                title: const Text('من قناة الشيخ'),
+                trailing: const Icon(Icons.chevron_left),
+                onTap: () => Navigator.of(context)
+                    .push(MaterialPageRoute(builder: (_) => const ChannelScreen())),
+              ),
+              ListTile(
+                leading: const _IconBox(Icons.headphones),
+                title: const Text('المكتبة الصوتية'),
+                trailing: const Icon(Icons.chevron_left),
+                onTap: () => Navigator.of(context)
+                    .push(MaterialPageRoute(builder: (_) => const AudioLibraryScreen())),
               ),
               ListTile(
                 leading: const _IconBox(Icons.play_circle_outline),
