@@ -256,6 +256,16 @@ class PrivacyScreen extends StatelessWidget {
 /// «ما الجديد»: what each version added, newest first.
 const whatsNew = <(String, List<String>)>[
   (
+    '2.1.0',
+    [
+      'البحث صار أدق: الكلمة التي تبحث عنها فقط، وما كان في العنوان أو السؤال يأتي أولاً.',
+      '«بحث بالمعنى» زر اختياري في صفحة البحث، مع تصفية: أجوبة أو مقالات.',
+      'البطاقة المصوّرة تحمل السؤال والجواب كاملين في صور مرقّمة.',
+      'صفحة «قراءتي»: كم قرأت وكم بقي في كل باب.',
+      'اسمك أو كنيتك اختيارياً مع أسئلتك للشيخ.',
+    ]
+  ),
+  (
     '2.0.0',
     [
       'اكتب سؤالك بكلامك العادي، فيعرض لك التطبيق أقرب كلام الشيخ إليه بنصّه.',
@@ -419,6 +429,84 @@ class MustUpdateScreen extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+
+/// «قراءتي»: the reader's own numbers, to know where they have reached.
+class MyReadingScreen extends StatelessWidget {
+  const MyReadingScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final repo = Repository.instance;
+    final read = repo.everRead;
+    final total = repo.fatwas.length;
+    final done = repo.fatwas.where((f) => read.contains(f.id)).length;
+    Widget box(String value, String label) => Expanded(
+          child: Card(
+            margin: const EdgeInsets.all(4),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 6),
+              child: Column(children: [
+                Text(value,
+                    style: const TextStyle(fontFamily: 'Tajawal', fontSize: 22, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 2),
+                Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+              ]),
+            ),
+          ),
+        );
+    return Scaffold(
+      appBar: AppBar(title: const Text('قراءتي')),
+      body: ListView(
+        padding: const EdgeInsets.all(12),
+        children: [
+          Row(children: [
+            box('$done', 'قرأت في المجموع'),
+            box('${repo.readThisMonth}', 'هذا الشهر'),
+            box('${repo.readToday}', 'اليوم'),
+          ]),
+          Row(children: [
+            box('${repo.streak}', 'أيام متتالية'),
+            box(total == 0 ? '0%' : '${(done * 100 / total).toStringAsFixed(1)}%', 'من المكتبة كلها'),
+            box('${total - done}', 'لم تقرأه بعد'),
+          ]),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(4, 16, 4, 6),
+            child: Text('تقدّمك في كل باب', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+          ),
+          for (final c in repo.chapters)
+            if (repo.countInChapter(c.id) > 0)
+              Builder(builder: (context) {
+                final all = repo.byChapter(c.id);
+                final n = all.where((f) => read.contains(f.id)).length;
+                return Card(
+                  margin: const EdgeInsets.symmetric(vertical: 4),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(children: [
+                          Icon(chapterIcon(c.icon), size: 18, color: kGold),
+                          const SizedBox(width: 6),
+                          Expanded(child: Text(c.name, style: const TextStyle(fontWeight: FontWeight.w600))),
+                          Text('$n من ${all.length}', style: const TextStyle(color: Colors.grey)),
+                        ]),
+                        const SizedBox(height: 8),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: LinearProgressIndicator(value: n / all.length, minHeight: 7),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+        ],
       ),
     );
   }

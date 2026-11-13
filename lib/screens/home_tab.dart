@@ -315,11 +315,6 @@ class _Header extends StatelessWidget {
                           fontFamily: 'Tajawal', color: ink, fontSize: 21, fontWeight: FontWeight.bold)),
                   const Spacer(),
                   IconButton(
-                    tooltip: 'البحث',
-                    icon: Icon(Icons.search, color: ink),
-                    onPressed: onOpenSearch,
-                  ),
-                  IconButton(
                     tooltip: dark ? 'الوضع الفاتح' : 'الوضع الداكن',
                     icon: Icon(dark ? Icons.wb_sunny_outlined : Icons.nightlight_outlined, color: ink),
                     onPressed: () => repo.setThemeMode(dark ? ThemeMode.light : ThemeMode.dark),

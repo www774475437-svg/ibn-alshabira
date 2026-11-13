@@ -5,6 +5,7 @@ import '../data/repository.dart';
 import '../services/cloud.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import 'admin_extra.dart';
 
 /// Staff: go through the answers of one chapter (by default «متفرقات»)
 /// one by one, and send each to its right chapter with a single tap.
@@ -16,16 +17,14 @@ class ReviewScreen extends StatefulWidget {
 }
 
 class _ReviewScreenState extends State<ReviewScreen> {
-  late String _from = Repository.instance.chapters.last.id;
+  late String _from = Repository.instance.chapters.last.id; // '' = all chapters
   final _skipped = <String>{};
   bool _busy = false;
 
   List<Fatwa> get _queue {
     final repo = Repository.instance;
-    return repo
-        .byChapter(_from)
-        .where((f) => !_skipped.contains(f.id) && !repo.sortedIds.contains(f.id))
-        .toList();
+    final pool = _from.isEmpty ? repo.fatwas : repo.byChapter(_from);
+    return pool.where((f) => !_skipped.contains(f.id) && !repo.verifiedIds.contains(f.id)).toList();
   }
 
   Future<void> _act(Future<String?> Function() job, String ok) async {
@@ -45,7 +44,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
     final queue = _queue;
     final f = queue.isEmpty ? null : queue.first;
     return Scaffold(
-      appBar: AppBar(title: Text('مراجعة الترتيب (${queue.length})')),
+      appBar: AppBar(title: Text('لم يُتحقق منها (${queue.length})')),
       body: Column(
         children: [
           Padding(
@@ -56,6 +55,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
               decoration: const InputDecoration(
                   labelText: 'أراجع منشورات باب', border: OutlineInputBorder(), isDense: true),
               items: [
+                const DropdownMenuItem(value: '', child: Text('كل الأبواب')),
                 for (final c in repo.chapters)
                   DropdownMenuItem(value: c.id, child: Text('${c.name} (${repo.countInChapter(c.id)})')),
               ],
@@ -101,7 +101,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
                         alignment: WrapAlignment.center,
                         children: [
                           for (final c in repo.chapters)
-                            if (c.id != _from)
+                            if (c.id != f.chapter)
                               ActionChip(
                                 avatar: Icon(chapterIcon(c.icon), size: 16, color: kGold),
                                 label: Text(c.name),
@@ -117,10 +117,20 @@ class _ReviewScreenState extends State<ReviewScreen> {
                           Expanded(
                             child: TextButton.icon(
                               icon: const Icon(Icons.check),
-                              label: const Text('مكانه صحيح'),
+                              label: const Text('صحيح'),
                               onPressed: _busy
                                   ? null
-                                  : () => _act(() => Cloud.instance.setChapter(f.id, _from, f.title), 'ثُبّت في بابه'),
+                                  : () => _act(() => Cloud.instance.setVerified(f.id, true, f.title), 'تم التحقق ✅'),
+                            ),
+                          ),
+                          Expanded(
+                            child: TextButton.icon(
+                              icon: const Icon(Icons.edit_outlined),
+                              label: const Text('تصحيح'),
+                              onPressed: () async {
+                                await showBundledEdit(context, f);
+                                if (mounted) setState(() {});
+                              },
                             ),
                           ),
                           Expanded(
