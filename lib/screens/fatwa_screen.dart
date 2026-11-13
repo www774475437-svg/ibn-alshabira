@@ -10,6 +10,7 @@ import '../services/cloud.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'admin_extra.dart';
+import 'ask_screen.dart';
 import 'favorites_tab.dart';
 import 'share_card_screen.dart';
 
@@ -491,6 +492,18 @@ class _AnswerBody extends StatelessWidget {
         Wrap(
           alignment: WrapAlignment.center,
           children: [
+            if (fatwa.audio.startsWith('http'))
+              FilledButton.tonalIcon(
+                icon: const Icon(Icons.headphones, size: 20),
+                label: const Text('استمع للجواب'),
+                onPressed: () => openUrl(context, fatwa.audio),
+              ),
+            TextButton.icon(
+              icon: const Icon(Icons.contact_support_outlined, size: 20),
+              label: const Text('اسأل عن هذا الجواب'),
+              onPressed: () => Navigator.of(context)
+                  .push(MaterialPageRoute(builder: (_) => AskScreen(about: fatwa))),
+            ),
             TextButton.icon(
               icon: const Icon(Icons.image_outlined, size: 20),
               label: const Text('بطاقة مصوّرة'),

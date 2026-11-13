@@ -332,7 +332,10 @@ class Cloud extends ChangeNotifier {
     if (!ready) return [];
     try {
       final q = await _db.collection('views').orderBy('count', descending: true).limit(limit).get();
-      return [for (final d in q.docs) (d.id, (d.data()['count'] ?? 0) as int)];
+      return [
+        for (final d in q.docs)
+          if (!d.id.startsWith('_')) (d.id, (d.data()['count'] ?? 0) as int),
+      ];
     } catch (_) {
       return [];
     }
@@ -426,6 +429,8 @@ class Cloud extends ChangeNotifier {
     required String answer,
     List<String> tags = const [],
     DateTime? publishAt,
+    String sub = '',
+    String audio = '',
   }) async {
     try {
       final now = publishAt ?? DateTime.now();
@@ -437,6 +442,8 @@ class Cloud extends ChangeNotifier {
         'question': question.trim(),
         'answer': answer.trim(),
         'tags': tags,
+        'sub': sub.trim(),
+        'audio': audio.trim(),
         'date': '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}',
         'source': '',
         'by': email,
@@ -465,8 +472,13 @@ class Cloud extends ChangeNotifier {
     if (!ready) return {};
     try {
       final views = await _db.collection('views').get();
-      var total = 0, helpful = 0, notHelpful = 0;
+      var total = 0, helpful = 0, notHelpful = 0, shares = 0, answersViewed = 0;
       for (final d in views.docs) {
+        if (d.id.startsWith('_')) {
+          if (d.id == '_appShare') shares = (d.data()['count'] ?? 0) as int;
+          continue;
+        }
+        answersViewed++;
         total += (d.data()['count'] ?? 0) as int;
         helpful += (d.data()['helpful'] ?? 0) as int;
         notHelpful += (d.data()['notHelpful'] ?? 0) as int;
@@ -475,7 +487,8 @@ class Cloud extends ChangeNotifier {
       final published = await _db.collection('answers').count().get();
       return {
         'views': total,
-        'answersViewed': views.docs.length,
+        'answersViewed': answersViewed,
+        'shares': shares,
         'helpful': helpful,
         'notHelpful': notHelpful,
         'reports': reports.count ?? 0,
@@ -496,10 +509,14 @@ class Cloud extends ChangeNotifier {
       required String title,
       required String question,
       required String answer,
-      List<String>? tags}) async {
+      List<String>? tags,
+      String? sub,
+      String? audio}) async {
     try {
       await _db.doc('answers/$id').update({
         if (tags != null) 'tags': tags,
+        if (sub != null) 'sub': sub.trim(),
+        if (audio != null) 'audio': audio.trim(),
         'chapter': chapter,
         'title': title.trim(),
         'question': question.trim(),
@@ -593,7 +610,8 @@ class Cloud extends ChangeNotifier {
       final q = await _db.collection('views').get();
       return [
         for (final d in q.docs)
-          (d.id, (d.data()['helpful'] ?? 0) as int, (d.data()['notHelpful'] ?? 0) as int),
+          if (!d.id.startsWith('_'))
+            (d.id, (d.data()['helpful'] ?? 0) as int, (d.data()['notHelpful'] ?? 0) as int),
       ];
     } catch (_) {
       return [];
@@ -616,6 +634,10 @@ class Cloud extends ChangeNotifier {
       final an = c['announcement'];
       announcement = an != null && an['active'] == true ? '${an['text'] ?? ''}' : '';
       askOpen = c['ask']?['open'] != false;
+      subs = {
+        for (final e in ((c['subs']?['map'] ?? {}) as Map).entries)
+          '${e.key}': ((e.value ?? []) as List).map((x) => '$x').toList(),
+      };
       final mb = c['app']?['minBuild'];
       minBuild = mb is int ? mb : 0;
       aboutText = '${c['about']?['text'] ?? ''}';
@@ -638,6 +660,27 @@ class Cloud extends ChangeNotifier {
     } catch (e) {
       debugPrint('config failed: $e');
     }
+  }
+
+  /// Sub-chapters: chapter id → names.
+  Map<String, List<String>> subs = {};
+
+  Future<String?> setSubs(String chapterId, List<String> names) {
+    final map = {for (final e in subs.entries) e.key: e.value};
+    if (names.isEmpty) {
+      map.remove(chapterId);
+    } else {
+      map[chapterId] = names;
+    }
+    return setConfig('subs', {'map': map}, 'تعديل الأبواب الفرعية');
+  }
+
+  /// Counts one press of «انشر التطبيق».
+  Future<void> countAppShare() async {
+    if (!ready) return;
+    try {
+      await _db.doc('views/_appShare').set({'count': FieldValue.increment(1)}, SetOptions(merge: true));
+    } catch (_) {}
   }
 
   /// Builds older than this must update (0 = no forced update).
@@ -683,16 +726,20 @@ class Cloud extends ChangeNotifier {
       series = [
         for (final d in q.docs)
           Series(d.id, '${d.data()['title'] ?? ''}',
-              ((d.data()['ids'] ?? []) as List).map((e) => '$e').toList()),
+              ((d.data()['ids'] ?? []) as List).map((e) => '$e').toList(),
+              track: d.data()['track'] == true),
       ];
       notifyListeners();
     } catch (_) {}
   }
 
-  Future<String?> createSeries(String title, String answerId) async {
-    if (title.trim().isEmpty) return 'اكتب عنوان السلسلة';
+  List<Series> get plainSeries => series.where((s) => !s.track).toList();
+  List<Series> get tracks => series.where((s) => s.track).toList();
+
+  Future<String?> createSeries(String title, String answerId, {bool track = false}) async {
+    if (title.trim().isEmpty) return 'اكتب العنوان';
     try {
-      await _db.collection('series').add({'title': title.trim(), 'ids': [answerId]});
+      await _db.collection('series').add({'title': title.trim(), 'ids': [answerId], 'track': track});
       await loadSeries();
       return null;
     } catch (_) {
@@ -906,5 +953,8 @@ class Series {
   final String id;
   final String title;
   final List<String> ids;
-  Series(this.id, this.title, this.ids);
+
+  /// A learning track: ordered steps the reader ticks off.
+  final bool track;
+  Series(this.id, this.title, this.ids, {this.track = false});
 }

@@ -107,7 +107,10 @@ class QrScreen extends StatelessWidget {
           FilledButton.icon(
             icon: const Icon(Icons.share),
             label: const Text('انشر رابط التطبيق والموقع'),
-            onPressed: () => Share.share(shareAppText()),
+            onPressed: () {
+              Cloud.instance.countAppShare();
+              Share.share(shareAppText());
+            },
           ),
         ],
       ),
@@ -252,6 +255,24 @@ class PrivacyScreen extends StatelessWidget {
 
 /// «ما الجديد»: what each version added, newest first.
 const whatsNew = <(String, List<String>)>[
+  (
+    '1.11.0',
+    [
+      'أبواب فرعية داخل كل باب (مثل: الأذان، الجمعة).',
+      'مسارات التعلّم: أجوبة مرتبة تتابعها خطوة خطوة.',
+      'خطة قراءة لكتب الشيخ: تختار الكتاب وعدد الصفحات كل يوم.',
+      'زر «اسأل عن هذا الجواب» تحت كل جواب.',
+      'زر «استمع للجواب» عند وجود تسجيل صوتي.',
+    ]
+  ),
+  (
+    '1.10.0',
+    [
+      'بطاقة مصوّرة للجواب جاهزة للنشر.',
+      'مجلدات للمحفوظات بأسماء تختارها.',
+      'وسوم تحت الأجوبة تجمع ما يتعلق بموضوع واحد.',
+    ]
+  ),
   (
     '1.9.0',
     [

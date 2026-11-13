@@ -26,6 +26,12 @@ class Fatwa {
   final String date;
   final String source;
 
+  /// Sub-chapter name inside the chapter ('' = none).
+  final String sub;
+
+  /// Link to a voice recording of the answer ('' = none).
+  final String audio;
+
   /// Pre-computed normalized text for fast search.
   late String searchText;
 
@@ -39,6 +45,8 @@ class Fatwa {
     required this.tags,
     required this.date,
     required this.source,
+    this.sub = '',
+    this.audio = '',
   });
 
   factory Fatwa.fromJson(Map<String, dynamic> j) => Fatwa(
@@ -51,6 +59,8 @@ class Fatwa {
         tags: ((j['tags'] ?? []) as List).map((e) => '$e').toList(),
         date: (j['date'] ?? '') as String,
         source: (j['source'] ?? '') as String,
+        sub: '${j['sub'] ?? ''}',
+        audio: '${j['audio'] ?? ''}',
       );
 
   String get typeLabel {

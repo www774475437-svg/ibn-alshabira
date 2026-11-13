@@ -123,6 +123,8 @@ class _BookReaderScreenState extends State<BookReaderScreen> {
                         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
                         onViewerReady: (document, controller) {
                           if (mounted) setState(() => _pages = document.pages.length);
+                          SharedPreferences.getInstance().then(
+                              (p) => p.setInt('book_pages_${widget.book.id}', document.pages.length));
                         },
                         onPageChanged: (page) {
                           if (page == null) return;

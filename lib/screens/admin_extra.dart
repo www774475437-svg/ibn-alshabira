@@ -11,6 +11,34 @@ import '../widgets/common.dart';
 void _toast(BuildContext context, String t) =>
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t)));
 
+/// Pick a sub-chapter of [chapterId] ('' = none).
+class SubPicker extends StatelessWidget {
+  final String chapterId;
+  final String value;
+  final ValueChanged<String> onChanged;
+  const SubPicker({super.key, required this.chapterId, required this.value, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final names = [...?Cloud.instance.subs[chapterId]];
+    if (value.isNotEmpty && !names.contains(value)) names.add(value);
+    if (names.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: DropdownButtonFormField<String>(
+        key: ValueKey('$chapterId|$value'),
+        value: value,
+        decoration: _deco('الباب الفرعي (اختياري)'),
+        items: [
+          const DropdownMenuItem(value: '', child: Text('بدون')),
+          for (final n in names) DropdownMenuItem(value: n, child: Text(n)),
+        ],
+        onChanged: (v) => onChanged(v ?? ''),
+      ),
+    );
+  }
+}
+
 /// «رمضان، السفر» → ['رمضان', 'السفر']
 List<String> parseTags(String text) => text
     .split(RegExp('[,،#\\n]'))
@@ -493,6 +521,8 @@ class _EditAnswerScreenState extends State<EditAnswerScreen> {
   late final _answer = TextEditingController(text: widget.fatwa.answer);
   late String _chapter = widget.fatwa.chapter;
   late final _tags = TextEditingController(text: widget.fatwa.tags.join('، '));
+  late final _audio = TextEditingController(text: widget.fatwa.audio);
+  late String _sub = widget.fatwa.sub;
 
   @override
   Widget build(BuildContext context) {
@@ -534,8 +564,12 @@ class _EditAnswerScreenState extends State<EditAnswerScreen> {
             value: _chapter,
             decoration: _deco('الباب (للنقل إلى باب آخر)'),
             items: [for (final c in repo.chapters) DropdownMenuItem(value: c.id, child: Text(c.name))],
-            onChanged: (v) => setState(() => _chapter = v ?? _chapter),
+            onChanged: (v) => setState(() {
+              _chapter = v ?? _chapter;
+              _sub = '';
+            }),
           ),
+          SubPicker(chapterId: _chapter, value: _sub, onChanged: (v) => setState(() => _sub = v)),
           const SizedBox(height: 12),
           TextField(controller: _title, decoration: _deco('العنوان')),
           const SizedBox(height: 12),
@@ -544,6 +578,12 @@ class _EditAnswerScreenState extends State<EditAnswerScreen> {
           TextField(controller: _answer, maxLines: 12, decoration: _deco('الجواب')),
           const SizedBox(height: 12),
           TextField(controller: _tags, decoration: _deco('الوسوم (افصل بينها بفاصلة)')),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _audio,
+            textDirection: TextDirection.ltr,
+            decoration: _deco('رابط تسجيل صوتي للجواب (اختياري)'),
+          ),
           const SizedBox(height: 16),
           FilledButton.icon(
             style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
@@ -557,6 +597,8 @@ class _EditAnswerScreenState extends State<EditAnswerScreen> {
                 question: _question.text,
                 answer: _answer.text,
                 tags: parseTags(_tags.text),
+                sub: _sub,
+                audio: _audio.text,
               );
               if (!context.mounted) return;
               _toast(context, err ?? 'تم الحفظ ✅');
@@ -584,14 +626,14 @@ void showSeriesSheet(BuildContext context, Fatwa fatwa) {
           shrinkWrap: true,
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
           children: [
-            const Text('إضافة الجواب إلى سلسلة',
+            const Text('إضافة الجواب إلى سلسلة أو مسار',
                 textAlign: TextAlign.center, style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             for (final s in Cloud.instance.series)
               ListTile(
-                leading: const Icon(Icons.collections_bookmark_outlined, color: kGold),
+                leading: Icon(s.track ? Icons.route_outlined : Icons.collections_bookmark_outlined, color: kGold),
                 title: Text(s.title),
-                subtitle: Text('${s.ids.length} جواب'),
+                subtitle: Text('${s.track ? 'مسار' : 'سلسلة'} · ${s.ids.length} جواب'),
                 trailing: s.ids.contains(fatwa.id) ? const Icon(Icons.check, color: Colors.green) : null,
                 onTap: () async {
                   final err = await Cloud.instance.addToSeries(s.id, fatwa.id);
@@ -601,7 +643,7 @@ void showSeriesSheet(BuildContext context, Fatwa fatwa) {
                 },
               ),
             const Divider(),
-            TextField(controller: newTitle, decoration: _deco('سلسلة جديدة، مثل: أحكام رمضان')),
+            TextField(controller: newTitle, decoration: _deco('العنوان، مثل: أحكام رمضان')),
             const SizedBox(height: 8),
             FilledButton(
               onPressed: () async {
@@ -610,7 +652,23 @@ void showSeriesSheet(BuildContext context, Fatwa fatwa) {
                 if (err == null) Navigator.pop(ctx);
                 _toast(context, err ?? 'أُنشئت السلسلة ✅');
               },
-              child: const Text('إنشاء السلسلة وإضافة الجواب'),
+              child: const Text('إنشاء سلسلة وإضافة الجواب'),
+            ),
+            const SizedBox(height: 6),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.route_outlined),
+              onPressed: () async {
+                final err = await Cloud.instance.createSeries(newTitle.text, fatwa.id, track: true);
+                if (!ctx.mounted) return;
+                if (err == null) Navigator.pop(ctx);
+                _toast(context, err ?? 'أُنشئ المسار ✅');
+              },
+              label: const Text('إنشاء مسار تعليمي وإضافة الجواب'),
+            ),
+            const Padding(
+              padding: EdgeInsets.only(top: 4),
+              child: Text('المسار: أجوبة مرتبة يتابعها القارئ خطوة خطوة، مثل «أحكام الصلاة للمبتدئ».',
+                  textAlign: TextAlign.center, style: TextStyle(color: Colors.grey, fontSize: 12)),
             ),
           ],
         ),
@@ -619,6 +677,66 @@ void showSeriesSheet(BuildContext context, Fatwa fatwa) {
   );
 }
 
+
+/// Full admin: the sub-chapters of one chapter.
+void showSubsSheet(BuildContext context, Chapter chapter) {
+  final c = TextEditingController();
+  var names = [...?Cloud.instance.subs[chapter.id]];
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setS) {
+        Future<void> save(List<String> list) async {
+          final err = await Cloud.instance.setSubs(chapter.id, list);
+          if (err == null) setS(() => names = list);
+          if (context.mounted) _toast(context, err ?? 'تم الحفظ ✅');
+        }
+
+        return Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+          child: ListView(
+            shrinkWrap: true,
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+            children: [
+              Text('الأبواب الفرعية في «${chapter.name}»',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 6),
+              const Text('مثل: الأذان، الجمعة، صلاة المسافر. ثم تختار الباب الفرعي عند نشر الجواب أو تعديله.',
+                  textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
+              const SizedBox(height: 8),
+              for (final n in names)
+                ListTile(
+                  leading: const Icon(Icons.subdirectory_arrow_left, color: kGold),
+                  title: Text(n),
+                  trailing: IconButton(
+                    tooltip: 'حذف',
+                    icon: const Icon(Icons.delete_outline),
+                    onPressed: () => save([...names]..remove(n)),
+                  ),
+                ),
+              const SizedBox(height: 8),
+              TextField(controller: c, decoration: _deco('باب فرعي جديد')),
+              const SizedBox(height: 8),
+              FilledButton.icon(
+                icon: const Icon(Icons.add),
+                label: const Text('إضافة'),
+                onPressed: () {
+                  final n = c.text.trim();
+                  if (n.isEmpty || names.contains(n)) return;
+                  c.clear();
+                  save([...names, n]);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    ),
+  );
+}
 
 /// Full admin: rename chapters and add new ones.
 class ChaptersTab extends StatelessWidget {
@@ -672,6 +790,15 @@ class ChaptersTab extends StatelessWidget {
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      IconButton(
+                        tooltip: 'الأبواب الفرعية',
+                        icon: Badge(
+                          isLabelVisible: (Cloud.instance.subs[c.id] ?? const []).isNotEmpty,
+                          label: Text('${(Cloud.instance.subs[c.id] ?? const []).length}'),
+                          child: const Icon(Icons.account_tree_outlined),
+                        ),
+                        onPressed: () => showSubsSheet(context, c),
+                      ),
                       IconButton(
                         tooltip: 'تغيير الاسم',
                         icon: const Icon(Icons.edit),

@@ -337,6 +337,7 @@ class _StatsTab extends StatelessWidget {
             tile(Icons.thumb_up, 'أفادهم الجواب', s['helpful'] ?? 0),
             tile(Icons.thumb_down, 'لم يُفدهم', s['notHelpful'] ?? 0),
             tile(Icons.flag, 'البلاغات', s['reports'] ?? 0),
+            tile(Icons.share, 'مرات نشر التطبيق', s['shares'] ?? 0),
           ],
             ),
             const _VotesLists(),
@@ -414,6 +415,8 @@ class _PublishTabState extends State<_PublishTab> {
   final _question = TextEditingController();
   final _answer = TextEditingController();
   final _tags = TextEditingController();
+  final _audio = TextEditingController();
+  String _sub = '';
   DateTime? _publishAt;
   String _chapter = Repository.instance.chapters.first.id;
   String? _draftId;
@@ -424,6 +427,8 @@ class _PublishTabState extends State<_PublishTab> {
     _question.clear();
     _answer.clear();
     _tags.clear();
+    _audio.clear();
+    _sub = '';
     _publishAt = null;
     _draftId = null;
   }
@@ -441,6 +446,8 @@ class _PublishTabState extends State<_PublishTab> {
         question: _question.text,
         answer: _answer.text,
         tags: parseTags(_tags.text),
+        sub: _sub,
+        audio: _audio.text,
         publishAt: later ? _publishAt : null);
     if (err == null && _draftId != null) await Cloud.instance.deleteDraft(_draftId!);
     if (!mounted) return;
@@ -497,8 +504,12 @@ class _PublishTabState extends State<_PublishTab> {
           value: _chapter,
           decoration: deco('الباب'),
           items: [for (final c in repo.chapters) DropdownMenuItem(value: c.id, child: Text(c.name))],
-          onChanged: (v) => setState(() => _chapter = v ?? _chapter),
+          onChanged: (v) => setState(() {
+            _chapter = v ?? _chapter;
+            _sub = '';
+          }),
         ),
+        SubPicker(chapterId: _chapter, value: _sub, onChanged: (v) => setState(() => _sub = v)),
         const SizedBox(height: 12),
         TextField(controller: _title, decoration: deco('العنوان')),
         const SizedBox(height: 12),
@@ -507,6 +518,12 @@ class _PublishTabState extends State<_PublishTab> {
         TextField(controller: _answer, maxLines: 10, decoration: deco('الجواب')),
         const SizedBox(height: 12),
         TextField(controller: _tags, decoration: deco('الوسوم (اختياري، افصل بينها بفاصلة)')),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _audio,
+          textDirection: TextDirection.ltr,
+          decoration: deco('رابط تسجيل صوتي للجواب (اختياري)'),
+        ),
         const SizedBox(height: 6),
         ListTile(
           contentPadding: EdgeInsets.zero,

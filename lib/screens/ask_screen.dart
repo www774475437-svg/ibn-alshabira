@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import '../data/models.dart';
+
 import '../config.dart';
 import '../data/repository.dart';
 import '../services/cloud.dart';
@@ -11,7 +13,9 @@ import 'account_screens.dart';
 /// «اسأل الشيخ»: the user sends a question and sees the sheikh's replies
 /// here, like a private chat.
 class AskScreen extends StatefulWidget {
-  const AskScreen({super.key});
+  /// When set, the question is about this answer.
+  final Fatwa? about;
+  const AskScreen({super.key, this.about});
 
   @override
   State<AskScreen> createState() => _AskScreenState();
@@ -27,6 +31,11 @@ class _AskScreenState extends State<AskScreen> {
   @override
   void initState() {
     super.initState();
+    final a = widget.about;
+    if (a != null) {
+      _text.text = 'بخصوص جواب «${a.title}»:\n';
+      _chapter = a.chapter;
+    }
     _text.addListener(() => setState(() {}));
   }
 
