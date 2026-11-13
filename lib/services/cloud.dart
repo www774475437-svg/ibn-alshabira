@@ -293,6 +293,11 @@ class Cloud extends ChangeNotifier {
   Future<void> addView(String id) async {
     if (!ready || !_countedThisSession.add(id)) return;
     try {
+      // One view per answer per device, so the numbers are real readers.
+      final prefs = await SharedPreferences.getInstance();
+      final seen = prefs.getStringList('viewedAnswers') ?? <String>[];
+      if (seen.contains(id)) return;
+      await prefs.setStringList('viewedAnswers', [...seen, id]);
       await _db.doc('views/$id').set({'count': FieldValue.increment(1)}, SetOptions(merge: true));
     } catch (_) {}
   }
