@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -508,13 +509,23 @@ class _CloudPanelState extends State<_CloudPanel> {
   }
 
   Future<void> _load() async {
+    // One vote per answer on this device, remembered for good.
+    final prefs = await SharedPreferences.getInstance();
+    if ((prefs.getStringList('votedAnswers') ?? const []).contains(widget.fatwa.id)) {
+      if (mounted) setState(() => _voted = true);
+    }
     await Future.delayed(const Duration(milliseconds: 600));
     final s = await Cloud.instance.stats(widget.fatwa.id);
     if (mounted) setState(() => _stats = s);
   }
 
   Future<void> _vote(bool yes) async {
+    if (_voted) return;
     setState(() => _voted = true);
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList('votedAnswers') ?? <String>[];
+    if (list.contains(widget.fatwa.id)) return;
+    await prefs.setStringList('votedAnswers', [...list, widget.fatwa.id]);
     await Cloud.instance.vote(widget.fatwa.id, yes);
   }
 
