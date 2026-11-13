@@ -164,6 +164,7 @@ class MoreTab extends StatelessWidget {
                   onChanged: (f) => repo.setFontFamily(f ?? ''),
                   items: const [
                     DropdownMenuItem(value: 'Amiri', child: Text('أميري', style: TextStyle(fontFamily: 'Amiri'))),
+                    DropdownMenuItem(value: 'Tajawal', child: Text('تجوّل (واضح)', style: TextStyle(fontFamily: 'Tajawal'))),
                     DropdownMenuItem(value: 'ReemKufi', child: Text('ريم كوفي', style: TextStyle(fontFamily: 'ReemKufi'))),
                     DropdownMenuItem(value: '', child: Text('خط الجهاز')),
                   ],

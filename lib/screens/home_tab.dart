@@ -216,7 +216,7 @@ class _Header extends StatelessWidget {
                   const SizedBox(width: 10),
                   Text('ابن الشابرة',
                       style: TextStyle(
-                          fontFamily: 'ReemKufi', color: ink, fontSize: 21, fontWeight: FontWeight.bold)),
+                          fontFamily: 'Tajawal', color: ink, fontSize: 21, fontWeight: FontWeight.bold)),
                   const Spacer(),
                   IconButton(
                     tooltip: 'البحث',
@@ -242,7 +242,7 @@ class _Header extends StatelessWidget {
               const SizedBox(height: 2),
               Text('قائد بن غانم الشابرة',
                   style: TextStyle(
-                      fontFamily: 'ReemKufi', color: ink, fontSize: 31, fontWeight: FontWeight.bold, height: 1.4)),
+                      fontFamily: 'Tajawal', color: ink, fontSize: 29, fontWeight: FontWeight.bold, height: 1.5)),
               const SizedBox(height: 8),
               Text('أجوبة ومقالات وكتب، مرتّبة على الأبواب، مع البحث بالموضوع.',
                   style: TextStyle(color: soft, fontSize: 15, height: 1.7)),
@@ -536,7 +536,7 @@ class _SectionTitle extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Text(text,
-              style: const TextStyle(fontFamily: 'ReemKufi', fontSize: 19, fontWeight: FontWeight.bold)),
+              style: const TextStyle(fontFamily: 'Tajawal', fontSize: 19, fontWeight: FontWeight.bold)),
           const Spacer(),
           if (action != null) TextButton(onPressed: onAction, child: Text(action!)),
         ],
