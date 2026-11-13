@@ -240,6 +240,13 @@ class MoreTab extends StatelessWidget {
             const _Group('عن التطبيق'),
             _Section(children: [
               ListTile(
+                leading: const _IconBox(Icons.new_releases_outlined),
+                title: const Text('ما الجديد'),
+                trailing: const Icon(Icons.chevron_left),
+                onTap: () => Navigator.of(context)
+                    .push(MaterialPageRoute(builder: (_) => const WhatsNewScreen())),
+              ),
+              ListTile(
                 leading: const _IconBox(Icons.privacy_tip_outlined),
                 title: const Text('سياسة الخصوصية'),
                 trailing: const Icon(Icons.chevron_left),

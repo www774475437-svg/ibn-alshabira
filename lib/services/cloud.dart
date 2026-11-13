@@ -512,6 +512,8 @@ class Cloud extends ChangeNotifier {
       final an = c['announcement'];
       announcement = an != null && an['active'] == true ? '${an['text'] ?? ''}' : '';
       askOpen = c['ask']?['open'] != false;
+      final mb = c['app']?['minBuild'];
+      minBuild = mb is int ? mb : 0;
       aboutText = '${c['about']?['text'] ?? ''}';
       pinned = ((c['pinned']?['ids'] ?? []) as List).map((e) => '$e').toList();
       final ch = c['chapters'];
@@ -533,6 +535,9 @@ class Cloud extends ChangeNotifier {
       debugPrint('config failed: $e');
     }
   }
+
+  /// Builds older than this must update (0 = no forced update).
+  int minBuild = 0;
 
   Future<String?> setConfig(String id, Map<String, dynamic> data, String logText) async {
     try {

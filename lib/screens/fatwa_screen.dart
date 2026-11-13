@@ -33,6 +33,10 @@ class _FatwaScreenState extends State<FatwaScreen> {
   double _startScale = 1.0;
   double _scale = Repository.instance.readingScale;
 
+  // Search inside the answer.
+  bool _finding = false;
+  String _find = '';
+
   Fatwa get current => _pages[_index];
 
   @override
@@ -209,8 +213,33 @@ class _FatwaScreenState extends State<FatwaScreen> {
         final later = repo.isReadLater(current.id);
         return Scaffold(
           appBar: AppBar(
-            title: Text(current.typeLabel),
+            title: _finding
+                ? TextField(
+                    autofocus: true,
+                    style: const TextStyle(color: Colors.white),
+                    cursorColor: Colors.white,
+                    decoration: InputDecoration(
+                      hintText: 'ابحث داخل الجواب',
+                      hintStyle: const TextStyle(color: Colors.white60),
+                      border: InputBorder.none,
+                      suffixText: _find.trim().length < 2
+                          ? null
+                          : '${countMatches('${current.title}\n${current.question}\n${current.answer}', _find)} موضع',
+                      suffixStyle: const TextStyle(color: Colors.white70, fontSize: 13),
+                    ),
+                    onChanged: (v) => setState(() => _find = v),
+                  )
+                : Text(current.typeLabel),
             actions: [
+              IconButton(
+                tooltip: _finding ? 'إغلاق البحث' : 'بحث داخل الجواب',
+                icon: Icon(_finding ? Icons.close : Icons.manage_search),
+                onPressed: () => setState(() {
+                  _finding = !_finding;
+                  _find = '';
+                }),
+              ),
+              if (!_finding)
               ListenableBuilder(
                 listenable: Cloud.instance,
                 builder: (context, _) => Cloud.instance.isAdmin
@@ -246,6 +275,7 @@ class _FatwaScreenState extends State<FatwaScreen> {
                       )
                     : const SizedBox.shrink(),
               ),
+              if (!_finding)
               IconButton(
                 tooltip: later ? 'إزالة من «اقرأ لاحقاً»' : 'اقرأ لاحقاً',
                 icon: Icon(later ? Icons.watch_later : Icons.watch_later_outlined),
@@ -254,6 +284,7 @@ class _FatwaScreenState extends State<FatwaScreen> {
                   _toast(later ? 'أُزيل من «اقرأ لاحقاً»' : 'أُضيف إلى «اقرأ لاحقاً»');
                 },
               ),
+              if (!_finding)
               IconButton(
                 tooltip: fav ? 'إزالة من المحفوظات' : 'حفظ',
                 icon: Icon(fav ? Icons.bookmark : Icons.bookmark_border),
@@ -281,6 +312,7 @@ class _FatwaScreenState extends State<FatwaScreen> {
               itemBuilder: (context, i) => _AnswerBody(
                 fatwa: _pages[i],
                 scale: _scale,
+                find: _finding ? _find : '',
                 onCopy: _copyOptions,
                 onReport: _reportError,
               ),
@@ -381,10 +413,15 @@ class _PagerBar extends StatelessWidget {
 class _AnswerBody extends StatelessWidget {
   final Fatwa fatwa;
   final double scale;
+  final String find;
   final VoidCallback onCopy;
   final VoidCallback onReport;
   const _AnswerBody(
-      {required this.fatwa, required this.scale, required this.onCopy, required this.onReport});
+      {required this.fatwa,
+      required this.scale,
+      this.find = '',
+      required this.onCopy,
+      required this.onReport});
 
   @override
   Widget build(BuildContext context) {
@@ -399,10 +436,10 @@ class _AnswerBody extends StatelessWidget {
             style: TextStyle(fontSize: 22 * scale, fontWeight: FontWeight.bold, height: 1.5)),
         const SizedBox(height: 16),
         if (fatwa.question.isNotEmpty) ...[
-          _Block(label: 'السؤال', text: fatwa.question, highlight: true, scale: scale),
+          _Block(label: 'السؤال', text: fatwa.question, highlight: true, scale: scale, find: find),
           const SizedBox(height: 14),
         ],
-        _Block(label: fatwa.question.isNotEmpty ? 'الجواب' : null, text: fatwa.answer, scale: scale),
+        _Block(label: fatwa.question.isNotEmpty ? 'الجواب' : null, text: fatwa.answer, scale: scale, find: find),
         const Padding(
           padding: EdgeInsets.only(top: 6),
           child: Text('قرّب إصبعيك أو باعدهما لتكبير الخط · واسحب يميناً أو يساراً للجواب التالي',
@@ -527,6 +564,44 @@ class _CloudPanelState extends State<_CloudPanel> {
     if (list.contains(widget.fatwa.id)) return;
     await prefs.setStringList('votedAnswers', [...list, widget.fatwa.id]);
     await Cloud.instance.vote(widget.fatwa.id, yes);
+    if (!yes && mounted) _askWhy();
+  }
+
+  /// «لم يفدني»: ask why, so the staff know what to improve.
+  void _askWhy() {
+    showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Text('ما الذي نقص في الجواب؟ (اختياري)',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            ),
+            for (final r in const [
+              'الجواب غير واضح',
+              'الجواب مختصر وأحتاج تفصيلاً',
+              'ليس هذا ما أبحث عنه',
+              'فيه خطأ في الكتابة',
+            ])
+              ListTile(
+                leading: const Icon(Icons.chevron_left),
+                title: Text(r),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Cloud.instance.report(widget.fatwa, 'لم يفدني: $r');
+                  ScaffoldMessenger.of(context)
+                      .showSnackBar(const SnackBar(content: Text('شكراً، وصلت ملاحظتك')));
+                },
+              ),
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('تخطٍّ')),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -588,7 +663,53 @@ String stripTashkeel(String s) =>
     s.replaceAll(RegExp(r'[ؐ-ًؚ-ٰٟۖ-ۭـ]'), '');
 
 /// Quran verses ﴿…﴾ in green with the Amiri font, hadith «…» in gold.
-List<TextSpan> highlightSpans(String text, TextStyle base) {
+List<TextSpan> highlightSpans(String text, TextStyle base, [String find = '']) {
+  final plain = _styledSpans(text);
+  final re = findPattern(find);
+  if (re == null) return plain;
+  // Mark the searched word inside every span.
+  final out = <TextSpan>[];
+  for (final s in plain) {
+    final t = s.text ?? '';
+    var last = 0;
+    for (final m in re.allMatches(t)) {
+      if (m.end == m.start) continue;
+      if (m.start > last) out.add(TextSpan(text: t.substring(last, m.start), style: s.style));
+      out.add(TextSpan(
+        text: t.substring(m.start, m.end),
+        style: (s.style ?? const TextStyle())
+            .copyWith(backgroundColor: const Color(0xFFFFE082), color: Colors.black),
+      ));
+      last = m.end;
+    }
+    if (last < t.length) out.add(TextSpan(text: t.substring(last), style: s.style));
+  }
+  return out;
+}
+
+/// A pattern that finds [query] ignoring tashkeel and hamza forms.
+RegExp? findPattern(String query) {
+  final q = stripTashkeel(query.trim());
+  if (q.length < 2) return null;
+  const marks = '[\\u064B-\\u065F\\u0670\\u0640]*';
+  final parts = <String>[];
+  for (final ch in q.split('')) {
+    if ('اأإآ'.contains(ch)) {
+      parts.add('[اأإآ]');
+    } else if ('ةه'.contains(ch)) {
+      parts.add('[ةه]');
+    } else if ('ىي'.contains(ch)) {
+      parts.add('[ىي]');
+    } else {
+      parts.add(RegExp.escape(ch));
+    }
+  }
+  return RegExp(parts.join(marks));
+}
+
+int countMatches(String text, String query) => findPattern(query)?.allMatches(text).length ?? 0;
+
+List<TextSpan> _styledSpans(String text) {
   final spans = <TextSpan>[];
   final re = RegExp(r'﴿[^﴾]*﴾|«[^»]*»');
   var last = 0;
@@ -613,7 +734,8 @@ class _Block extends StatelessWidget {
   final String text;
   final bool highlight;
   final double scale;
-  const _Block({this.label, required this.text, this.highlight = false, this.scale = 1.0});
+  final String find;
+  const _Block({this.label, required this.text, this.highlight = false, this.scale = 1.0, this.find = ''});
 
   @override
   Widget build(BuildContext context) {
@@ -634,7 +756,7 @@ class _Block extends StatelessWidget {
             Text(label!, style: TextStyle(color: scheme.primary, fontWeight: FontWeight.bold)),
             const SizedBox(height: 6),
           ],
-          SelectableText.rich(TextSpan(style: base, children: highlightSpans(text, base))),
+          SelectableText.rich(TextSpan(style: base, children: highlightSpans(text, base, find))),
         ],
       ),
     );

@@ -15,6 +15,7 @@ class ChapterScreen extends StatefulWidget {
 class _ChapterScreenState extends State<ChapterScreen> {
   String _filter = 'all'; // all | fatwa | article | letter
   String _sort = 'new'; // new | old | alpha
+  bool _unreadOnly = false;
 
   @override
   Widget build(BuildContext context) {
@@ -40,7 +41,10 @@ class _ChapterScreenState extends State<ChapterScreen> {
         listenable: repo,
         builder: (context, _) {
           final all = repo.byChapter(widget.chapter.id);
+          final read = repo.everRead;
+          final readCount = all.where((f) => read.contains(f.id)).length;
           var items = _filter == 'all' ? all : all.where((f) => f.type == _filter).toList();
+          if (_unreadOnly) items = items.where((f) => !read.contains(f.id)).toList();
           if (_sort == 'new') {
             items = items.reversed.toList();
           } else if (_sort == 'alpha') {
@@ -48,6 +52,35 @@ class _ChapterScreenState extends State<ChapterScreen> {
           }
           return Column(
             children: [
+              if (all.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('قرأت $readCount من ${all.length}',
+                                style: const TextStyle(fontSize: 13, color: Colors.grey)),
+                            const SizedBox(height: 5),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(6),
+                              child: LinearProgressIndicator(
+                                  value: readCount / all.length, minHeight: 7),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      FilterChip(
+                        label: const Text('ما لم أقرأه'),
+                        selected: _unreadOnly,
+                        onSelected: (v) => setState(() => _unreadOnly = v),
+                      ),
+                    ],
+                  ),
+                ),
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.all(10),
@@ -72,9 +105,11 @@ class _ChapterScreenState extends State<ChapterScreen> {
               ),
               Expanded(
                 child: items.isEmpty
-                    ? const EmptyState(
-                        icon: Icons.hourglass_empty,
-                        text: 'لا توجد مواد في هذا الباب بعد،\nوستُضاف قريباً بإذن الله.')
+                    ? EmptyState(
+                        icon: _unreadOnly && all.isNotEmpty ? Icons.task_alt : Icons.hourglass_empty,
+                        text: _unreadOnly && all.isNotEmpty
+                            ? 'قرأت كل ما في هذا الباب، بارك الله فيك.'
+                            : 'لا توجد مواد في هذا الباب بعد،\nوستُضاف قريباً بإذن الله.')
                     : ListView.builder(
                         itemCount: items.length,
                         itemBuilder: (context, i) => FatwaTile(fatwa: items[i], showChapter: false),

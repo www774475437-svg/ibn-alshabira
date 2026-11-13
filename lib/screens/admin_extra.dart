@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import '../config.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
 import '../services/cloud.dart';
@@ -379,6 +380,41 @@ class _AnnouncementTabState extends State<AnnouncementTab> {
             _save('');
           },
         ),
+        if (Cloud.instance.isDeveloper) ...[
+          const Divider(height: 36),
+          const Text('التحديث الإجباري (للمطوّر)',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          const SizedBox(height: 6),
+          Text(
+              Cloud.instance.minBuild > 0
+                  ? 'مفعّل: كل نسخة أقدم من البناء رقم ${Cloud.instance.minBuild} يُطلب من صاحبها التحديث.'
+                  : 'غير مفعّل: كل النسخ القديمة تعمل.',
+              style: const TextStyle(height: 1.7)),
+          const SizedBox(height: 8),
+          if (AppConfig.buildNumber > 0)
+            FilledButton.tonalIcon(
+              icon: const Icon(Icons.system_update),
+              label: Text('ألزِم الجميع بهذه النسخة (${AppConfig.version}) أو أحدث'),
+              onPressed: () async {
+                final err = await Cloud.instance.setConfig(
+                    'app', {'minBuild': AppConfig.buildNumber}, 'تفعيل التحديث الإجباري');
+                if (!context.mounted) return;
+                _toast(context, err ?? 'فُعّل التحديث الإجباري ✅');
+                setState(() {});
+              },
+            ),
+          if (Cloud.instance.minBuild > 0)
+            TextButton(
+              onPressed: () async {
+                final err = await Cloud.instance
+                    .setConfig('app', {'minBuild': 0}, 'إلغاء التحديث الإجباري');
+                if (!context.mounted) return;
+                _toast(context, err ?? 'أُلغي التحديث الإجباري');
+                setState(() {});
+              },
+              child: const Text('إلغاء التحديث الإجباري'),
+            ),
+        ],
       ],
     );
   }
