@@ -1,9 +1,12 @@
 {
   "sheikh": [
-    {"platform": "telegram", "name": "قناة تليجرام", "url": ""},
-    {"platform": "youtube",  "name": "يوتيوب",       "url": ""},
-    {"platform": "facebook", "name": "فيسبوك",       "url": ""},
-    {"platform": "x",        "name": "إكس (تويتر)",  "url": ""}
+    {"platform": "telegram", "name": "القناة الرئيسية على تليجرام", "url": "https://t.me/qaidghsh"},
+    {"platform": "whatsapp", "name": "القناة الرسمية على واتساب", "url": "https://whatsapp.com/channel/0029VaDAXVD2f3EKso79GI0n"},
+    {"platform": "youtube",  "name": "القناة الرسمية على يوتيوب", "url": "https://youtube.com/@qaidghsh"},
+    {"platform": "telegram", "name": "قناة دعوية بالإنجليزية (Q.G.S)", "url": "https://t.me/QaidEnCh"},
+    {"platform": "audio",    "name": "قناة الصوتيات والمرئيات", "url": "https://t.me/QaidSandVe"},
+    {"platform": "group",    "name": "مجتمع مجالس الصالحين الأول (واتساب)", "url": "https://chat.whatsapp.com/ElQxvBr9mnE1sVj7bdjQ0l"},
+    {"platform": "group",    "name": "مجموعة مجالس العلم (واتساب)", "url": "https://chat.whatsapp.com/CGt8qL2dDkW1BetDngIy7i"}
   ],
   "developer": {
     "name": "أبو عبد الرحمن أحمد الأثري",
