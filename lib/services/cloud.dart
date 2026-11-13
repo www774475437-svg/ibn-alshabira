@@ -43,6 +43,8 @@ class Cloud extends ChangeNotifier {
         notifyListeners();
       });
       await loadRemoteAnswers();
+      loadAnnouncement();
+      loadSeries();
     } catch (e) {
       debugPrint('Cloud init failed: $e');
       ready = false;
@@ -235,6 +237,7 @@ class Cloud extends ChangeNotifier {
     if (!ready) return;
     try {
       final answers = await _db.collection('answers').get();
+      remoteIds = {for (final d in answers.docs) d.id};
       final edits = await _db.collection('titleEdits').get();
       Repository.instance.applyRemote(
         [for (final d in answers.docs) Fatwa.fromJson({...d.data(), 'id': d.id})],
@@ -306,4 +309,237 @@ class Cloud extends ChangeNotifier {
       return {};
     }
   }
+
+  // ------------------------------------------- Answers published in-app
+  Set<String> remoteIds = {};
+
+  bool isRemote(String id) => remoteIds.contains(id);
+
+  Future<String?> updateAnswer(String id,
+      {required String chapter, required String title, required String question, required String answer}) async {
+    try {
+      await _db.doc('answers/$id').update({
+        'chapter': chapter,
+        'title': title.trim(),
+        'question': question.trim(),
+        'answer': answer.trim(),
+      });
+      await loadRemoteAnswers();
+      return null;
+    } catch (_) {
+      return 'تعذّر الحفظ';
+    }
+  }
+
+  Future<String?> deleteAnswer(String id) async {
+    try {
+      await _db.doc('answers/$id').delete();
+      await loadRemoteAnswers();
+      return null;
+    } catch (_) {
+      return 'تعذّر الحذف';
+    }
+  }
+
+  // --------------------------------------------------------- Announcement
+  String announcement = '';
+
+  Future<void> loadAnnouncement() async {
+    if (!ready) return;
+    try {
+      final d = (await _db.doc('config/announcement').get()).data();
+      announcement = d != null && d['active'] == true ? '${d['text'] ?? ''}' : '';
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  Future<String?> setAnnouncement(String text) async {
+    try {
+      final t = text.trim();
+      await _db.doc('config/announcement').set({'text': t, 'active': t.isNotEmpty, 'by': email});
+      announcement = t;
+      notifyListeners();
+      return null;
+    } catch (_) {
+      return 'تعذّر الحفظ';
+    }
+  }
+
+  // --------------------------------------------------------------- Series
+  List<Series> series = [];
+
+  Future<void> loadSeries() async {
+    if (!ready) return;
+    try {
+      final q = await _db.collection('series').get();
+      series = [
+        for (final d in q.docs)
+          Series(d.id, '${d.data()['title'] ?? ''}',
+              ((d.data()['ids'] ?? []) as List).map((e) => '$e').toList()),
+      ];
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  Future<String?> createSeries(String title, String answerId) async {
+    if (title.trim().isEmpty) return 'اكتب عنوان السلسلة';
+    try {
+      await _db.collection('series').add({'title': title.trim(), 'ids': [answerId]});
+      await loadSeries();
+      return null;
+    } catch (_) {
+      return 'تعذّر الحفظ';
+    }
+  }
+
+  Future<String?> addToSeries(String seriesId, String answerId) async {
+    try {
+      await _db.doc('series/$seriesId').update({'ids': FieldValue.arrayUnion([answerId])});
+      await loadSeries();
+      return null;
+    } catch (_) {
+      return 'تعذّر الحفظ';
+    }
+  }
+
+  Future<void> removeFromSeries(String seriesId, String answerId) async {
+    try {
+      await _db.doc('series/$seriesId').update({'ids': FieldValue.arrayRemove([answerId])});
+      await loadSeries();
+    } catch (_) {}
+  }
+
+  Future<void> deleteSeries(String seriesId) async {
+    try {
+      await _db.doc('series/$seriesId').delete();
+      await loadSeries();
+    } catch (_) {}
+  }
+
+  // ------------------------------------------------------ Ask the sheikh
+  Future<String?> ask(String text) async {
+    final u = user;
+    if (!ready || u == null) return 'سجّل الدخول أولاً';
+    final t = text.trim();
+    if (t.length < 5) return 'اكتب سؤالك';
+    try {
+      await _db.collection('questions').add({
+        'uid': u.uid,
+        'text': t,
+        'at': FieldValue.serverTimestamp(),
+        'status': 'new',
+        'reply': '',
+        'published': false,
+      });
+      return null;
+    } catch (_) {
+      return 'تعذّر إرسال السؤال';
+    }
+  }
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> myQuestions() =>
+      _db.collection('questions').where('uid', isEqualTo: user?.uid ?? '-').snapshots();
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> allQuestions() =>
+      _db.collection('questions').orderBy('at', descending: true).limit(200).snapshots();
+
+  /// Reply privately, or reply and publish (without the asker's name).
+  Future<String?> replyQuestion(String id,
+      {required String questionText,
+      required String reply,
+      required bool publish,
+      String chapter = 'mutafarriq',
+      String title = ''}) async {
+    if (reply.trim().isEmpty) return 'اكتب الجواب';
+    try {
+      if (publish) {
+        final err = await publishAnswer(
+          chapter: chapter,
+          title: title.trim().isEmpty ? questionText.split('\n').first : title,
+          question: questionText,
+          answer: reply,
+        );
+        if (err != null) return err;
+      }
+      await _db.doc('questions/$id').update({
+        'reply': reply.trim(),
+        'status': 'answered',
+        'published': publish,
+        'replyAt': FieldValue.serverTimestamp(),
+      });
+      return null;
+    } catch (_) {
+      return 'تعذّر الحفظ';
+    }
+  }
+
+  Future<void> setQuestionStatus(String id, String status) async {
+    try {
+      await _db.doc('questions/$id').update({'status': status});
+    } catch (_) {}
+  }
+
+  Future<void> deleteQuestion(String id) async {
+    try {
+      await _db.doc('questions/$id').delete();
+    } catch (_) {}
+  }
+
+  // -------------------------------------------- Searches with no results
+  Future<void> logMiss(String term) async {
+    if (!ready) return;
+    final id = normalizeArabic(term).replaceAll('/', ' ').trim();
+    if (id.length < 2 || id.length > 40) return;
+    try {
+      await _db.doc('searchMisses/$id').set({'count': FieldValue.increment(1)}, SetOptions(merge: true));
+    } catch (_) {}
+  }
+
+  Future<List<(String, int)>> topMisses() async {
+    if (!ready) return [];
+    try {
+      final q = await _db.collection('searchMisses').orderBy('count', descending: true).limit(60).get();
+      return [for (final d in q.docs) (d.id, (d.data()['count'] ?? 0) as int)];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> clearMiss(String id) async {
+    try {
+      await _db.doc('searchMisses/$id').delete();
+    } catch (_) {}
+  }
+
+  // ------------------------------------ «المشايخ الثقات المعتمدون»
+  Stream<QuerySnapshot<Map<String, dynamic>>> scholarsStream() =>
+      _db.collection('scholars').orderBy('at').snapshots();
+
+  Future<String?> addScholar(String name, String note, String url) async {
+    if (name.trim().isEmpty) return 'اكتب اسم الشيخ';
+    try {
+      await _db.collection('scholars').add({
+        'name': name.trim(),
+        'note': note.trim(),
+        'url': url.trim(),
+        'at': FieldValue.serverTimestamp(),
+      });
+      return null;
+    } catch (_) {
+      return 'تعذّرت الإضافة';
+    }
+  }
+
+  Future<void> deleteScholar(String id) async {
+    try {
+      await _db.doc('scholars/$id').delete();
+    } catch (_) {}
+  }
+}
+
+class Series {
+  final String id;
+  final String title;
+  final List<String> ids;
+  Series(this.id, this.title, this.ids);
 }

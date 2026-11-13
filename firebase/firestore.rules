@@ -1,44 +1,46 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
     function signedIn() { return request.auth != null; }
-
     function isAdmin() {
       return signedIn() && (
         request.auth.token.email == 'www774475437@gmail.com' ||
-        exists(/databases/$(database)/documents/admins/$(request.auth.token.email))
-      );
+        exists(/databases/$(database)/documents/admins/$(request.auth.token.email)));
     }
-
     function stepOk(field) {
       return request.resource.data.get(field, 0) is int &&
         request.resource.data.get(field, 0) - (resource == null ? 0 : resource.data.get(field, 0)) in [0, 1];
     }
-
-    // Answers published from inside the app, and edited titles
     match /answers/{id}    { allow read: if true; allow write: if isAdmin(); }
     match /titleEdits/{id} { allow read: if true; allow write: if isAdmin(); }
-
-    // Admin list (managed by admins)
+    match /series/{id}     { allow read: if true; allow write: if isAdmin(); }
+    match /scholars/{id}   { allow read: if true; allow write: if isAdmin(); }
+    match /config/{id}     { allow read: if true; allow write: if isAdmin(); }
     match /admins/{email}  { allow read: if signedIn(); allow write: if isAdmin(); }
-
-    // View counts and «هل أفادك الجواب؟» — anyone may add 1
     match /views/{id} {
       allow read: if true;
       allow create, update: if request.resource.data.keys().hasOnly(['count', 'helpful', 'notHelpful'])
         && stepOk('count') && stepOk('helpful') && stepOk('notHelpful');
       allow delete: if isAdmin();
     }
-
-    // Error reports — anyone may send, only admins read
+    match /searchMisses/{id} {
+      allow create, update: if request.resource.data.keys().hasOnly(['count']) && stepOk('count');
+      allow read, delete: if isAdmin();
+    }
     match /reports/{id} {
       allow create: if request.resource.data.keys().hasOnly(['answerId', 'title', 'note', 'by', 'at'])
         && request.resource.data.note is string && request.resource.data.note.size() < 2000;
       allow read, delete: if isAdmin();
     }
-
-    // Each user's own saved lists
+    match /questions/{id} {
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['uid', 'text', 'at', 'status', 'reply', 'published'])
+        && request.resource.data.text is string && request.resource.data.text.size() < 3000
+        && request.resource.data.status == 'new' && request.resource.data.reply == ''
+        && request.resource.data.published == false;
+      allow read: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
+      allow update, delete: if isAdmin();
+    }
     match /users/{uid} {
       allow read, write: if signedIn() && request.auth.uid == uid;
     }

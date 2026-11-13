@@ -14,17 +14,38 @@ class ChapterScreen extends StatefulWidget {
 
 class _ChapterScreenState extends State<ChapterScreen> {
   String _filter = 'all'; // all | fatwa | article | letter
+  String _sort = 'new'; // new | old | alpha
 
   @override
   Widget build(BuildContext context) {
     final repo = Repository.instance;
     return Scaffold(
-      appBar: AppBar(title: Text('باب ${widget.chapter.name}')),
+      appBar: AppBar(
+        title: Text('باب ${widget.chapter.name}'),
+        actions: [
+          PopupMenuButton<String>(
+            tooltip: 'الترتيب',
+            icon: const Icon(Icons.sort),
+            initialValue: _sort,
+            onSelected: (v) => setState(() => _sort = v),
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'new', child: Text('الأحدث أولاً')),
+              PopupMenuItem(value: 'old', child: Text('الأقدم أولاً')),
+              PopupMenuItem(value: 'alpha', child: Text('ترتيب أبجدي')),
+            ],
+          ),
+        ],
+      ),
       body: ListenableBuilder(
         listenable: repo,
         builder: (context, _) {
           final all = repo.byChapter(widget.chapter.id);
-          final items = _filter == 'all' ? all : all.where((f) => f.type == _filter).toList();
+          var items = _filter == 'all' ? all : all.where((f) => f.type == _filter).toList();
+          if (_sort == 'new') {
+            items = items.reversed.toList();
+          } else if (_sort == 'alpha') {
+            items = [...items]..sort((a, b) => normalizeArabic(a.title).compareTo(normalizeArabic(b.title)));
+          }
           return Column(
             children: [
               SingleChildScrollView(

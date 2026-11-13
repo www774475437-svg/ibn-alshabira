@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/models.dart';
+import '../data/repository.dart';
 import '../services/books_store.dart';
 import '../theme.dart';
 
@@ -32,6 +33,8 @@ class _BookReaderScreenState extends State<BookReaderScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => Repository.instance.setLastBook(widget.book.id));
     _load();
   }
 

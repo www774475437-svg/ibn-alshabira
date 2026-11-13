@@ -9,6 +9,7 @@ import '../data/repository.dart';
 import '../services/cloud.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import 'admin_extra.dart';
 
 /// Shows one answer; swipe (or use the arrows) to move through the other
 /// answers of the same chapter, like turning the pages of a book.
@@ -213,10 +214,23 @@ class _FatwaScreenState extends State<FatwaScreen> {
               ListenableBuilder(
                 listenable: Cloud.instance,
                 builder: (context, _) => Cloud.instance.isAdmin
-                    ? IconButton(
-                        tooltip: 'تعديل العنوان',
-                        icon: const Icon(Icons.edit),
-                        onPressed: _editTitle,
+                    ? Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            tooltip: 'إضافة إلى سلسلة',
+                            icon: const Icon(Icons.playlist_add),
+                            onPressed: () => showSeriesSheet(context, current),
+                          ),
+                          IconButton(
+                            tooltip: 'تعديل',
+                            icon: const Icon(Icons.edit),
+                            onPressed: () => Cloud.instance.isRemote(current.id)
+                                ? Navigator.of(context).push(MaterialPageRoute(
+                                    builder: (_) => EditAnswerScreen(fatwa: current)))
+                                : _editTitle(),
+                          ),
+                        ],
                       )
                     : const SizedBox.shrink(),
               ),

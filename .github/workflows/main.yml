@@ -45,6 +45,9 @@ jobs:
       - name: Books list from the sheikh's Google Drive
         run: python3 tool/fetch_drive_books.py
 
+      - name: Latest videos from the sheikh's YouTube channel
+        run: python3 tool/fetch_youtube.py
+
       - run: flutter pub get
 
       - name: App icon (logo)
@@ -84,6 +87,9 @@ jobs:
 
       - name: Books list from the sheikh's Google Drive
         run: python3 tool/fetch_drive_books.py
+
+      - name: Latest videos from the sheikh's YouTube channel
+        run: python3 tool/fetch_youtube.py
 
       - name: Build website
         run: flutter build web --release --base-href /ibn-alshabira/ --dart-define=BUILD_NUMBER=0

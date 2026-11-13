@@ -9,6 +9,7 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import 'ask_screen.dart';
 import 'account_screens.dart';
+import 'content_screens.dart';
 import 'extra_screens.dart';
 import '../services/cloud.dart';
 
@@ -58,6 +59,20 @@ class MoreTab extends StatelessWidget {
                 trailing: const Icon(Icons.chevron_left),
                 onTap: () => Navigator.of(context)
                     .push(MaterialPageRoute(builder: (_) => const AboutSheikhScreen())),
+              ),
+              ListTile(
+                leading: const _IconBox(Icons.play_circle_outline),
+                title: const Text('المرئيات'),
+                trailing: const Icon(Icons.chevron_left),
+                onTap: () => Navigator.of(context)
+                    .push(MaterialPageRoute(builder: (_) => const VideosScreen())),
+              ),
+              ListTile(
+                leading: const _IconBox(Icons.groups_outlined),
+                title: const Text('المشايخ الثقات المعتمدون'),
+                trailing: const Icon(Icons.chevron_left),
+                onTap: () => Navigator.of(context)
+                    .push(MaterialPageRoute(builder: (_) => const ScholarsScreen())),
               ),
             ]),
             const _Group('حسابات الشيخ'),
@@ -127,8 +142,9 @@ class MoreTab extends StatelessWidget {
                 trailing: DropdownButton<String>(
                   value: repo.palette,
                   underline: const SizedBox(),
-                  onChanged: (p) => repo.setPalette(p ?? 'green'),
+                  onChanged: (p) => repo.setPalette(p ?? 'teal'),
                   items: const [
+                    DropdownMenuItem(value: 'teal', child: Text('فيروزي وذهبي')),
                     DropdownMenuItem(value: 'green', child: Text('أخضر وذهبي')),
                     DropdownMenuItem(value: 'black', child: Text('أسود وذهبي')),
                     DropdownMenuItem(value: 'paper', child: Text('ورقي هادئ')),
@@ -260,7 +276,7 @@ class _ReaderStats extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
         child: Card(
-          color: kGreen,
+          color: brandColor(context),
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Row(
@@ -313,7 +329,7 @@ class _IconBox extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.all(6),
         decoration: BoxDecoration(
-          color: kGreen,
+          color: brandColor(context),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Icon(icon, color: kGold, size: 20),

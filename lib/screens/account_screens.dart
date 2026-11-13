@@ -5,6 +5,7 @@ import '../data/repository.dart';
 import '../services/cloud.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import 'admin_extra.dart';
 
 void _toast(BuildContext context, String t) =>
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t)));
@@ -142,7 +143,7 @@ class AdminScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 4,
+      length: 7,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('لوحة الإدارة'),
@@ -153,14 +154,25 @@ class AdminScreen extends StatelessWidget {
             indicatorColor: kGold,
             tabs: [
               Tab(icon: Icon(Icons.bar_chart), text: 'الإحصائيات'),
+              Tab(icon: Icon(Icons.forum), text: 'الأسئلة'),
               Tab(icon: Icon(Icons.edit_note), text: 'نشر جواب'),
+              Tab(icon: Icon(Icons.campaign), text: 'الإعلان'),
               Tab(icon: Icon(Icons.flag), text: 'البلاغات'),
+              Tab(icon: Icon(Icons.search_off), text: 'بحث بلا نتيجة'),
               Tab(icon: Icon(Icons.group), text: 'المشرفون'),
             ],
           ),
         ),
         body: const TabBarView(
-          children: [_StatsTab(), _PublishTab(), _ReportsTab(), _AdminsTab()],
+          children: [
+            _StatsTab(),
+            QuestionsTab(),
+            _PublishTab(),
+            AnnouncementTab(),
+            _ReportsTab(),
+            MissesTab(),
+            _AdminsTab(),
+          ],
         ),
       ),
     );

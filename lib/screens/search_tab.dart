@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/repository.dart';
+import '../services/cloud.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'chapter_screen.dart';
@@ -116,7 +117,10 @@ class _SearchTabState extends State<SearchTab> {
               controller: _controller,
               textInputAction: TextInputAction.search,
               onChanged: (v) => setState(() => _query = v),
-              onSubmitted: repo.addRecentSearch,
+              onSubmitted: (v) {
+                repo.addRecentSearch(v);
+                if (v.trim().length > 1 && repo.search(v).isEmpty) Cloud.instance.logMiss(v);
+              },
               decoration: InputDecoration(
                 hintText: 'اكتب المسألة… مثل: النمص، الوضوء، الربا',
                 prefixIcon: const Icon(Icons.search),
