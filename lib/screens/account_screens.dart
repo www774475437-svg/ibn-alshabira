@@ -64,6 +64,43 @@ class AccountScreen extends StatelessWidget {
                         .push(MaterialPageRoute(builder: (_) => const AdminScreen())),
                   ),
                 ],
+                if (cloud.pendingDeleteAt != null) ...[
+                  const SizedBox(height: 16),
+                  Card(
+                    color: Colors.red.withValues(alpha: 0.10),
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            'طلبت حذف حسابك. سيُحذف نهائياً بعد '
+                            '${cloud.pendingDeleteAt!.difference(DateTime.now()).inDays + 1} يوماً، '
+                            'ويمكنك استعادته قبل ذلك.',
+                            style: const TextStyle(height: 1.8),
+                          ),
+                          const SizedBox(height: 8),
+                          FilledButton.icon(
+                            style: FilledButton.styleFrom(backgroundColor: Colors.green),
+                            icon: const Icon(Icons.restore),
+                            label: const Text('استعادة حسابي'),
+                            onPressed: () async {
+                              final err = await cloud.cancelDeletion();
+                              if (context.mounted) _toast(context, err ?? 'استُعيد حسابك ✅');
+                            },
+                          ),
+                          TextButton(
+                            onPressed: () async {
+                              final err = await cloud.deleteNow();
+                              if (context.mounted) _toast(context, err ?? 'حُذف حسابك');
+                            },
+                            child: const Text('احذفه الآن نهائياً', style: TextStyle(color: Colors.red)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 20),
                 const _AskName(),
                 const SizedBox(height: 24),
@@ -71,6 +108,12 @@ class AccountScreen extends StatelessWidget {
                   icon: const Icon(Icons.logout),
                   label: const Text('تسجيل الخروج'),
                   onPressed: cloud.signOut,
+                ),
+                const SizedBox(height: 28),
+                TextButton.icon(
+                  icon: const Icon(Icons.delete_forever_outlined, color: Colors.red),
+                  label: const Text('حذف الحساب', style: TextStyle(color: Colors.red)),
+                  onPressed: () => _askDelete(context),
                 ),
               ],
             ],
@@ -943,4 +986,30 @@ class AppOnlyScreen extends StatelessWidget {
           ],
         ),
       );
+}
+
+
+/// «حذف الحساب»: the owner deletes his own account; 30 days to take it back.
+Future<void> _askDelete(BuildContext context) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('حذف الحساب'),
+      content: const Text(
+        'سيُحذف حسابك وأسئلتك ومحفوظاتك بعد 30 يوماً.\n'
+        'إن غيّرت رأيك قبلها فسجّل الدخول واضغط «استعادة حسابي».',
+        style: TextStyle(height: 1.8),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('احذف حسابي', style: TextStyle(color: Colors.red)),
+        ),
+      ],
+    ),
+  );
+  if (ok != true) return;
+  final err = await Cloud.instance.requestDeletion();
+  if (context.mounted) _toast(context, err ?? 'سُجّل طلب الحذف، وخرجت من حسابك');
 }

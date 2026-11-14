@@ -88,3 +88,37 @@ class DailyNotifications {
     }
   }
 }
+
+/// Morning and evening adhkar reminders, each switched on by the user himself.
+class AdhkarNotifications {
+  static Future<void> set(int id, bool enabled, int hour, int minute, String title) async {
+    if (!DailyNotifications._ready) return;
+    try {
+      await DailyNotifications._plugin.cancel(id);
+      if (!enabled) return;
+      await DailyNotifications._plugin
+          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+          ?.requestNotificationsPermission();
+      final now = DateTime.now();
+      var next = DateTime(now.year, now.month, now.day, hour, minute);
+      if (!next.isAfter(now)) next = next.add(const Duration(days: 1));
+      await DailyNotifications._plugin.zonedSchedule(
+        id,
+        title,
+        'افتح الأذكار في تطبيق «ابن الشابرة»',
+        tz.TZDateTime.from(next, tz.UTC),
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'adhkar',
+            'تذكير الأذكار',
+            channelDescription: 'تذكير بأذكار الصباح والمساء في الوقت الذي تختاره',
+            importance: Importance.defaultImportance,
+            priority: Priority.defaultPriority,
+          ),
+        ),
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        matchDateTimeComponents: DateTimeComponents.time,
+      );
+    } catch (_) {}
+  }
+}

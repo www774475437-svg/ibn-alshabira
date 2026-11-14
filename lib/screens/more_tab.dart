@@ -5,6 +5,8 @@ import '../config.dart';
 import '../services/notifications.dart';
 
 import '../data/repository.dart';
+import '../services/books_store.dart';
+import '../data/models.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'ask_screen.dart';
@@ -187,7 +189,8 @@ class MoreTab extends StatelessWidget {
               ),
               ListTile(
                 leading: const _IconBox(Icons.headphones),
-                title: const Text('المكتبة الصوتية'),
+                title: const Text('الدروس والتسجيلات الصوتية'),
+                subtitle: const Text('سلاسل الدروس وتسجيلات الشيخ'),
                 trailing: const Icon(Icons.chevron_left),
                 onTap: () => Navigator.of(context)
                     .push(MaterialPageRoute(builder: (_) => const AudioLibraryScreen())),
@@ -381,6 +384,14 @@ class MoreTab extends StatelessWidget {
             ]),
             const _Group('التطبيق والموقع'),
             _Section(children: [
+              if (!kIsWeb)
+                ListTile(
+                  leading: const _IconBox(Icons.download_for_offline_outlined),
+                  title: const Text('حمّل كل الكتب للقراءة بلا إنترنت'),
+                  subtitle: const Text('الأجوبة محفوظة في التطبيق أصلاً'),
+                  trailing: const Icon(Icons.chevron_left),
+                  onTap: () => showDialog(context: context, barrierDismissible: false, builder: (_) => const _DownloadAll()),
+                ),
               ListTile(
                 leading: const _IconBox(Icons.qr_code_2),
                 title: const Text('رمز الموقع (QR) ونشر التطبيق'),
@@ -628,4 +639,82 @@ class _IconBox extends StatelessWidget {
         ),
         child: Icon(icon, color: kGold, size: 20),
       );
+}
+
+
+/// Downloads every book the reader does not have yet, one after another.
+class _DownloadAll extends StatefulWidget {
+  const _DownloadAll();
+
+  @override
+  State<_DownloadAll> createState() => _DownloadAllState();
+}
+
+class _DownloadAllState extends State<_DownloadAll> {
+  int _done = 0;
+  int _total = 0;
+  int _failed = 0;
+  double _part = 0;
+  bool _stop = false;
+  bool _finished = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _run();
+  }
+
+  Future<void> _run() async {
+    final books = Repository.instance.books;
+    final todo = <Book>[];
+    for (final b in books) {
+      if (await BooksStore.cachedFile(b) == null) todo.add(b);
+    }
+    if (!mounted) return;
+    setState(() => _total = todo.length);
+    for (final b in todo) {
+      if (_stop || !mounted) break;
+      try {
+        await BooksStore.download(b, (p) {
+          if (mounted) setState(() => _part = p < 0 ? 0 : p);
+        });
+      } catch (_) {
+        _failed++;
+      }
+      if (mounted) setState(() => _done++);
+    }
+    if (mounted) setState(() => _finished = true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('تحميل الكتب'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_total == 0 && !_finished)
+            const Text('جارٍ التحقق…')
+          else if (_finished)
+            Text(_total == 0
+                ? 'كل الكتب محمّلة على جهازك ✅'
+                : 'انتهى التحميل: ${_done - _failed} من $_total${_failed > 0 ? '، وتعذّر $_failed' : ''}')
+          else ...[
+            Text('الكتاب ${_done + 1} من $_total'),
+            const SizedBox(height: 10),
+            LinearProgressIndicator(value: (_done + _part) / _total),
+          ],
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () {
+            _stop = true;
+            Navigator.pop(context);
+          },
+          child: Text(_finished ? 'تم' : 'إيقاف'),
+        ),
+      ],
+    );
+  }
 }

@@ -7,7 +7,7 @@ class AppConfig {
   static const siteUrl = 'https://ibnalshabira.com/';
 
   /// Always points to the newest APK.
-  static const apkUrl = 'https://github.com/$owner/$repo/releases/latest/download/ibn-alshabira.apk';
+  static const apkUrl = 'https://ibnalshabira.com/ibn-alshabira.apk';
 
   /// Store links — fill in once the app is published there.
   static const playStoreUrl = '';
@@ -18,7 +18,7 @@ class AppConfig {
   /// Set at build time: --dart-define=BUILD_NUMBER=<run number>.
   static const buildNumber = int.fromEnvironment('BUILD_NUMBER', defaultValue: 0);
 
-  static const version = '3.8.1';
+  static const version = '3.9.0';
 
   /// Short link: channel answers are «…/#/a/<number>».
   static String fatwaLink(String id) =>

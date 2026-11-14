@@ -6,7 +6,8 @@ on:
   workflow_dispatch:
   # Every day: refresh the site with the sheikh's newest channel posts.
   schedule:
-    - cron: '17 3 * * *'
+    # 02:00 UTC = 5:00 AM Yemen time
+    - cron: '0 2 * * *'
 
 permissions:
   contents: write
@@ -83,7 +84,7 @@ jobs:
         run: dart run flutter_launcher_icons
 
       - name: Build APK
-        run: flutter build apk --release --build-number=${{ github.run_number }} --dart-define=BUILD_NUMBER=${{ github.run_number }}
+        run: flutter build apk --release --target-platform android-arm,android-arm64 --build-number=${{ github.run_number }} --dart-define=BUILD_NUMBER=${{ github.run_number }}
 
       - name: Rename APK
         run: cp build/app/outputs/flutter-apk/app-release.apk ibn-alshabira.apk
@@ -97,7 +98,9 @@ jobs:
           files: ibn-alshabira.apk
 
   website:
-    needs: data
+    needs: [data, android]
+    # Runs after the APK (or without it on the daily refresh).
+    if: always() && needs.data.result == 'success' && needs.android.result != 'failure'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -132,6 +135,11 @@ jobs:
 
       - name: Build website
         run: flutter build web --release --no-web-resources-cdn --base-href / --dart-define=BUILD_NUMBER=0
+
+      - name: The APK on our own domain (ibnalshabira.com/ibn-alshabira.apk)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download --repo ${{ github.repository }} --pattern ibn-alshabira.apk --dir build/web || echo "no release yet"
 
       - name: Publish website (gh-pages branch)
         uses: peaceiris/actions-gh-pages@v4

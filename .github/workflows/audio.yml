@@ -1,0 +1,32 @@
+name: Sheikh's recordings from Telegram
+on:
+  schedule:
+    - cron: '20 */3 * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  audio:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get the media branch (create it the first time)
+        run: |
+          git clone --depth 1 --branch media "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" media \
+            || (git init -b media media && cd media && git remote add origin "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}")
+      - uses: actions/checkout@v4
+        with:
+          path: code
+          sparse-checkout: tool
+      - name: Take new recordings
+        working-directory: media
+        env:
+          # The private secret is used when it exists.
+          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN || '9080478362:AAG5t2TBfQEmopMu4ERAw1a6Qy-ahYxtmmQ' }}
+        run: python3 -I ../code/tool/fetch_audio.py
+      - name: Save
+        working-directory: media
+        run: |
+          git config user.name "recordings-bot"
+          git config user.email "recordings-bot@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet || (git commit -m "New recordings" && git push origin HEAD:media)
