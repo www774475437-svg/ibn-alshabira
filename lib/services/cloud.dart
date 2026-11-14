@@ -1159,6 +1159,13 @@ class Cloud extends ChangeNotifier {
   Stream<QuerySnapshot<Map<String, dynamic>>> myQuestions() =>
       _db.collection('questions').where('uid', isEqualTo: user?.uid ?? '-').snapshots();
 
+  /// A star or a pin on a question, for the sheikh and the staff.
+  Future<void> setQuestionFlag(String id, String field, bool value) async {
+    try {
+      await _db.doc('questions/$id').update({field: value});
+    } catch (_) {}
+  }
+
   Stream<QuerySnapshot<Map<String, dynamic>>> allQuestions() =>
       _db.collection('questions').orderBy('at', descending: true).limit(200).snapshots();
 
@@ -1274,4 +1281,14 @@ class Series {
   /// A learning track: ordered steps the reader ticks off.
   final bool track;
   Series(this.id, this.title, this.ids, {this.track = false});
+}
+
+/// A fixed four-digit number for an asker, made from his account id, so the
+/// sheikh can tell askers apart without knowing who they are.
+int askerNo(String uid) {
+  var h = 7;
+  for (final c in uid.codeUnits) {
+    h = (h * 31 + c) % 9000;
+  }
+  return 1000 + h;
 }
