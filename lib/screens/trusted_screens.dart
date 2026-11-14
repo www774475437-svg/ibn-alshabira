@@ -138,7 +138,7 @@ class TrustedScholarsScreen extends StatelessWidget {
                     leading: CircleAvatar(
                       radius: 24,
                       backgroundColor: kGold.withValues(alpha: 0.18),
-                      child: const Icon(Icons.person_outline, color: kGoldChip),
+                      child: Icon(Icons.person_outline, color: kGoldChip),
                     ),
                     title: Text(s.name,
                         style: const TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.bold, fontSize: 17)),
@@ -499,7 +499,7 @@ class _TrustedFatwaScreenState extends State<TrustedFatwaScreen> {
                         Padding(
                           padding: const EdgeInsets.only(bottom: 6),
                           child: Text(h.headings.last,
-                              style: const TextStyle(color: kGoldChip, fontWeight: FontWeight.bold)),
+                              style: TextStyle(color: kGoldChip, fontWeight: FontWeight.bold)),
                         ),
                       SelectableText.rich(
                         TextSpan(children: _spans(h.text, mark: mark)),

@@ -50,7 +50,10 @@ try:
         except Exception as e:
             print("feed", cid, "->", e)
     if "<entry>" not in feed:
-        feed = fetch(f"https://www.youtube.com/feeds/videos.xml?user={HANDLE}")
+        try:
+            feed = fetch(f"https://www.youtube.com/feeds/videos.xml?user={HANDLE}")
+        except Exception as e:
+            print("feed by name ->", e)
     videos = []
     for entry in feed.split("<entry>")[1:]:
         vid = re.search(r"<yt:videoId>([^<]+)</yt:videoId>", entry)
@@ -59,6 +62,19 @@ try:
         if vid and title:
             videos.append({"id": vid.group(1), "title": html.unescape(title.group(1)),
                            "published": (pub.group(1) if pub else "")[:10]})
+    if not videos:
+        # The feed is closed to this server: read the videos listed on the channel page itself.
+        seen = set()
+        for m in re.finditer(r'"videoRenderer":\{"videoId":"([\w-]{11})"', page):
+            vid = m.group(1)
+            if vid in seen:
+                continue
+            chunk = page[m.end():m.end() + 3000]
+            t = re.search(r'"title":\{"runs":\[\{"text":"((?:[^"\\]|\\.)*)"', chunk)
+            if t:
+                seen.add(vid)
+                videos.append({"id": vid, "title": json.loads('"' + t.group(1) + '"'), "published": ""})
+        print("from the channel page:", len(videos))
     if videos:
         OUT.write_text(json.dumps(videos, ensure_ascii=False, indent=1), encoding="utf-8")
     print(len(videos), "videos")
