@@ -83,6 +83,45 @@ $question''');
     return out.isEmpty ? null : out.take(4).toList();
   }
 
+  /// Given texts of several scholars, picks the ONE scholar whose words are
+  /// closest to the question and writes the short ruling from his texts alone.
+  /// [groups] holds (scholar name, his texts). Returns the index of the group
+  /// and, in [AiSummary.used], which of that scholar's texts were relied on.
+  static Future<(int, AiSummary)?> choose(String issue, List<(String, List<String>)> groups) async {
+    final body = StringBuffer();
+    final where = <(int, int)>[]; // text number -> (group, index inside it)
+    for (var g = 0; g < groups.length; g++) {
+      for (var i = 0; i < groups[g].$2.length; i++) {
+        final t = groups[g].$2[i];
+        where.add((g, i));
+        body.writeln('[${where.length}] (الشيخ ${groups[g].$1}) ${t.length > 1300 ? t.substring(0, 1300) : t}');
+      }
+    }
+    final names = [for (var g = 0; g < groups.length; g++) '${g + 1}: ${groups[g].$1}'].join('، ');
+    final j = await _json('''
+بين يديك نصوص منقولة حرفياً من كتب عدد من المشايخ، ومسألة يسأل عنها مستفتٍ.
+اختر شيخاً واحداً فقط: الذي كلامه أقرب إلى المسألة نفسها وأوضح في جوابها.
+ثم اكتب جواباً مختصراً (من سطرين إلى أربعة) يلخّص ما قاله هذا الشيخ وحده، من نصوصه وحدها.
+قواعد لا تُخالَف:
+- لا تذكر أي حكم أو دليل أو معلومة ليست في نصوص الشيخ المختار، ولا تخلط كلامه بكلام غيره، ولا تجتهد من عندك.
+- انسب الكلام للشيخ بصيغة مثل: «ذكر الشيخ أن…».
+- إن لم يتناول أي نص المسألة نفسها فاجعل found يساوي false.
+أرقام المشايخ: $names
+أعد JSON فقط: {"found": true, "scholar": رقم الشيخ المختار, "summary": "…", "used": [أرقام النصوص التي اعتمدت عليها من نصوصه]}
+المسألة: $issue
+النصوص:
+$body''');
+    if (j is! Map) return null;
+    final g = j['scholar'] is num ? (j['scholar'] as num).toInt() - 1 : -1;
+    final found = j['found'] == true && g >= 0 && g < groups.length && '${j['summary'] ?? ''}'.trim().isNotEmpty;
+    if (!found) return (-1, AiSummary(false, '', const []));
+    final used = <int>[
+      for (final u in (j['used'] is List ? j['used'] as List : const []))
+        if (u is num && u >= 1 && u <= where.length && where[u.toInt() - 1].$1 == g) where[u.toInt() - 1].$2,
+    ];
+    return (g, AiSummary(true, '${j['summary']}'.trim(), used));
+  }
+
   /// A short ruling built only from [texts] (the scholar's own words).
   static Future<AiSummary?> summarize(String scholar, String issue, List<String> texts) async {
     final body = StringBuffer();

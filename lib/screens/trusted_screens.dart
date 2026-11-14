@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/ai.dart';
@@ -119,11 +120,12 @@ class TrustedScholarsScreen extends StatelessWidget {
                         Icon(Icons.manage_search, color: Colors.white, size: 32),
                         SizedBox(width: 12),
                         Expanded(
-                          child: Text('بحث الفتاوى من كتب الثقات',
+                          child: Text('بحث الفتاوى من كتب الثقات\nباستخدام الذكاء الاصطناعي',
                               style: TextStyle(
                                   fontFamily: 'Tajawal',
                                   color: Colors.white,
-                                  fontSize: 18,
+                                  fontSize: 17,
+                                  height: 1.5,
                                   fontWeight: FontWeight.bold)),
                         ),
                         Icon(Icons.chevron_left, color: Colors.white),
@@ -287,6 +289,19 @@ class _Hit {
   final String text;
   _Hit(this.bookId, this.pageId, this.book, this.vol, this.page, this.headings, this.text);
 
+  Map<String, dynamic> toJson() =>
+      {'b': bookId, 'p': pageId, 'n': book, 'v': vol, 'g': page, 'h': headings, 't': text};
+
+  static _Hit fromJson(Map m) => _Hit(
+        ((m['b'] ?? 0) as num).toInt(),
+        ((m['p'] ?? 0) as num).toInt(),
+        '${m['n'] ?? ''}',
+        '${m['v'] ?? ''}',
+        '${m['g'] ?? ''}',
+        [for (final h in (m['h'] ?? []) as List) '$h'],
+        '${m['t'] ?? ''}',
+      );
+
   String get source => [book, if (vol.isNotEmpty && vol != '0') '$vol/$page' else page].join(' — ');
   String get url => 'https://app.turath.io/book/$bookId/$pageId';
 }
@@ -340,6 +355,21 @@ class _Found {
   String summary = '';
   bool reported = false;
   _Found(this.title, this.queries);
+
+  Map<String, dynamic> toJson() => {
+        'title': title,
+        'at': at,
+        'status': status,
+        'summary': summary,
+        'hits': [for (final h in hits) h.toJson()],
+      };
+
+  static _Found fromJson(Map m) => _Found('${m['title'] ?? ''}', const [])
+    ..busy = false
+    ..at = ((m['at'] ?? -1) as num).toInt()
+    ..status = '${m['status'] ?? ''}'
+    ..summary = '${m['summary'] ?? ''}'
+    ..hits = [for (final h in (m['hits'] ?? []) as List) _Hit.fromJson(h as Map)];
 }
 
 class TrustedFatwaScreen extends StatefulWidget {
@@ -427,16 +457,228 @@ class _TrustedFatwaScreenState extends State<TrustedFatwaScreen> {
         _note = 'تعذّر الوصول إلى الذكاء الاصطناعي الآن، فبُحث عن السؤال كما كتبته. اكتب المسألة باختصار لنتيجة أدق.';
       }
     });
-    for (final f in found) {
-      await _fill(f, 0, run, summarize: issues != null && Cloud.instance.aiSummary);
-      if (!mounted || run != _run) return;
+    // All the questions are looked up at the same time.
+    final summarize = issues != null && Cloud.instance.aiSummary;
+    await Future.wait([for (final f in found) summarize ? _answer(f, run) : _plainSearch(f, 0, run)]);
+    if (mounted && run == _run) _remember(q, found);
+  }
+
+  // ---- The record of earlier searches, kept on this phone only.
+  static const _historyKey = 'trustedHistory';
+
+  Future<List<Map>> _history() async {
+    final p = await SharedPreferences.getInstance();
+    try {
+      return [for (final e in jsonDecode(p.getString(_historyKey) ?? '[]') as List) e as Map];
+    } catch (_) {
+      return [];
     }
   }
 
-  /// Looks for one question at the scholars in order, starting from [from].
-  /// With [summarize], a scholar is kept only when his texts do speak of the
-  /// question, and a short ruling is written from those texts alone.
-  Future<void> _fill(_Found f, int from, int run, {required bool summarize}) async {
+  Future<void> _remember(String q, List<_Found> found) async {
+    if (!found.any((f) => f.at >= 0)) return; // nothing was found: not worth keeping
+    final p = await SharedPreferences.getInstance();
+    final list = (await _history()).where((e) => e['q'] != q).toList();
+    list.insert(0, {
+      'q': q,
+      'time': DateTime.now().millisecondsSinceEpoch,
+      'found': [for (final f in found) f.toJson()],
+    });
+    await p.setString(_historyKey, jsonEncode(list.take(40).toList()));
+  }
+
+  Future<void> _openHistory() async {
+    var list = await _history();
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => SafeArea(
+          child: SizedBox(
+            height: MediaQuery.of(ctx).size.height * 0.7,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 8, 6),
+                  child: Row(
+                    children: [
+                      const Expanded(
+                        child: Text('السجل', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                      ),
+                      TextButton.icon(
+                        icon: const Icon(Icons.add),
+                        label: const Text('بحث جديد'),
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          _run++;
+                          setState(() {
+                            _c.clear();
+                            _found = [];
+                            _note = '';
+                            _error = '';
+                            _busy = false;
+                          });
+                        },
+                      ),
+                      if (list.isNotEmpty)
+                        TextButton(
+                          onPressed: () async {
+                            (await SharedPreferences.getInstance()).remove(_historyKey);
+                            setS(() => list = []);
+                          },
+                          child: const Text('مسح الكل', style: TextStyle(color: Colors.red)),
+                        ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: list.isEmpty
+                      ? const Center(
+                          child: Text('لا يوجد شيء بعد.\nكل بحث تجريه يُحفظ هنا على هاتفك.',
+                              textAlign: TextAlign.center, style: TextStyle(color: Colors.grey, height: 1.8)))
+                      : ListView.separated(
+                          itemCount: list.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (ctx, i) {
+                            final e = list[i];
+                            final d = DateTime.fromMillisecondsSinceEpoch(((e['time'] ?? 0) as num).toInt());
+                            return ListTile(
+                              leading: const Icon(Icons.chat_bubble_outline),
+                              title: Text('${e['q']}', maxLines: 2, overflow: TextOverflow.ellipsis),
+                              subtitle: Text('${d.year}/${d.month}/${d.day}'),
+                              trailing: IconButton(
+                                tooltip: 'حذف',
+                                icon: const Icon(Icons.delete_outline),
+                                onPressed: () async {
+                                  list.removeAt(i);
+                                  (await SharedPreferences.getInstance()).setString(_historyKey, jsonEncode(list));
+                                  setS(() {});
+                                },
+                              ),
+                              onTap: () {
+                                Navigator.pop(ctx);
+                                _run++; // stop any search still running
+                                setState(() {
+                                  _c.text = '${e['q']}';
+                                  _busy = false;
+                                  _note = '';
+                                  _error = '';
+                                  _found = [for (final f in (e['found'] ?? []) as List) _Found.fromJson(f as Map)];
+                                });
+                              },
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// The texts of one scholar for a question: its phrases are searched together.
+  Future<List<_Hit>> _hitsOf(int author, List<String> queries, int max) async {
+    final lists = await Future.wait([for (final q in queries) _ask(author, q)]);
+    final hits = <_Hit>[];
+    for (final l in lists) {
+      for (final h in l) {
+        if (hits.length < max && !hits.any((x) => x.bookId == h.bookId && x.pageId == h.pageId)) hits.add(h);
+      }
+    }
+    return hits;
+  }
+
+  String _offline() => kIsWeb
+      ? 'البحث في كتب الثقات يعمل الآن من تطبيق أندرويد. موقع «تراث» لا يسمح بالبحث من داخل المواقع الأخرى.'
+      : 'تعذّر الاتصال بموقع «تراث». حاول بعد قليل.';
+
+  /// With the AI: Ibn Uthaymeen first. If his texts do not speak of the
+  /// question, all the other scholars are searched at once and the AI keeps
+  /// the ONE scholar whose words are closest to it.
+  Future<void> _answer(_Found f, int run) async {
+    bool live() => mounted && run == _run;
+    void done(void Function() change) {
+      if (live()) setState(change);
+    }
+
+    try {
+      done(() => f.status = 'جارٍ البحث في كتب الشيخ ${_order[0].$2}…');
+      final first = await _hitsOf(_order[0].$1, f.queries, 5);
+      if (!live()) return;
+      if (first.isNotEmpty) {
+        final sum = await Ai.summarize(_order[0].$2, f.title, [for (final h in first) _plain(h.text)]);
+        if (!live()) return;
+        if (sum == null) {
+          return done(() {
+            f.at = 0;
+            f.hits = first;
+            f.busy = false;
+          });
+        }
+        if (sum.found) {
+          return done(() {
+            f.at = 0;
+            f.summary = sum.text;
+            f.hits = sum.used.isEmpty ? first.take(2).toList() : [for (final u in sum.used) first[u]];
+            f.busy = false;
+          });
+        }
+      }
+      done(() => f.status = 'جارٍ البحث في كتب بقية المشايخ…');
+      final rest = await Future.wait([for (var i = 1; i < _order.length; i++) _hitsOf(_order[i].$1, f.queries, 3)]);
+      if (!live()) return;
+      final groups = <(int, List<_Hit>)>[
+        for (var i = 0; i < rest.length; i++)
+          if (rest[i].isNotEmpty) (i + 1, rest[i]),
+      ];
+      if (groups.isEmpty) {
+        return done(() {
+          f.busy = false;
+          f.status = 'لم أجد للمشايخ كلاماً في هذه المسألة بهذه الألفاظ.';
+        });
+      }
+      done(() => f.status = 'جارٍ اختيار أقرب أقوال المشايخ إلى سؤالك…');
+      final pick = await Ai.choose(f.title, [
+        for (final g in groups) (_order[g.$1].$2, [for (final h in g.$2) _plain(h.text)]),
+      ]);
+      if (!live()) return;
+      if (pick == null) {
+        // The AI did not answer: show the first scholar who has texts.
+        return done(() {
+          f.at = groups.first.$1;
+          f.hits = groups.first.$2;
+          f.busy = false;
+        });
+      }
+      if (pick.$1 < 0) {
+        return done(() {
+          f.busy = false;
+          f.status = 'لم أجد للمشايخ كلاماً في هذه المسألة نفسها.';
+        });
+      }
+      final g = groups[pick.$1];
+      done(() {
+        f.at = g.$1;
+        f.summary = pick.$2.text;
+        f.hits = pick.$2.used.isEmpty ? g.$2.take(2).toList() : [for (final u in pick.$2.used) g.$2[u]];
+        f.busy = false;
+      });
+    } catch (_) {
+      done(() {
+        f.busy = false;
+        f.status = _offline();
+      });
+    }
+  }
+
+  /// Without the AI: the scholars one after another from [from]; the first
+  /// who has texts with these words is shown.
+  Future<void> _plainSearch(_Found f, int from, int run) async {
+    bool live() => mounted && run == _run;
     setState(() {
       f.busy = true;
       f.hits = [];
@@ -445,60 +687,28 @@ class _TrustedFatwaScreenState extends State<TrustedFatwaScreen> {
     });
     try {
       for (var i = from; i < _order.length; i++) {
-        if (!mounted || run != _run) return;
+        if (!live()) return;
         setState(() => f.status = 'جارٍ البحث في كتب الشيخ ${_order[i].$2}…');
-        final hits = <_Hit>[];
-        for (final q in f.queries) {
-          for (final h in await _ask(_order[i].$1, q)) {
-            if (hits.length < 6 && !hits.any((x) => x.bookId == h.bookId && x.pageId == h.pageId)) hits.add(h);
-          }
-          if (hits.length >= 6) break;
-        }
+        final hits = await _hitsOf(_order[i].$1, f.queries, 6);
+        if (!live()) return;
         if (hits.isEmpty) continue;
-        if (!summarize) {
-          if (!mounted || run != _run) return;
-          setState(() {
-            f.at = i;
-            f.hits = hits;
-            f.busy = false;
-          });
-          return;
-        }
-        if (!mounted || run != _run) return;
-        setState(() => f.status = 'جارٍ قراءة كلام الشيخ ${_order[i].$2}…');
-        final sum = await Ai.summarize(_order[i].$2, f.title, [for (final h in hits) _plain(h.text)]);
-        if (!mounted || run != _run) return;
-        if (sum == null) {
-          // The AI did not answer: show the texts alone.
-          setState(() {
-            f.at = i;
-            f.hits = hits;
-            f.busy = false;
-          });
-          return;
-        }
-        if (!sum.found) continue; // these texts are about something else
         setState(() {
           f.at = i;
-          f.summary = sum.text;
-          // The texts the ruling rests on come first; the rest are left out.
-          f.hits = sum.used.isEmpty ? hits.take(2).toList() : [for (final u in sum.used) hits[u]];
+          f.hits = hits;
           f.busy = false;
         });
         return;
       }
-      if (!mounted || run != _run) return;
+      if (!live()) return;
       setState(() {
         f.busy = false;
         f.status = 'لم أجد للمشايخ كلاماً في هذه المسألة بهذه الألفاظ.';
       });
     } catch (_) {
-      if (!mounted || run != _run) return;
+      if (!live()) return;
       setState(() {
         f.busy = false;
-        f.status = kIsWeb
-            ? 'البحث في كتب الثقات يعمل الآن من تطبيق أندرويد. موقع «تراث» لا يسمح بالبحث من داخل المواقع الأخرى.'
-            : 'تعذّر الاتصال بموقع «تراث». حاول بعد قليل.';
+        f.status = _offline();
       });
     }
   }
@@ -507,7 +717,12 @@ class _TrustedFatwaScreenState extends State<TrustedFatwaScreen> {
   Widget build(BuildContext context) {
     final mark = Theme.of(context).brightness == Brightness.dark ? const Color(0xFF7A6200) : const Color(0xFFFFF176);
     return Scaffold(
-      appBar: AppBar(title: const Text('بحث الفتاوى من كتب الثقات')),
+      appBar: AppBar(
+        title: const Text('بحث الفتاوى من كتب الثقات', style: TextStyle(fontSize: 17)),
+        actions: [
+          IconButton(tooltip: 'السجل', icon: const Icon(Icons.menu), onPressed: _openHistory),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 30),
         children: [
@@ -636,7 +851,7 @@ class _TrustedFatwaScreenState extends State<TrustedFatwaScreen> {
           OutlinedButton.icon(
             icon: const Icon(Icons.skip_next),
             label: Text('ابحث عند الشيخ التالي: ${_order[f.at + 1].$2}'),
-            onPressed: () => _fill(f, f.at + 1, _run, summarize: f.summary.isNotEmpty),
+            onPressed: f.queries.isEmpty ? null : () => _plainSearch(f, f.at + 1, _run),
           ),
       ],
     ];

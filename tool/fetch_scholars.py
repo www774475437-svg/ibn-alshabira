@@ -12,6 +12,8 @@ SCHOLARS = [
     (54, "ابن تيمية"), (14, "ابن القيم"), (67, "ابن باز"), (57, "ابن عثيمين"), (62, "صالح الفوزان"),
     (414, "الألباني"), (223, "الدارقطني"), (202, "ابن حجر العسقلاني"), (362, "الذهبي"), (242, "مسلم"),
     (215, "البخاري"), (217, "الترمذي"),
+    # No id known beforehand: found by these words in the author's name.
+    (("مقبل", "الوادعي"), "مقبل الوادعي"), (("يحيى", "الحجوري"), "يحيى الحجوري"),
 ]
 
 
@@ -28,6 +30,17 @@ try:
     data = get("https://files.turath.io/data-v3.json")
     out = []
     for aid, shown in SCHOLARS:
+        if isinstance(aid, tuple):
+            words, aid = aid, None
+            for k, v in data["authors"].items():
+                if all(w in v.get("name", "") for w in words):
+                    aid = int(k)
+                    break
+            print(shown, "-> author id", aid)
+            if aid is None:
+                # Not on «تراث»: listed by name only, with no invented text.
+                out.append({"id": 0, "name": shown, "full": shown, "death": None, "bio": "", "books": []})
+                continue
         a = data["authors"].get(str(aid)) or {}
         bio = ""
         try:

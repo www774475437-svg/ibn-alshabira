@@ -16,6 +16,7 @@ import 'channel_screen.dart';
 import 'book_reader_screen.dart';
 import 'content_screens.dart';
 import 'chapter_screen.dart';
+import 'trusted_screens.dart';
 
 class HomeTab extends StatefulWidget {
   final VoidCallback onOpenSearch;
@@ -54,6 +55,71 @@ class _HomeTabState extends State<HomeTab> {
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           SliverToBoxAdapter(child: _Header(onOpenSearch: onOpenSearch, onOpenMore: widget.onOpenMore)),
+          // The search in the trusted scholars' books, with the AI.
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+              child: Material(
+                borderRadius: BorderRadius.circular(20),
+                clipBehavior: Clip.antiAlias,
+                elevation: 3,
+                child: Ink(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topRight,
+                      end: Alignment.bottomLeft,
+                      colors: [Color(0xFF2E8B57), Color(0xFF145A32)],
+                    ),
+                  ),
+                  child: InkWell(
+                    onTap: () => Navigator.of(context)
+                        .push(MaterialPageRoute(builder: (_) => const TrustedFatwaScreen())),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.white.withValues(alpha: 0.14),
+                              border: Border.all(color: kGold, width: 1.5),
+                            ),
+                            child: const Icon(Icons.auto_awesome, color: kGold, size: 28),
+                          ),
+                          const SizedBox(width: 14),
+                          const Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('بحث الفتاوى من كتب الثقات',
+                                    style: TextStyle(
+                                        fontFamily: 'Tajawal',
+                                        color: Colors.white,
+                                        fontSize: 19,
+                                        fontWeight: FontWeight.bold)),
+                                SizedBox(height: 3),
+                                Text('باستخدام الذكاء الاصطناعي',
+                                    style: TextStyle(
+                                        fontFamily: 'Tajawal',
+                                        color: kGold,
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.bold)),
+                                SizedBox(height: 4),
+                                Text('اكتب سؤالك، فيأتيك كلام الشيخ بنصّه من كتبه',
+                                    style: TextStyle(color: Colors.white, fontSize: 13)),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.chevron_left, color: Colors.white),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
           const SliverToBoxAdapter(child: _CloudSections()),
           if (!kIsWeb && repo.lastBook != null)
             SliverToBoxAdapter(child: _ContinueReading(book: repo.lastBook!)),
