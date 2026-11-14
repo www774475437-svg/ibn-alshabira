@@ -313,6 +313,13 @@ class MoreTab extends StatelessWidget {
                 ),
               ),
               SwitchListTile(
+                secondary: const _IconBox(Icons.nights_stay_outlined),
+                title: const Text('الوضع الليلي التلقائي'),
+                subtitle: const Text('داكن بعد المغرب، فاتح في النهار'),
+                value: repo.autoNight,
+                onChanged: repo.setAutoNight,
+              ),
+              SwitchListTile(
                 secondary: const _IconBox(Icons.text_increase),
                 title: const Text('الخط الكبير'),
                 subtitle: const Text('لمن يحتاج خطاً أوضح'),

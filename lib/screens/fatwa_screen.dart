@@ -14,6 +14,7 @@ import '../services/voice.dart';
 import 'admin_extra.dart';
 import 'ask_screen.dart';
 import 'favorites_tab.dart';
+import 'quran_screen.dart';
 import 'share_card_screen.dart';
 
 /// Shows one answer; swipe (or use the arrows) to move through the other
@@ -130,6 +131,24 @@ class _FatwaScreenState extends State<FatwaScreen> {
                 _toast('تم النسخ دون تشكيل');
               },
             ),
+            if (Cloud.instance.isAdmin)
+              ListTile(
+                leading: const Icon(Icons.campaign_outlined),
+                title: const Text('نسخ للنشر في القناة'),
+                subtitle: const Text('السؤال ثم الجواب ثم الرابط القصير'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  final f = current;
+                  final text = [
+                    if (f.question.isNotEmpty) f.question else f.title,
+                    if (f.question.isNotEmpty) 'والجواب:',
+                    f.answer,
+                    AppConfig.fatwaLink(f.id),
+                  ].join('\n\n');
+                  Clipboard.setData(ClipboardData(text: text));
+                  _toast('نُسخ، الصقه في القناة');
+                },
+              ),
             ListTile(
               leading: const Icon(Icons.link),
               title: const Text('نسخ رابط الجواب'),
@@ -310,7 +329,10 @@ class _FatwaScreenState extends State<FatwaScreen> {
               IconButton(
                 tooltip: fav ? 'إزالة من المحفوظات' : 'حفظ',
                 icon: Icon(fav ? Icons.bookmark : Icons.bookmark_border),
-                onPressed: () => repo.toggleFavorite(current.id),
+                onPressed: () {
+                  HapticFeedback.lightImpact();
+                  repo.toggleFavorite(current.id);
+                },
               ),
             ],
           ),
@@ -456,11 +478,53 @@ class _AnswerBodyState extends State<_AnswerBody> {
   // Each answer has its own scroll position and always opens at the top,
   // where its title and question are.
   final _scroll = ScrollController(keepScrollOffset: false);
+  final _progress = ValueNotifier<double>(0);
+  late double _saved = Repository.instance.readPosition(widget.fatwa.id);
+
+  @override
+  void initState() {
+    super.initState();
+    _scroll.addListener(() {
+      if (!_scroll.hasClients) return;
+      final max = _scroll.position.maxScrollExtent;
+      _progress.value = max <= 0 ? 0 : (_scroll.offset / max).clamp(0.0, 1.0);
+    });
+  }
 
   @override
   void dispose() {
+    // Remember where the reader stopped in a long text.
+    if (_scroll.hasClients) {
+      final max = _scroll.position.maxScrollExtent;
+      final at = _scroll.offset;
+      Repository.instance.saveReadPosition(widget.fatwa.id, max > 1500 && at < max - 300 ? at : 0);
+    }
     _scroll.dispose();
+    _progress.dispose();
     super.dispose();
+  }
+
+  /// Verses quoted in the text ﴿…﴾, to open them in the mushaf.
+  List<String> get _quotedVerses {
+    final found = <String>[];
+    for (final m in RegExp('﴿([^﴾]{6,})﴾').allMatches('${widget.fatwa.question}\n${widget.fatwa.answer}')) {
+      final t = m.group(1)!.trim();
+      if (!found.contains(t)) found.add(t);
+      if (found.length >= 6) break;
+    }
+    return found;
+  }
+
+  Future<void> _openVerse(String quoted) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final nav = Navigator.of(context);
+    final q = await QuranData.load();
+    final index = q.find(quoted);
+    if (index == null) {
+      messenger.showSnackBar(const SnackBar(content: Text('لم أجد موضع الآية، ابحث عنها من صفحة المصحف')));
+      return;
+    }
+    nav.push(MaterialPageRoute(builder: (_) => QuranScreen(openAt: index)));
   }
 
   Fatwa get fatwa => widget.fatwa;
@@ -487,11 +551,38 @@ class _AnswerBodyState extends State<_AnswerBody> {
             Text(text, style: const TextStyle(fontSize: 12.5, color: kGoldChip, fontWeight: FontWeight.w600)),
           ]),
         );
-    return ListView(
+    final quoted = _quotedVerses;
+    return Column(
+      children: [
+        // Thin bar: how far the reader is through a long text.
+        ValueListenableBuilder<double>(
+          valueListenable: _progress,
+          builder: (context, v, _) => v <= 0
+              ? const SizedBox(height: 3)
+              : LinearProgressIndicator(value: v, minHeight: 3, backgroundColor: Colors.transparent),
+        ),
+        Expanded(
+          child: ListView(
       key: PageStorageKey('answer-${fatwa.id}'),
       controller: _scroll,
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+      padding: const EdgeInsets.fromLTRB(18, 13, 18, 18),
       children: [
+        if (_saved > 0)
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: ActionChip(
+                avatar: const Icon(Icons.south, size: 16),
+                label: const Text('أكمل من حيث توقفت'),
+                onPressed: () {
+                  final to = _saved.clamp(0.0, _scroll.position.maxScrollExtent);
+                  setState(() => _saved = 0);
+                  _scroll.animateTo(to, duration: const Duration(milliseconds: 400), curve: Curves.easeOut);
+                },
+              ),
+            ),
+          ),
         Wrap(
           spacing: 6,
           runSpacing: 6,
@@ -542,6 +633,23 @@ class _AnswerBodyState extends State<_AnswerBody> {
                   label: Text('#$t'),
                   onPressed: () => Navigator.of(context)
                       .push(MaterialPageRoute(builder: (_) => TagScreen(tag: t))),
+                ),
+            ],
+          ),
+        ],
+        if (quoted.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          const Text('الآيات في المصحف', style: TextStyle(fontWeight: FontWeight.bold, color: kGoldChip)),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 6,
+            runSpacing: 2,
+            children: [
+              for (final v in quoted)
+                ActionChip(
+                  avatar: const Icon(Icons.auto_stories_outlined, size: 16, color: kGold),
+                  label: Text(v.length > 34 ? '${v.substring(0, 34)}…' : v, style: const TextStyle(fontFamily: 'Amiri')),
+                  onPressed: () => _openVerse(v),
                 ),
             ],
           ),
@@ -625,6 +733,9 @@ class _AnswerBodyState extends State<_AnswerBody> {
         ),
         ..._related(context, repo),
         const SizedBox(height: 12),
+      ],
+          ),
+        ),
       ],
     );
   }

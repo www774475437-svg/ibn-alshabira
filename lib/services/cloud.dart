@@ -598,6 +598,37 @@ class Cloud extends ChangeNotifier {
     return setConfig('ask', {'open': open ?? askOpen, 'limit': limit ?? askLimit, 'limits': per}, logText);
   }
 
+  static String _weekKey() {
+    final now = DateTime.now().toUtc();
+    final monday = now.subtract(Duration(days: now.weekday - 1));
+    return '${monday.year}-${monday.month.toString().padLeft(2, '0')}-${monday.day.toString().padLeft(2, '0')}';
+  }
+
+  /// Counts an answer opened from the search results this week. Only the
+  /// sheikh's own answers can appear, never what people typed.
+  Future<void> countSearchOpen(String answerId) async {
+    if (!ready) return;
+    try {
+      await _db.doc('searches/${_weekKey()}').set({answerId: FieldValue.increment(1)}, SetOptions(merge: true));
+    } catch (_) {}
+  }
+
+  /// Answers people reached most through search this week (ids, best first).
+  Future<List<String>> mostSearched({int limit = 10}) async {
+    if (!ready) return [];
+    try {
+      final d = await _db.doc('searches/${_weekKey()}').get();
+      final m = d.data() ?? {};
+      final list = [
+        for (final e in m.entries)
+          if (e.value is int) (e.key, e.value as int),
+      ]..sort((a, b) => b.$2.compareTo(a.$2));
+      return [for (final e in list.take(limit)) e.$1];
+    } catch (_) {
+      return [];
+    }
+  }
+
   /// The sheikh's lessons timetable (free text; hidden while empty).
   String schedule = '';
 

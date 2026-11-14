@@ -78,6 +78,28 @@ class QuranData {
     return lo + 1;
   }
 
+  static List<String>? _plainVerses;
+
+  /// The verse that holds a quoted piece of Quran text, or null.
+  int? find(String quoted) {
+    final t = plain(quoted).replaceAll(RegExp(r'[^\u0621-\u064A ]'), ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (t.length < 6) return null;
+    _plainVerses ??= [for (final v in verses) plain(v)];
+    final list = _plainVerses!;
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].contains(t)) return i;
+    }
+    // A quote that runs over several verses: look for its first words.
+    final words = t.split(' ');
+    if (words.length >= 4) {
+      final head = words.take(4).join(' ');
+      for (var i = 0; i < list.length; i++) {
+        if (list[i].contains(head)) return i;
+      }
+    }
+    return null;
+  }
+
   int juzOfPage(int page) {
     var j = 1;
     for (var i = 0; i < juzPage.length; i++) {
@@ -142,7 +164,9 @@ class QuranMarks extends ChangeNotifier {
 
 /// The mushaf: one page per screen, turned like paper.
 class QuranScreen extends StatefulWidget {
-  const QuranScreen({super.key});
+  /// Open at the page of this verse (global index) instead of the last page read.
+  final int? openAt;
+  const QuranScreen({super.key, this.openAt});
 
   @override
   State<QuranScreen> createState() => _QuranScreenState();
@@ -166,7 +190,9 @@ class _QuranScreenState extends State<QuranScreen> {
     if (!mounted) return;
     setState(() {
       _q = q;
-      _page = (p.getInt('quranPage') ?? 1).clamp(1, QuranData.pages);
+      _page = widget.openAt != null
+          ? q.pageOf(widget.openAt!)
+          : (p.getInt('quranPage') ?? 1).clamp(1, QuranData.pages);
       _pages = PageController(initialPage: _page - 1);
     });
   }

@@ -121,7 +121,7 @@ class ChannelPostScreen extends StatelessWidget {
             tooltip: 'نسخ',
             icon: const Icon(Icons.copy),
             onPressed: () {
-              Clipboard.setData(ClipboardData(text: post.text));
+              Clipboard.setData(ClipboardData(text: '${post.text}\n\n${post.link}'));
               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('نُسخ النص')));
             },
           ),
