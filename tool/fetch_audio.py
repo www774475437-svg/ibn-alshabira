@@ -28,12 +28,19 @@ def main():
     items = json.loads(LIST.read_text("utf-8")) if LIST.exists() else []
     state = json.loads(STATE.read_text("utf-8")) if STATE.exists() else {"offset": 0}
     have = {i["key"] for i in items}
+    me = api("getMe").get("result", {})
+    print("bot:", me.get("username"))
     res = api("getUpdates", offset=state["offset"], timeout=0, allowed_updates='["channel_post"]')
+    print("updates:", len(res.get("result", [])), "ok:", res.get("ok"))
     added = 0
     for u in res.get("result", []):
         state["offset"] = u["update_id"] + 1
         post = u.get("channel_post") or {}
-        media = post.get("audio") or post.get("voice")
+        doc = post.get("document") or {}
+        media = post.get("audio") or post.get("voice") or (
+            doc if str(doc.get("mime_type", "")).startswith("audio/") else None)
+        print("update:", u["update_id"], "chat:", (post.get("chat") or {}).get("title"),
+              "kinds:", [k for k in post if k in ("audio", "voice", "document", "video", "text")])
         if not media:
             continue
         key = f'{post["chat"]["id"]}_{post["message_id"]}'
