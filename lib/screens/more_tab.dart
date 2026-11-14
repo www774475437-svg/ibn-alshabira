@@ -11,6 +11,7 @@ import 'ask_screen.dart';
 import 'audio_library.dart';
 import 'channel_screen.dart';
 import 'account_screens.dart';
+import 'accounts_screen.dart';
 import 'adhkar_screen.dart';
 import 'quran_screen.dart';
 import 'package:share_plus/share_plus.dart';
@@ -43,7 +44,7 @@ class MoreTab extends StatelessWidget {
               onTap: () =>
                   Navigator.of(context).push(MaterialPageRoute(builder: (_) => const QuranScreen())),
             ),
-            // A small gold strip: the sheikh's channels and accounts.
+            // A small gold strip: channels and accounts of the sheikh and of those the staff add.
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
               child: Material(
@@ -54,31 +55,8 @@ class MoreTab extends StatelessWidget {
                 ),
                 child: InkWell(
                   borderRadius: BorderRadius.circular(14),
-                  onTap: () => showModalBottomSheet<void>(
-                    context: context,
-                    showDragHandle: true,
-                    builder: (ctx) => SafeArea(
-                      child: ListView(
-                        shrinkWrap: true,
-                        children: [
-                          const Padding(
-                            padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
-                            child: Text('قنوات وحسابات الشيخ',
-                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
-                          ),
-                          for (final l in repo.sheikhLinks)
-                            ListTile(
-                              leading: _IconBox(platformIcon(l.platform)),
-                              title: Text(l.name),
-                              subtitle: l.url.isEmpty ? const Text('يُضاف قريباً') : null,
-                              trailing: const Icon(Icons.chevron_left),
-                              enabled: l.url.isNotEmpty,
-                              onTap: () => openUrl(context, l.url),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
+                  onTap: () => Navigator.of(context)
+                      .push(MaterialPageRoute(builder: (_) => const AccountsScreen())),
                   child: const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     child: Row(
@@ -86,7 +64,7 @@ class MoreTab extends StatelessWidget {
                         Icon(Icons.campaign_outlined, color: kGoldChip, size: 22),
                         SizedBox(width: 10),
                         Expanded(
-                          child: Text('قنوات وحسابات الشيخ',
+                          child: Text('قنوات وحسابات',
                               style: TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.bold, fontSize: 15)),
                         ),
                         Icon(Icons.chevron_left, size: 20),
