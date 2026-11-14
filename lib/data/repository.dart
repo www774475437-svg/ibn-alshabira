@@ -58,14 +58,67 @@ class Repository extends ChangeNotifier {
   Set<String> readLater = {};
   List<String> recentSearches = [];
 
-  Future<void> load(SharedPreferences prefs) async {
+  /// False while the site is still fetching the full library in the background.
+  bool fullyLoaded = true;
+  List<ChannelPost> _channelBase = [];
+  List<Fatwa>? _lastPublished;
+  Map<String, Map<String, dynamic>>? _lastEdits;
+
+  /// Short channel posts, plus the channel posts that became answers.
+  void _buildChannel() {
+    channel = [
+      ..._channelBase,
+      for (final f in _bundled)
+        if (f.id.startsWith('tg-') && int.tryParse(f.id.substring(3)) != null)
+          ChannelPost(
+            id: int.parse(f.id.substring(3)),
+            text: f.question.isEmpty ? f.answer : '${f.question}\n\nالجواب:\n${f.answer}',
+            date: f.date,
+            fatwaId: f.id,
+          ),
+    ]..sort((a, b) => b.id.compareTo(a.id));
+  }
+
+  /// The site opens with the newest answers only; this brings the rest.
+  Future<void> loadRest() async {
+    if (fullyLoaded) return;
+    try {
+      final fw = jsonDecode(await rootBundle.loadString('assets/data/fatwas.json')) as List;
+      final full = fw.map((e) => Fatwa.fromJson(e as Map<String, dynamic>)).toList();
+      final have = {for (final f in full) f.id};
+      for (final f in full) {
+        _index(f);
+      }
+      _bundled = [...full, ..._bundled.where((f) => !have.contains(f.id))];
+      fullyLoaded = true;
+      _buildChannel();
+      if (_lastEdits != null) {
+        applyRemote(_lastPublished ?? const [], _lastEdits!);
+      } else {
+        fatwas = List.of(_bundled);
+        notifyListeners();
+      }
+    } catch (_) {
+      fullyLoaded = true;
+      notifyListeners();
+    }
+  }
+
+  Future<void> load(SharedPreferences prefs, {bool quick = false}) async {
     _prefs = prefs;
 
     final ch = jsonDecode(await rootBundle.loadString('assets/data/chapters.json')) as List;
     chapters = ch.map((e) => Chapter.fromJson(e as Map<String, dynamic>)).toList();
     _baseChapters = List.of(chapters);
 
-    final fw = jsonDecode(await rootBundle.loadString('assets/data/fatwas.json')) as List;
+    List fw = const [];
+    if (quick) {
+      try {
+        fw = jsonDecode(await rootBundle.loadString('assets/data/latest.json')) as List;
+      } catch (_) {}
+      fullyLoaded = fw.isEmpty;
+    }
+    if (fw.isEmpty) fw = jsonDecode(await rootBundle.loadString('assets/data/fatwas.json')) as List;
     fatwas = fw.map((e) => Fatwa.fromJson(e as Map<String, dynamic>)).toList();
     for (final f in fatwas) {
       _index(f);
@@ -82,17 +135,8 @@ class Repository extends ChangeNotifier {
       channel = [];
     }
     // Channel posts that became answers/articles appear in «من قناة الشيخ» too.
-    channel = [
-      ...channel,
-      for (final f in fatwas)
-        if (f.id.startsWith('tg-') && int.tryParse(f.id.substring(3)) != null)
-          ChannelPost(
-            id: int.parse(f.id.substring(3)),
-            text: f.question.isEmpty ? f.answer : '${f.question}\n\nالجواب:\n${f.answer}',
-            date: f.date,
-            fatwaId: f.id,
-          ),
-    ]..sort((a, b) => b.id.compareTo(a.id));
+    _channelBase = channel;
+    _buildChannel();
 
     try {
       final vd = jsonDecode(await rootBundle.loadString('assets/data/videos.json')) as List;
@@ -100,6 +144,16 @@ class Repository extends ChangeNotifier {
       _fetchedVideos = videos;
     } catch (_) {
       videos = [];
+    }
+    // If this build came without videos, keep showing the last list we had.
+    if (videos.isEmpty) {
+      try {
+        final vd = jsonDecode(prefs.getString('videosSaved') ?? '[]') as List;
+        videos = vd.map((e) => Video.fromJson(e as Map<String, dynamic>)).toList();
+        _fetchedVideos = videos;
+      } catch (_) {}
+    } else {
+      prefs.setString('videosSaved', jsonEncode([for (final v in videos) v.toJson()]));
     }
     lastBookId = prefs.getString('lastBookId') ?? '';
 
@@ -257,6 +311,8 @@ class Repository extends ChangeNotifier {
 
   /// Merges answers published from inside the app and edited titles.
   void applyRemote(List<Fatwa> published, Map<String, Map<String, dynamic>> edits) {
+    _lastPublished = published;
+    _lastEdits = edits;
     final all = [..._bundled, ...published];
     final known = {for (final c in chapters) c.id};
     for (final f in all) {
@@ -360,6 +416,15 @@ class Repository extends ChangeNotifier {
 
   /// Every word of the query must appear (in any order).
   List<Video> _fetchedVideos = [];
+
+  /// Videos fetched later (from the site) replace an empty list.
+  void setFetchedVideos(List<Video> list) {
+    if (list.isEmpty) return;
+    final extra = videos.where((v) => !_fetchedVideos.any((f) => f.id == v.id)).toList();
+    _fetchedVideos = list;
+    _prefs.setString('videosSaved', jsonEncode([for (final v in list) v.toJson()]));
+    setExtraVideos(extra);
+  }
 
   void setExtraVideos(List<Video> extra) {
     final ids = {for (final v in extra) v.id};

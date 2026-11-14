@@ -241,6 +241,29 @@ class _HomeTabState extends State<HomeTab> {
               ),
             ),
           ],
+          if (repo.videos.isEmpty)
+            SliverToBoxAdapter(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const _SectionTitle('المرئيات'),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+                    child: Card(
+                      margin: EdgeInsets.zero,
+                      child: ListTile(
+                        leading: const Icon(Icons.play_circle_fill, color: Colors.red, size: 34),
+                        title: const Text('مقاطع الشيخ المرئية'),
+                        subtitle: const Text('افتح قناة الشيخ في يوتيوب'),
+                        trailing: const Icon(Icons.chevron_left),
+                        onTap: () => Navigator.of(context)
+                            .push(MaterialPageRoute(builder: (_) => const VideosScreen())),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           if (repo.videos.isNotEmpty) ...[
             SliverToBoxAdapter(
               child: _SectionTitle('أحدث المرئيات',
@@ -262,6 +285,19 @@ class _HomeTabState extends State<HomeTab> {
             ),
           ],
           const SliverToBoxAdapter(child: _SectionTitle('أحدث ما نُشر')),
+          if (!repo.fullyLoaded)
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Column(
+                  children: [
+                    LinearProgressIndicator(minHeight: 3),
+                    SizedBox(height: 6),
+                    Text('جارٍ تحميل بقية المكتبة…', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                  ],
+                ),
+              ),
+            ),
           SliverList.builder(
             itemCount: latest.length,
             itemBuilder: (context, i) => FatwaTile(fatwa: latest[i]),

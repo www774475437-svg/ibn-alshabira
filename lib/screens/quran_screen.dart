@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../theme.dart';
@@ -22,7 +23,8 @@ class QuranData {
   late final List<int> surahStart; // global index of each surah's first verse
   late final List<int> pageStart; // global index of each page's first verse
   late final List<int> juzPage; // first page of each juz
-  late final List<String> verses;
+  late final List<String> verses; // as printed, each ending with its number mark
+  late final List<String> simple; // plain spelling, for search
 
   static const pages = 604;
 
@@ -44,11 +46,22 @@ class QuranData {
         d.pageStart = [for (final e in j['p'] as List) (e as num).toInt()];
         d.juzPage = [for (final e in j['j'] as List) (e as num).toInt()];
         d.verses = [for (final e in j['v'] as List) '$e'];
+        d.simple = [for (final e in (j['e'] ?? j['v']) as List) plain('$e')];
         _instance = d;
         return d;
       }();
 
   /// (surah 1-based, verse 1-based) of a global verse index.
+  /// The words of a verse without the number mark at its end.
+  String words(int index) => verses[index].split('\u00A0').first.trim();
+
+  /// The number mark at the end of a verse (drawn by the mushaf font).
+  String mark(int index) {
+    final v = verses[index];
+    final i = v.lastIndexOf('\u00A0');
+    return i < 0 ? '' : v.substring(i);
+  }
+
   (int, int) at(int index) {
     var lo = 0, hi = surahStart.length - 1;
     while (lo < hi) {
@@ -78,14 +91,11 @@ class QuranData {
     return lo + 1;
   }
 
-  static List<String>? _plainVerses;
-
   /// The verse that holds a quoted piece of Quran text, or null.
   int? find(String quoted) {
     final t = plain(quoted).replaceAll(RegExp(r'[^\u0621-\u064A ]'), ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
     if (t.length < 6) return null;
-    _plainVerses ??= [for (final v in verses) plain(v)];
-    final list = _plainVerses!;
+    final list = simple;
     for (var i = 0; i < list.length; i++) {
       if (list[i].contains(t)) return i;
     }
@@ -176,6 +186,10 @@ class _QuranScreenState extends State<QuranScreen> {
   QuranData? _q;
   PageController? _pages;
   int _page = 1;
+  bool _full = false; // reading only: bars hidden
+  bool _night = false; // dark page
+  int _khatmaStart = 0; // page the current khatma began at (0 = none)
+  int _khatmaDays = 30;
 
   @override
   void initState() {
@@ -194,6 +208,9 @@ class _QuranScreenState extends State<QuranScreen> {
           ? q.pageOf(widget.openAt!)
           : (p.getInt('quranPage') ?? 1).clamp(1, QuranData.pages);
       _pages = PageController(initialPage: _page - 1);
+      _night = p.getBool('quranNight') ?? false;
+      _khatmaStart = p.getInt('khatmaStart') ?? 0;
+      _khatmaDays = p.getInt('khatmaDays') ?? 30;
     });
   }
 
@@ -226,6 +243,85 @@ class _QuranScreenState extends State<QuranScreen> {
     if (index != null) _goTo(q.pageOf(index));
   }
 
+  /// Settings inside the mushaf: night page, and a simple khatma plan.
+  void _settings() {
+    showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) {
+          Future<void> save(void Function() change) async {
+            setState(change);
+            setS(() {});
+            final p = await SharedPreferences.getInstance();
+            p.setBool('quranNight', _night);
+            p.setInt('khatmaStart', _khatmaStart);
+            p.setInt('khatmaDays', _khatmaDays);
+          }
+
+          return SafeArea(
+            child: ListView(
+              shrinkWrap: true,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: Text('إعدادات المصحف', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+                ),
+                SwitchListTile(
+                  secondary: const Icon(Icons.nights_stay_outlined),
+                  title: const Text('صفحة ليلية'),
+                  subtitle: const Text('خلفية داكنة وخط فاتح'),
+                  value: _night,
+                  onChanged: (v) => save(() => _night = v),
+                ),
+                SwitchListTile(
+                  secondary: const Icon(Icons.flag_outlined),
+                  title: const Text('ختمة'),
+                  subtitle: Text(_khatmaStart == 0
+                      ? 'حدّد مدة، فيظهر لك وِرد اليوم من الصفحات'
+                      : 'بدأت من صفحة ${QuranData.digits(_khatmaStart)}'),
+                  value: _khatmaStart != 0,
+                  onChanged: (v) => save(() => _khatmaStart = v ? _page : 0),
+                ),
+                if (_khatmaStart != 0)
+                  ListTile(
+                    leading: const Icon(Icons.date_range_outlined),
+                    title: const Text('مدة الختمة'),
+                    trailing: DropdownButton<int>(
+                      value: const [7, 10, 15, 30, 60, 90].contains(_khatmaDays) ? _khatmaDays : 30,
+                      underline: const SizedBox(),
+                      items: [
+                        for (final d in const [7, 10, 15, 30, 60, 90]) DropdownMenuItem(value: d, child: Text('$d يوماً')),
+                      ],
+                      onChanged: (d) => save(() => _khatmaDays = d ?? 30),
+                    ),
+                  ),
+                ListTile(
+                  leading: const Icon(Icons.fullscreen),
+                  title: const Text('القراءة فقط'),
+                  subtitle: const Text('اضغط مرتين على الصفحة لإخفاء الأشرطة أو إظهارها'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    setState(() => _full = true);
+                  },
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  /// Pages left in the khatma and how many a day.
+  String? get _khatmaText {
+    if (_khatmaStart == 0) return null;
+    final left = QuranData.pages - _page;
+    if (left <= 0) return 'أتممت الختمة، تقبّل الله منك';
+    final perDay = ((QuranData.pages - _khatmaStart + 1) / _khatmaDays).ceil();
+    return 'الختمة: بقي ${QuranData.digits(left)} صفحة · وِردك ${QuranData.digits(perDay)} صفحة في اليوم';
+  }
+
   Future<void> _askPage() async {
     final c = TextEditingController();
     final n = await showDialog<int>(
@@ -254,10 +350,15 @@ class _QuranScreenState extends State<QuranScreen> {
       return Scaffold(appBar: AppBar(title: const Text('المصحف')), body: const Center(child: CircularProgressIndicator()));
     }
     final (surah, _) = q.at(q.pageStart[_page - 1]);
+    final khatma = _khatmaText;
     return Scaffold(
-      appBar: AppBar(
+      backgroundColor: _night ? const Color(0xFF0B0906) : null,
+      appBar: _full
+          ? null
+          : AppBar(
         title: Text('سورة ${q.names[surah - 1]}', style: const TextStyle(fontFamily: 'Amiri', fontSize: 20)),
         actions: [
+          IconButton(tooltip: 'إعدادات المصحف', icon: const Icon(Icons.tune), onPressed: _settings),
           IconButton(tooltip: 'بحث في المصحف', icon: const Icon(Icons.search), onPressed: _openSearch),
           IconButton(tooltip: 'العلامات', icon: const Icon(Icons.bookmarks_outlined), onPressed: _openMarks),
           IconButton(tooltip: 'الفهرس', icon: const Icon(Icons.format_list_bulleted), onPressed: _openIndex),
@@ -265,6 +366,7 @@ class _QuranScreenState extends State<QuranScreen> {
       ),
       body: Column(
         children: [
+          if (_full) SizedBox(height: MediaQuery.of(context).padding.top),
           Expanded(
             child: PageView.builder(
               controller: _pages,
@@ -274,9 +376,21 @@ class _QuranScreenState extends State<QuranScreen> {
                 final p = await SharedPreferences.getInstance();
                 p.setInt('quranPage', i + 1);
               },
-              itemBuilder: (context, i) => _MushafPage(key: ValueKey(i), q: q, page: i + 1),
+              itemBuilder: (context, i) => GestureDetector(
+                // Double tap: reading only (bars hidden), and back.
+                onDoubleTap: () => setState(() => _full = !_full),
+                child: _MushafPage(key: ValueKey(i), q: q, page: i + 1, night: _night),
+              ),
             ),
           ),
+          if (!_full && khatma != null)
+            Container(
+              width: double.infinity,
+              color: kGold.withValues(alpha: 0.16),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+              child: Text(khatma, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12.5)),
+            ),
+          if (!_full)
           Material(
             color: Theme.of(context).colorScheme.surfaceContainerHighest,
             child: InkWell(
@@ -290,7 +404,8 @@ class _QuranScreenState extends State<QuranScreen> {
                     Text('صفحة ${QuranData.digits(_page)}',
                         style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                     const Spacer(),
-                    const Text('اضغط مطولاً على الآية', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                    const Text('ضغطة مطوّلة: الآية · ضغطتان: القراءة فقط',
+                        style: TextStyle(fontSize: 10.5, color: Colors.grey)),
                   ],
                 ),
               ),
@@ -305,7 +420,8 @@ class _QuranScreenState extends State<QuranScreen> {
 class _MushafPage extends StatefulWidget {
   final QuranData q;
   final int page;
-  const _MushafPage({super.key, required this.q, required this.page});
+  final bool night;
+  const _MushafPage({super.key, required this.q, required this.page, this.night = false});
 
   @override
   State<_MushafPage> createState() => _MushafPageState();
@@ -341,8 +457,9 @@ class _MushafPageState extends State<_MushafPage> {
                   textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               const SizedBox(height: 10),
               Text(q.verses[index],
+                  textDirection: TextDirection.rtl,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(fontFamily: 'AmiriQuran', fontSize: 22, height: 2.0)),
+                  style: const TextStyle(fontFamily: 'UthmanicHafs', fontSize: 22, height: 2.0)),
               const SizedBox(height: 12),
               _Tafsir(surah: s, verse: v),
               const SizedBox(height: 12),
@@ -378,11 +495,20 @@ class _MushafPageState extends State<_MushafPage> {
                     ),
                   const Spacer(),
                   IconButton(
+                    tooltip: 'مشاركة الآية',
+                    icon: const Icon(Icons.share_outlined),
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      // Only the verse and where it is from: no app name.
+                      Share.share('﴿${q.words(index)}﴾ [${q.names[s - 1]}: ${QuranData.digits(v)}]');
+                    },
+                  ),
+                  IconButton(
                     tooltip: 'نسخ الآية',
                     icon: const Icon(Icons.copy),
                     onPressed: () {
                       Clipboard.setData(ClipboardData(
-                          text: '﴿${q.verses[index]}﴾ [${q.names[s - 1]}: ${QuranData.digits(v)}]'));
+                          text: '﴿${q.words(index)}﴾ [${q.names[s - 1]}: ${QuranData.digits(v)}]'));
                       Navigator.pop(ctx);
                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('نُسخت الآية')));
                     },
@@ -406,6 +532,7 @@ class _MushafPageState extends State<_MushafPage> {
     final start = q.pageStart[widget.page - 1];
     final end = widget.page < QuranData.pages ? q.pageStart[widget.page] : q.verses.length;
     final ink = Theme.of(context).colorScheme.onSurface;
+    final night = widget.night;
     // One long-press recogniser per verse, shared by measuring and drawing.
     final press = <int, LongPressGestureRecognizer>{
       for (var i = start; i < end; i++) i: LongPressGestureRecognizer()..onLongPress = () => _menu(i),
@@ -431,13 +558,13 @@ class _MushafPageState extends State<_MushafPage> {
       builder: (context, _) => LayoutBuilder(
         builder: (context, box) {
           TextStyle style(double size) =>
-              TextStyle(fontFamily: 'AmiriQuran', fontSize: size, height: 1.95, color: ink);
+              TextStyle(fontFamily: 'UthmanicHafs', fontSize: size, height: 1.9, color: night ? const Color(0xFFEDE6D3) : ink);
           TextSpan verses(List<int> run, double size) => TextSpan(
                 style: style(size),
                 children: [
                   for (final i in run) ...[
                     TextSpan(
-                      text: q.verses[i],
+                      text: q.words(i),
                       recognizer: press[i],
                       style: QuranMarks.instance.marks[i] == null
                           ? null
@@ -445,10 +572,7 @@ class _MushafPageState extends State<_MushafPage> {
                               backgroundColor:
                                   _markColors[QuranMarks.instance.marks[i]!.$1]!.withValues(alpha: 0.45)),
                     ),
-                    TextSpan(
-                      text: ' \u06DD${QuranData.digits(q.at(i).$2)} ',
-                      style: const TextStyle(color: kGold),
-                    ),
+                    TextSpan(text: '${q.mark(i)} ', style: const TextStyle(color: kGoldChip)),
                   ],
                 ],
               );
@@ -501,7 +625,9 @@ class _MushafPageState extends State<_MushafPage> {
                 else
                   SizedBox(
                     height: headerHeight(size, (p as (String, bool)).$2),
-                    child: _SurahHeader(name: (p as (String, bool)).$1, basmala: (p as (String, bool)).$2, size: size),
+                    child: _SurahHeader(name: (p as (String, bool)).$1, basmala: (p as (String, bool)).$2,
+                        size: size,
+                        color: night ? const Color(0xFFEDE6D3) : null),
                   ),
             ],
           );
@@ -509,7 +635,9 @@ class _MushafPageState extends State<_MushafPage> {
             margin: const EdgeInsets.all(outer),
             padding: const EdgeInsets.all(inner),
             decoration: BoxDecoration(
-              color: Theme.of(context).brightness == Brightness.dark ? null : const Color(0xFFFFFBF0),
+              color: night
+                  ? const Color(0xFF14110B)
+                  : (Theme.of(context).brightness == Brightness.dark ? null : const Color(0xFFFFFBF0)),
               border: Border.all(color: kGold.withValues(alpha: 0.8), width: 1.5),
               borderRadius: BorderRadius.circular(14),
             ),
@@ -527,7 +655,8 @@ class _SurahHeader extends StatelessWidget {
   final String name;
   final bool basmala;
   final double size;
-  const _SurahHeader({required this.name, required this.basmala, this.size = 22});
+  final Color? color;
+  const _SurahHeader({required this.name, required this.basmala, this.size = 22, this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -544,14 +673,16 @@ class _SurahHeader extends StatelessWidget {
             borderRadius: BorderRadius.circular(10),
           ),
           child: Text('سورة $name',
-              style: TextStyle(fontFamily: 'Amiri', fontSize: size * 0.85, height: 1.2, fontWeight: FontWeight.bold)),
+              style: TextStyle(
+                  fontFamily: 'Amiri', fontSize: size * 0.85, height: 1.2, fontWeight: FontWeight.bold, color: color)),
         ),
         if (basmala)
           SizedBox(
             height: size * 2.1,
             child: Center(
               child: Text('بِسۡمِ ٱللَّهِ ٱلرَّحۡمَٰنِ ٱلرَّحِيمِ',
-                  style: TextStyle(fontFamily: 'AmiriQuran', fontSize: size, height: 1.4)),
+                  textDirection: TextDirection.rtl,
+                  style: TextStyle(fontFamily: 'UthmanicHafs', fontSize: size, height: 1.4, color: color)),
             ),
           ),
       ],
@@ -700,7 +831,7 @@ class _SearchScreenState extends State<_SearchScreen> {
 
   void _run(String text) {
     final q = widget.q;
-    _plain ??= [for (final v in q.verses) QuranData.plain(v)];
+    _plain ??= q.simple;
     final words = QuranData.plain(text).split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
     setState(() {
       _query = text;
@@ -744,7 +875,7 @@ class _SearchScreenState extends State<_SearchScreen> {
                     final (s, v) = q.at(i);
                     return ListTile(
                       title: Text(q.verses[i],
-                          style: const TextStyle(fontFamily: 'AmiriQuran', fontSize: 19, height: 2.0)),
+                          style: const TextStyle(fontFamily: 'UthmanicHafs', fontSize: 19, height: 2.0)),
                       subtitle: Text('${q.names[s - 1]}: ${QuranData.digits(v)}',
                           style: const TextStyle(color: kGoldChip)),
                       onTap: () => Navigator.pop(context, i),
