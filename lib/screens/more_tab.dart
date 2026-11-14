@@ -44,6 +44,14 @@ class MoreTab extends StatelessWidget {
               onTap: () =>
                   Navigator.of(context).push(MaterialPageRoute(builder: (_) => const QuranScreen())),
             ),
+            _BigCard(
+              icon: Icons.spa_outlined,
+              title: 'الأذكار',
+              subtitle: 'حصن المسلم كاملاً، وعدّاد التسبيح',
+              color: const Color(0xFF2E7D32),
+              onTap: () =>
+                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AdhkarScreen())),
+            ),
             // A small gold strip: channels and accounts of the sheikh and of those the staff add.
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
@@ -64,7 +72,7 @@ class MoreTab extends StatelessWidget {
                         Icon(Icons.campaign_outlined, color: kGoldChip, size: 22),
                         SizedBox(width: 10),
                         Expanded(
-                          child: Text('قنوات وحسابات',
+                          child: Text('قنوات وحسابات أنصح بها',
                               style: TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.bold, fontSize: 15)),
                         ),
                         Icon(Icons.chevron_left, size: 20),
@@ -73,14 +81,6 @@ class MoreTab extends StatelessWidget {
                   ),
                 ),
               ),
-            ),
-            _BigCard(
-              icon: Icons.spa_outlined,
-              title: 'الأذكار',
-              subtitle: 'حصن المسلم كاملاً، وعدّاد التسبيح',
-              color: const Color(0xFF2E7D32),
-              onTap: () =>
-                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AdhkarScreen())),
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
