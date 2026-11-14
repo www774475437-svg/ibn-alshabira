@@ -33,6 +33,9 @@ class Repository extends ChangeNotifier {
   List<SocialLink> sheikhLinks = [];
   List<Video> videos = [];
   String lastBookId = '';
+
+  /// The last answer or article opened, for «أكمل» on the home page.
+  String lastFatwaId = '';
   String developerName = '';
   String developerUrl = '';
 
@@ -156,6 +159,7 @@ class Repository extends ChangeNotifier {
       prefs.setString('videosSaved', jsonEncode([for (final v in videos) v.toJson()]));
     }
     lastBookId = prefs.getString('lastBookId') ?? '';
+    lastFatwaId = prefs.getString('lastFatwaId') ?? '';
 
     final ln = jsonDecode(await rootBundle.loadString('assets/data/links.json')) as Map<String, dynamic>;
     sheikhLinks = ((ln['sheikh'] ?? []) as List)
@@ -679,6 +683,10 @@ class Repository extends ChangeNotifier {
 
   void markRead(String id) {
     _logDay(id);
+    if (lastFatwaId != id) {
+      lastFatwaId = id;
+      _prefs.setString('lastFatwaId', id);
+    }
     final key = _monthKey(DateTime.now());
     final set = readLog.putIfAbsent(key, () => <String>{});
     if (set.add(id)) {

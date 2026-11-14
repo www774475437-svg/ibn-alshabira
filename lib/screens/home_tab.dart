@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -13,12 +14,13 @@ import '../data/repository.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../services/cloud.dart';
-import 'ask_screen.dart';
 import 'channel_screen.dart';
 import 'book_reader_screen.dart';
 import 'content_screens.dart';
 import 'chapter_screen.dart';
 import 'trusted_screens.dart';
+import 'quran_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class HomeTab extends StatefulWidget {
   final VoidCallback onOpenSearch;
@@ -31,11 +33,39 @@ class HomeTab extends StatefulWidget {
 }
 
 class _HomeTabState extends State<HomeTab> {
+  List<Object> _feed = [];
+  int _feedKey = -1;
+  List<TrustedScholar> _scholars = [];
+
+  /// The long list under the sections: every answer and article once, in an
+  /// order that changes each day, with a book and a scholar now and then.
+  /// Nothing shown in «أُضيف حديثاً» or «جواب اليوم» is repeated here.
+  List<Object> _feedFor(Repository repo) {
+    final key = repo.fatwas.length * 31 + repo.books.length * 7 + _scholars.length;
+    if (key == _feedKey) return _feed;
+    _feedKey = key;
+    final day = DateTime.now().difference(DateTime(2024)).inDays;
+    final skip = {for (final f in repo.latest()) f.id, if (repo.fatwaOfDay != null) repo.fatwaOfDay!.id};
+    final fatwas = repo.fatwas.where((f) => !skip.contains(f.id)).toList()..shuffle(math.Random(day));
+    final books = [...repo.books]..shuffle(math.Random(day));
+    final out = <Object>[];
+    var b = 0, sc = 0;
+    for (var i = 0; i < fatwas.length; i++) {
+      out.add(fatwas[i]);
+      if (i % 6 == 5 && b < books.length) out.add(books[b++]);
+      if (i % 14 == 9 && sc < _scholars.length) out.add(_scholars[sc++]);
+    }
+    return _feed = out;
+  }
+
   DateTime? _updateAt;
 
   @override
   void initState() {
     super.initState();
+    loadTrustedScholars().then((l) {
+      if (mounted) setState(() => _scholars = l.where((x) => x.bio.isNotEmpty).toList());
+    }).catchError((_) {});
     updatePublishedAt().then((v) {
       if (mounted && v != null) setState(() => _updateAt = v);
     });
@@ -45,7 +75,6 @@ class _HomeTabState extends State<HomeTab> {
   Widget build(BuildContext context) {
     final onOpenSearch = widget.onOpenSearch;
     final repo = Repository.instance;
-    final latest = repo.fatwas.reversed.take(5).toList();
     return ListenableBuilder(
       listenable: repo,
       builder: (context, _) => RefreshIndicator(
@@ -111,9 +140,6 @@ class _HomeTabState extends State<HomeTab> {
               ),
             ),
           ),
-          const SliverToBoxAdapter(child: _CloudSections()),
-          if (!kIsWeb && repo.lastBook != null)
-            SliverToBoxAdapter(child: _ContinueReading(book: repo.lastBook!)),
           if (_updateAt != null)
             SliverToBoxAdapter(
               child: _Banner(
@@ -134,9 +160,14 @@ class _HomeTabState extends State<HomeTab> {
                 url: AppConfig.apkUrl,
               ),
             ),
+          // Back to where the reader stopped.
+          const SliverToBoxAdapter(child: _Resume()),
+          // The chapters, as a row that moves right and left.
+          const SliverToBoxAdapter(child: _ChapterStrip()),
           SliverToBoxAdapter(child: _TodayStrip(onSetWird: widget.onOpenMore)),
           if (repo.fatwaOfDay != null)
             SliverToBoxAdapter(child: _FatwaOfDay(fatwa: repo.fatwaOfDay!)),
+          const SliverToBoxAdapter(child: _DailyVerse()),
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
@@ -155,28 +186,11 @@ class _HomeTabState extends State<HomeTab> {
               ),
             ),
           ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-              child: Card(
-                child: ListTile(
-                  leading: const Icon(Icons.forum_outlined, color: kGold),
-                  title: const Text('اسأل الشيخ', style: TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: ListenableBuilder(
-                    listenable: Cloud.instance,
-                    builder: (context, _) => Cloud.instance.unseenReplies > 0
-                        ? const Text('وصلك رد جديد من الشيخ ✉️',
-                            style: TextStyle(color: kGoldChip, fontWeight: FontWeight.bold))
-                        : const Text('أرسل سؤالك ويصلك الجواب'),
-                  ),
-                  trailing: const Icon(Icons.chevron_left),
-                  onTap: () => Navigator.of(context)
-                      .push(MaterialPageRoute(builder: (_) => const AskScreen())),
-                ),
-              ),
-            ),
-          ),
-          const SliverToBoxAdapter(child: _MostSearched()),
+          const SliverToBoxAdapter(child: _CloudSections()),
+          const SliverToBoxAdapter(child: _Counts()),
+
+          // ------------------------------------------------ للقراءة
+          const SliverToBoxAdapter(child: _GroupTitle('للقراءة', Icons.menu_book_outlined)),
           if (repo.latest().isNotEmpty) ...[
             const SliverToBoxAdapter(child: _SectionTitle('أُضيف حديثاً')),
             SliverToBoxAdapter(
@@ -223,43 +237,45 @@ class _HomeTabState extends State<HomeTab> {
               ),
             ),
           ],
-          const SliverToBoxAdapter(child: _SectionTitle('الأبواب')),
-          SliverPadding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            sliver: SliverGrid.builder(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
-                mainAxisSpacing: 8,
-                crossAxisSpacing: 8,
-                childAspectRatio: 0.95,
-              ),
-              itemCount: repo.chapters.length,
-              itemBuilder: (context, i) {
-                final c = repo.chapters[i];
-                return Card(
-                  margin: EdgeInsets.zero,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(16),
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => ChapterScreen(chapter: c)),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(chapterIcon(c.icon), size: 32, color: kGold),
-                        const SizedBox(height: 8),
-                        Text(c.name,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(fontWeight: FontWeight.w600)),
-                        Text('${repo.countInChapter(c.id)}',
-                            style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                      ],
+          const SliverToBoxAdapter(child: _MostRead()),
+          const SliverToBoxAdapter(child: _MostSearched()),
+
+          // ------------------------------------------------ للمشاهدة والمتابعة
+          const SliverToBoxAdapter(child: _GroupTitle('للمشاهدة والمتابعة', Icons.play_circle_outline)),
+          if (repo.videos.isEmpty)
+            SliverToBoxAdapter(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const _SectionTitle('المرئيات'),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+                    child: Card(
+                      margin: EdgeInsets.zero,
+                      child: ListTile(
+                        leading: const Icon(Icons.play_circle_fill, color: Colors.red, size: 34),
+                        title: const Text('مقاطع الشيخ المرئية'),
+                        subtitle: const Text('افتح قناة الشيخ في يوتيوب'),
+                        trailing: const Icon(Icons.chevron_left),
+                        onTap: () => Navigator.of(context)
+                            .push(MaterialPageRoute(builder: (_) => const VideosScreen())),
+                      ),
                     ),
                   ),
-                );
-              },
+                ],
+              ),
             ),
-          ),
+          if (repo.videos.isNotEmpty) ...[
+            SliverToBoxAdapter(
+              child: _SectionTitle('أحدث المرئيات',
+                  action: 'الكل',
+                  onAction: () => Navigator.of(context)
+                      .push(MaterialPageRoute(builder: (_) => const VideosScreen()))),
+            ),
+            SliverToBoxAdapter(
+              child: _VideoStrip(videos: repo.videos.take(8).toList()),
+            ),
+          ],
           if (repo.channel.isNotEmpty) ...[
             SliverToBoxAdapter(
               child: _SectionTitle('أحدث منشورات القناة',
@@ -306,41 +322,9 @@ class _HomeTabState extends State<HomeTab> {
               ),
             ),
           ],
-          if (repo.videos.isEmpty)
-            SliverToBoxAdapter(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const _SectionTitle('المرئيات'),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
-                    child: Card(
-                      margin: EdgeInsets.zero,
-                      child: ListTile(
-                        leading: const Icon(Icons.play_circle_fill, color: Colors.red, size: 34),
-                        title: const Text('مقاطع الشيخ المرئية'),
-                        subtitle: const Text('افتح قناة الشيخ في يوتيوب'),
-                        trailing: const Icon(Icons.chevron_left),
-                        onTap: () => Navigator.of(context)
-                            .push(MaterialPageRoute(builder: (_) => const VideosScreen())),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          if (repo.videos.isNotEmpty) ...[
-            SliverToBoxAdapter(
-              child: _SectionTitle('أحدث المرئيات',
-                  action: 'الكل',
-                  onAction: () => Navigator.of(context)
-                      .push(MaterialPageRoute(builder: (_) => const VideosScreen()))),
-            ),
-            SliverToBoxAdapter(
-              child: _VideoStrip(videos: repo.videos.take(8).toList()),
-            ),
-          ],
-          const SliverToBoxAdapter(child: _SectionTitle('أحدث ما نُشر')),
+
+          // ------------------------------------------------ تصفّح المكتبة
+          const SliverToBoxAdapter(child: _GroupTitle('تصفّح المكتبة', Icons.explore_outlined)),
           if (!repo.fullyLoaded)
             const SliverToBoxAdapter(
               child: Padding(
@@ -354,9 +338,16 @@ class _HomeTabState extends State<HomeTab> {
                 ),
               ),
             ),
+          // Answers, articles, books and scholars, one after another, as far as the reader scrolls.
           SliverList.builder(
-            itemCount: latest.length,
-            itemBuilder: (context, i) => FatwaTile(fatwa: latest[i]),
+            itemCount: _feedFor(repo).length,
+            itemBuilder: (context, i) {
+              final item = _feedFor(repo)[i];
+              if (item is Fatwa) return FatwaTile(fatwa: item);
+              if (item is Book) return _BookRow(book: item);
+              if (item is TrustedScholar) return _ScholarRow(scholar: item);
+              return const SizedBox.shrink();
+            },
           ),
           const SliverToBoxAdapter(child: SizedBox(height: 24)),
         ],
@@ -755,6 +746,330 @@ class _Banner extends StatelessWidget {
       ),
     );
   }
+}
+
+/// A heading for a group of sections, with a gold bar.
+class _GroupTitle extends StatelessWidget {
+  final String text;
+  final IconData icon;
+  const _GroupTitle(this.text, this.icon);
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 30, 16, 2),
+        child: Row(
+          children: [
+            Container(width: 5, height: 26, decoration: BoxDecoration(color: kGold, borderRadius: BorderRadius.circular(3))),
+            const SizedBox(width: 10),
+            Icon(icon, color: kGold, size: 22),
+            const SizedBox(width: 8),
+            Text(text, style: const TextStyle(fontFamily: 'Tajawal', fontSize: 21, fontWeight: FontWeight.bold)),
+            const SizedBox(width: 12),
+            const Expanded(child: Divider()),
+          ],
+        ),
+      );
+}
+
+/// «آخر ما قرأت»: the last answer, book and mushaf page, each one tap away.
+class _Resume extends StatefulWidget {
+  const _Resume();
+
+  @override
+  State<_Resume> createState() => _ResumeState();
+}
+
+class _ResumeState extends State<_Resume> {
+  int? _page;
+
+  @override
+  void initState() {
+    super.initState();
+    SharedPreferences.getInstance().then((p) {
+      if (mounted) setState(() => _page = p.getInt('quranPage'));
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final repo = Repository.instance;
+    final f = repo.lastFatwaId.isEmpty ? null : repo.findById(repo.lastFatwaId);
+    final book = kIsWeb ? null : repo.lastBook;
+    if (f == null && book == null && _page == null) return const SizedBox.shrink();
+    Widget chip(IconData icon, String text, VoidCallback onTap) => Padding(
+          padding: const EdgeInsetsDirectional.only(end: 8),
+          child: ActionChip(
+            avatar: Icon(icon, size: 18, color: kGoldChip),
+            label: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 190),
+              child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis),
+            ),
+            onPressed: onTap,
+          ),
+        );
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: SizedBox(
+        height: 44,
+        child: ListView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          children: [
+            const Center(
+              child: Padding(
+                padding: EdgeInsetsDirectional.only(end: 8),
+                child: Text('أكمل:', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ),
+            if (f != null) chip(Icons.article_outlined, f.title, () => openFatwa(context, f)),
+            if (_page != null)
+              chip(Icons.auto_stories_outlined, 'المصحف · صفحة $_page',
+                  () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const QuranScreen()))),
+            if (book != null)
+              chip(Icons.menu_book_outlined, book.title,
+                  () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => BookReaderScreen(book: book)))),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The chapters as round buttons in one row.
+class _ChapterStrip extends StatelessWidget {
+  const _ChapterStrip();
+
+  @override
+  Widget build(BuildContext context) {
+    final repo = Repository.instance;
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: SizedBox(
+        height: 96,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          itemCount: repo.chapters.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 6),
+          itemBuilder: (context, i) {
+            final c = repo.chapters[i];
+            return InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: () =>
+                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => ChapterScreen(chapter: c))),
+              child: SizedBox(
+                width: 76,
+                child: Column(
+                  children: [
+                    Container(
+                      width: 54,
+                      height: 54,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: kGold.withValues(alpha: 0.14),
+                        border: Border.all(color: kGold.withValues(alpha: 0.6)),
+                      ),
+                      child: Icon(chapterIcon(c.icon), color: kGoldChip, size: 26),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(c.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                    Text('${repo.countInChapter(c.id)}', style: const TextStyle(fontSize: 10.5, color: Colors.grey)),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+/// «آية اليوم»: one verse a day from the bundled mushaf; opens its page.
+class _DailyVerse extends StatelessWidget {
+  const _DailyVerse();
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<QuranData>(
+        future: QuranData.load(),
+        builder: (context, snap) {
+          final q = snap.data;
+          if (q == null) return const SizedBox.shrink();
+          final day = DateTime.now().difference(DateTime(2024)).inDays;
+          var i = (day * 2459) % q.verses.length;
+          // A verse of a fitting length for a small card.
+          for (var n = 0; n < 60; n++) {
+            final len = q.words(i).length;
+            if (len >= 40 && len <= 220) break;
+            i = (i + 1) % q.verses.length;
+          }
+          final (s, v) = q.at(i);
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+            child: Card(
+              margin: EdgeInsets.zero,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(18),
+                onTap: () => Navigator.of(context)
+                    .push(MaterialPageRoute(builder: (_) => QuranScreen(openAt: i))),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(children: [
+                        Icon(Icons.auto_stories_outlined, color: kGold, size: 18),
+                        SizedBox(width: 6),
+                        Text('آية اليوم', style: TextStyle(color: kGoldChip, fontWeight: FontWeight.bold)),
+                      ]),
+                      const SizedBox(height: 6),
+                      Text(q.words(i),
+                          textDirection: TextDirection.rtl,
+                          style: const TextStyle(fontFamily: 'UthmanicHafs', fontSize: 21, height: 1.9)),
+                      const SizedBox(height: 4),
+                      Text('سورة ${q.names[s - 1]} · الآية ${QuranData.digits(v)}',
+                          style: const TextStyle(color: Colors.grey, fontSize: 12.5)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      );
+}
+
+/// What the library holds, in one line of numbers.
+class _Counts extends StatelessWidget {
+  const _Counts();
+
+  @override
+  Widget build(BuildContext context) {
+    final repo = Repository.instance;
+    final answers = repo.fatwas.where((f) => f.question.isNotEmpty).length;
+    Widget cell(String n, String label) => Expanded(
+          child: Column(
+            children: [
+              Text(n, style: const TextStyle(fontFamily: 'Tajawal', fontSize: 20, fontWeight: FontWeight.bold, color: kGoldChip)),
+              Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+            ],
+          ),
+        );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 14, 12, 0),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          border: Border.all(color: kGold.withValues(alpha: 0.5)),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          children: [
+            cell('$answers', 'جواباً'),
+            cell('${repo.fatwas.length - answers}', 'مقالاً'),
+            cell('${repo.books.length}', 'كتاباً'),
+            cell('${repo.videos.length}', 'مرئياً'),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The three answers people read most.
+class _MostRead extends StatefulWidget {
+  const _MostRead();
+
+  @override
+  State<_MostRead> createState() => _MostReadState();
+}
+
+class _MostReadState extends State<_MostRead> {
+  late final Future<List<(String, int)>> _load = Cloud.instance.mostRead(limit: 15);
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<List<(String, int)>>(
+        future: _load,
+        builder: (context, snap) {
+          final repo = Repository.instance;
+          final list = [
+            for (final e in snap.data ?? const <(String, int)>[])
+              if (repo.findById(e.$1) != null) repo.findById(e.$1)!,
+          ].take(3).toList();
+          if (list.isEmpty) return const SizedBox.shrink();
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const _SectionTitle('الأكثر قراءة'),
+              for (final f in list) FatwaTile(fatwa: f),
+            ],
+          );
+        },
+      );
+}
+
+/// A book among the answers of the long list.
+class _BookRow extends StatelessWidget {
+  final Book book;
+  const _BookRow({required this.book});
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+        child: Card(
+          margin: EdgeInsets.zero,
+          color: kGold.withValues(alpha: 0.12),
+          child: ListTile(
+            leading: const Icon(Icons.menu_book, color: kGold, size: 30),
+            title: Text(book.title, style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: const Text('من كتب الشيخ'),
+            trailing: const Icon(Icons.chevron_left),
+            onTap: () =>
+                Navigator.of(context).push(MaterialPageRoute(builder: (_) => BookReaderScreen(book: book))),
+          ),
+        ),
+      );
+}
+
+/// A trusted scholar's short biography among the answers of the long list.
+class _ScholarRow extends StatelessWidget {
+  final TrustedScholar scholar;
+  const _ScholarRow({required this.scholar});
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+        child: Card(
+          margin: EdgeInsets.zero,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(18),
+            onTap: () =>
+                Navigator.of(context).push(MaterialPageRoute(builder: (_) => ScholarPage(scholar: scholar))),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(children: [
+                    const Icon(Icons.person_outline, color: kGold),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text('من سيرة ${scholar.name}',
+                          style: const TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.bold, fontSize: 16)),
+                    ),
+                    const Icon(Icons.chevron_left),
+                  ]),
+                  const SizedBox(height: 6),
+                  Text(scholar.bio, maxLines: 3, overflow: TextOverflow.ellipsis, style: const TextStyle(height: 1.8)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
 }
 
 /// The newest videos in a row that moves by itself, and by the finger.
