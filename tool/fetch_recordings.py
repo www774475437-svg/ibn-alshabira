@@ -15,7 +15,7 @@ import urllib.request
 from pathlib import Path
 
 CHANNEL = "QaidSandVe"
-VERSION = 3
+VERSION = 4
 OUT = Path(os.environ.get("MEDIA_ROOT", ".")) / "recordings.json"
 
 msg_re = re.compile(r'<div class="tgme_widget_message_wrap.*?(?=<div class="tgme_widget_message_wrap|\Z)', re.S)
@@ -69,6 +69,8 @@ def title_of(text):
     lines = []
     for raw in text.split("\n"):
         line = raw.strip()
+        if trim_edges(line).startswith("محتويات"):
+            break  # what follows is the list of the lesson's points
         if not line or line.startswith("#") or any(k in line for k in SKIP):
             continue
         core = trim_edges(line)
@@ -190,6 +192,8 @@ def main():
         if (not t or t.startswith("محتويات")) and len(file_title) > 6:
             t = file_title
         t = re.sub(r"\s+", " ", t.replace("#", " ").replace("_", " ")).strip()
+        if i in (1476, 1473, 1442):
+            print("DEBUG", i, repr(text[:400]), "| file:", repr(p["dtitle"]), repr(p["dextra"]))
         if not t:
             t = f"تسجيل صوتي {p['date']}".strip()
         dur = p["dur"] if p["dur"] not in ("", "0:00") else ""
