@@ -13,7 +13,7 @@ h = index.read_text(encoding="utf-8")
 h = re.sub(r"<html[^>]*>", '<html lang="ar" dir="rtl">', h, count=1)
 h = re.sub(r"<title>.*?</title>", f"<title>{TITLE}</title>", h, count=1, flags=re.S)
 h = re.sub(r'<meta name="description" content="[^"]*">', f'<meta name="description" content="{DESC}">', h, count=1)
-SITE = "https://www774475437-svg.github.io/ibn-alshabira/"
+SITE = "https://ibnalshabira.com/"
 if 'property="og:title"' not in h:
     h = h.replace("</head>",
                   f'  <meta property="og:title" content="{TITLE}">\n'

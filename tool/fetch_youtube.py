@@ -54,7 +54,7 @@ except Exception as ex:
     print("YouTube not reachable:", ex)
     # Keep the last good list (the one the live site already shows).
     try:
-        old = json.loads(fetch("https://www774475437-svg.github.io/ibn-alshabira/assets/assets/data/videos.json"))
+        old = json.loads(fetch("https://ibnalshabira.com/assets/assets/data/videos.json"))
         if old:
             OUT.write_text(json.dumps(old, ensure_ascii=False, indent=1), encoding="utf-8")
             print("kept the last list:", len(old), "videos")

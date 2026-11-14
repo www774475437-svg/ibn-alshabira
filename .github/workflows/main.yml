@@ -125,7 +125,7 @@ jobs:
           path: assets/data
 
       - name: Build website
-        run: flutter build web --release --no-web-resources-cdn --base-href /ibn-alshabira/ --dart-define=BUILD_NUMBER=0
+        run: flutter build web --release --no-web-resources-cdn --base-href / --dart-define=BUILD_NUMBER=0
 
       - name: Publish website (gh-pages branch)
         uses: peaceiris/actions-gh-pages@v4
@@ -133,3 +133,4 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: build/web
           force_orphan: true
+          cname: ibnalshabira.com
