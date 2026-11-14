@@ -846,20 +846,57 @@ void showSubsSheet(BuildContext context, Chapter chapter) {
 }
 
 /// Full admin: rename chapters and add new ones.
+/// Saves the chapters settings: names, added chapters and chosen icons.
+Future<void> saveChapters(BuildContext context, Map<String, String> names, List<Chapter> extra, String log,
+    [Map<String, String>? icons]) async {
+  final err = await Cloud.instance.setConfig(
+    'chapters',
+    {
+      'names': names,
+      'extra': [for (final c in extra) {'id': c.id, 'name': c.name}],
+      'icons': icons ?? Repository.instance.chapterIconChoice,
+    },
+    log,
+  );
+  if (context.mounted) _toast(context, err ?? 'تم الحفظ ✅');
+}
+
+/// «باب جديد» with a name and an icon; used in the admin panel and while reviewing.
+Future<void> addChapterDialog(BuildContext context) async {
+  final repo = Repository.instance;
+  final c = TextEditingController();
+  final name = await showDialog<String>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('باب جديد'),
+      content: TextField(controller: c, autofocus: true, decoration: _deco('اسم الباب')),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+        FilledButton(onPressed: () => Navigator.pop(ctx, c.text.trim()), child: const Text('التالي: الرمز')),
+      ],
+    ),
+  );
+  if (name == null || name.isEmpty || !context.mounted) return;
+  final icon = await pickChapterIcon(context);
+  if (!context.mounted) return;
+  final id = 'c${DateTime.now().millisecondsSinceEpoch}';
+  final extra = repo.chapters.where((e) => !repo.isBaseChapter(e.id)).toList();
+  final names = {for (final e in repo.chapters.where((e) => repo.isBaseChapter(e.id))) e.id: e.name};
+  await saveChapters(
+    context,
+    names,
+    [...extra, Chapter(id: id, name: name, icon: 'mutafarriq')],
+    'إضافة باب',
+    {...repo.chapterIconChoice, if (icon != null) id: icon},
+  );
+}
+
 class ChaptersTab extends StatelessWidget {
   const ChaptersTab({super.key});
 
-  Future<void> _save(BuildContext context, Map<String, String> names, List<Chapter> extra, String log) async {
-    final err = await Cloud.instance.setConfig(
-      'chapters',
-      {
-        'names': names,
-        'extra': [for (final c in extra) {'id': c.id, 'name': c.name}],
-      },
-      log,
-    );
-    if (context.mounted) _toast(context, err ?? 'تم الحفظ ✅');
-  }
+  Future<void> _save(BuildContext context, Map<String, String> names, List<Chapter> extra, String log,
+          [Map<String, String>? icons]) =>
+      saveChapters(context, names, extra, log, icons);
 
   Future<String?> _askName(BuildContext context, String title, String initial) {
     final c = TextEditingController(text: initial);
@@ -907,6 +944,15 @@ class ChaptersTab extends StatelessWidget {
                         onPressed: () => showSubsSheet(context, c),
                       ),
                       IconButton(
+                        tooltip: 'تغيير الرمز',
+                        icon: const Icon(Icons.emoji_symbols_outlined),
+                        onPressed: () async {
+                          final icon = await pickChapterIcon(context);
+                          if (icon == null || !context.mounted) return;
+                          await _save(context, names, extra, 'تغيير رمز باب', {...repo.chapterIconChoice, c.id: icon});
+                        },
+                      ),
+                      IconButton(
                         tooltip: 'تغيير الاسم',
                         icon: const Icon(Icons.edit),
                         onPressed: () async {
@@ -944,12 +990,7 @@ class ChaptersTab extends StatelessWidget {
             FilledButton.icon(
               icon: const Icon(Icons.add),
               label: const Text('إضافة باب جديد'),
-              onPressed: () async {
-                final n = await _askName(context, 'باب جديد', '');
-                if (n == null || n.isEmpty || !context.mounted) return;
-                final id = 'c${DateTime.now().millisecondsSinceEpoch}';
-                await _save(context, names, [...extra, Chapter(id: id, name: n, icon: 'mutafarriq')], 'إضافة باب');
-              },
+              onPressed: () => addChapterDialog(context),
             ),
           ],
         );

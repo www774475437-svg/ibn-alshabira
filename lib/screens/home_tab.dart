@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../config.dart';
 import '../services/update_check.dart';
+import '../services/fresh_posts.dart';
 
 import '../data/hijri.dart';
 import '../data/models.dart';
@@ -44,7 +45,13 @@ class _HomeTabState extends State<HomeTab> {
     final latest = repo.fatwas.reversed.take(5).toList();
     return ListenableBuilder(
       listenable: repo,
-      builder: (context, _) => CustomScrollView(
+      builder: (context, _) => RefreshIndicator(
+        onRefresh: () async {
+          await loadFreshPosts();
+          await Future<void>.delayed(const Duration(milliseconds: 400));
+        },
+        child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           SliverToBoxAdapter(child: _Header(onOpenSearch: onOpenSearch, onOpenMore: widget.onOpenMore)),
           const SliverToBoxAdapter(child: _CloudSections()),
@@ -304,6 +311,7 @@ class _HomeTabState extends State<HomeTab> {
           ),
           const SliverToBoxAdapter(child: SizedBox(height: 24)),
         ],
+        ),
       ),
     );
   }

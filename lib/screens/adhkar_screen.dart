@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/repository.dart' show normalizeArabic;
 import '../theme.dart';
@@ -41,6 +42,18 @@ class AdhkarScreen extends StatefulWidget {
 
 class _AdhkarScreenState extends State<AdhkarScreen> {
   String _q = '';
+  SharedPreferences? _prefs;
+
+  @override
+  void initState() {
+    super.initState();
+    SharedPreferences.getInstance().then((p) {
+      if (mounted) setState(() => _prefs = p);
+    });
+  }
+
+  /// How many adhkar of a square were finished today.
+  int _doneToday(String key) => _prefs?.getInt('adhkar_${_today()}_$key') ?? 0;
 
   @override
   Widget build(BuildContext context) {
@@ -63,15 +76,18 @@ class _AdhkarScreenState extends State<AdhkarScreen> {
           final all = snap.data!;
           final n = normalizeArabic(_q);
           final items = n.isEmpty ? all : all.where((c) => normalizeArabic(c.name).contains(n)).toList();
-          void open(_Category c) =>
-              Navigator.of(context).push(MaterialPageRoute(builder: (_) => _CategoryScreen(category: c)));
+          void open(_Category c, [String? key]) => Navigator.of(context)
+              .push(MaterialPageRoute(builder: (_) => _CategoryScreen(category: c, progressKey: key)))
+              .then((_) {
+            if (mounted) setState(() {});
+          });
           _Category? at(int i) => i < all.length ? all[i] : null;
           // The four everyday chapters, as big squares on top.
-          final squares = <(String, IconData, List<Color>, _Category?)>[
-            ('أذكار الصباح', Icons.wb_sunny_outlined, const [Color(0xFFF2A93B), Color(0xFFE2762A)], at(0)),
-            ('أذكار المساء', Icons.nights_stay_outlined, const [Color(0xFF3F4C8C), Color(0xFF232B57)], at(0)),
-            ('أذكار النوم', Icons.bedtime_outlined, const [Color(0xFF5B4B9A), Color(0xFF342A63)], at(1)),
-            ('أذكار بعد الصلاة', Icons.mosque_outlined, const [Color(0xFF2E8B57), Color(0xFF1B5E3A)], at(26)),
+          final squares = <(String, IconData, List<Color>, _Category?, String)>[
+            ('أذكار الصباح', Icons.wb_sunny_outlined, const [Color(0xFFF2A93B), Color(0xFFE2762A)], at(0), 'morning'),
+            ('أذكار المساء', Icons.nights_stay_outlined, const [Color(0xFF3F4C8C), Color(0xFF232B57)], at(0), 'evening'),
+            ('أذكار النوم', Icons.bedtime_outlined, const [Color(0xFF5B4B9A), Color(0xFF342A63)], at(1), 'sleep'),
+            ('أذكار بعد الصلاة', Icons.mosque_outlined, const [Color(0xFF2E8B57), Color(0xFF1B5E3A)], at(26), 'salah'),
           ];
           return CustomScrollView(
             slivers: [
@@ -84,7 +100,7 @@ class _AdhkarScreenState extends State<AdhkarScreen> {
                     crossAxisSpacing: 10,
                     childAspectRatio: 1.45,
                     children: [
-                      for (final (name, icon, colors, c) in squares)
+                      for (final (name, icon, colors, c, key) in squares)
                         Material(
                           borderRadius: BorderRadius.circular(20),
                           clipBehavior: Clip.antiAlias,
@@ -94,7 +110,7 @@ class _AdhkarScreenState extends State<AdhkarScreen> {
                                   begin: Alignment.topRight, end: Alignment.bottomLeft, colors: colors),
                             ),
                             child: InkWell(
-                              onTap: c == null ? null : () => open(c),
+                              onTap: c == null ? null : () => open(c, key),
                               child: Padding(
                                 padding: const EdgeInsets.all(14),
                                 child: Column(
@@ -102,12 +118,23 @@ class _AdhkarScreenState extends State<AdhkarScreen> {
                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
                                     Icon(icon, color: Colors.white, size: 32),
-                                    Text(name,
-                                        style: const TextStyle(
-                                            fontFamily: 'Tajawal',
-                                            color: Colors.white,
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.bold)),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(name,
+                                            style: const TextStyle(
+                                                fontFamily: 'Tajawal',
+                                                color: Colors.white,
+                                                fontSize: 18,
+                                                fontWeight: FontWeight.bold)),
+                                        if (c != null && _doneToday(key) > 0)
+                                          Text(
+                                              _doneToday(key) >= c.items.length
+                                                  ? 'أتممتها اليوم ✓'
+                                                  : 'أتممت ${_doneToday(key)} من ${c.items.length}',
+                                              style: const TextStyle(color: Colors.white, fontSize: 12.5)),
+                                      ],
+                                    ),
                                   ],
                                 ),
                               ),
@@ -175,9 +202,17 @@ class _AdhkarScreenState extends State<AdhkarScreen> {
   }
 }
 
+String _today() {
+  final d = DateTime.now();
+  return '${d.year}-${d.month}-${d.day}';
+}
+
 class _CategoryScreen extends StatefulWidget {
   final _Category category;
-  const _CategoryScreen({required this.category});
+
+  /// When set, how many adhkar were finished today is saved under this name.
+  final String? progressKey;
+  const _CategoryScreen({required this.category, this.progressKey});
 
   @override
   State<_CategoryScreen> createState() => _CategoryScreenState();
@@ -207,6 +242,14 @@ class _CategoryScreenState extends State<_CategoryScreen> {
                   : () {
                       HapticFeedback.lightImpact();
                       setState(() => _left[i]--);
+                      final key = widget.progressKey;
+                      if (key != null && _left[i] <= 0) {
+                        final done = _left.where((n) => n <= 0).length;
+                        SharedPreferences.getInstance().then((p) {
+                          final k = 'adhkar_${_today()}_$key';
+                          if (done > (p.getInt(k) ?? 0)) p.setInt(k, done);
+                        });
+                      }
                     },
               child: Padding(
                 padding: const EdgeInsets.all(16),
