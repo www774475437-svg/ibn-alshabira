@@ -31,12 +31,26 @@ try:
                 break
         except Exception as e:
             print("tried", url, "->", e)
-    m = (re.search(r'"channelId":"(UC[\w-]{22})"', page)
-         or re.search(r'channel_id=(UC[\w-]{22})', page)
-         or re.search(r'"externalId":"(UC[\w-]{22})"', page))
-    if not m:
-        raise RuntimeError("channel id not found")
-    feed = fetch(f"https://www.youtube.com/feeds/videos.xml?channel_id={m.group(1)}")
+    title = re.search(r"<title>([^<]*)</title>", page)
+    print("page:", len(page), "chars, title:", title.group(1) if title else None)
+    ids = []
+    for pat in (r'"externalId":"(UC[\w-]{22})"', r'"browseId":"(UC[\w-]{22})"', r'/channel/(UC[\w-]{22})',
+                r'channel_id=(UC[\w-]{22})', r'"channelId":"(UC[\w-]{22})"'):
+        for found in re.findall(pat, page):
+            if found not in ids:
+                ids.append(found)
+    print("channel ids seen:", ids[:6])
+    feed = ""
+    for cid in ids[:6]:
+        try:
+            feed = fetch(f"https://www.youtube.com/feeds/videos.xml?channel_id={cid}")
+            if "<entry>" in feed:
+                print("feed of", cid)
+                break
+        except Exception as e:
+            print("feed", cid, "->", e)
+    if "<entry>" not in feed:
+        feed = fetch(f"https://www.youtube.com/feeds/videos.xml?user={HANDLE}")
     videos = []
     for entry in feed.split("<entry>")[1:]:
         vid = re.search(r"<yt:videoId>([^<]+)</yt:videoId>", entry)
@@ -47,7 +61,7 @@ try:
                            "published": (pub.group(1) if pub else "")[:10]})
     if videos:
         OUT.write_text(json.dumps(videos, ensure_ascii=False, indent=1), encoding="utf-8")
-    print(f"channel {m.group(1)}: {len(videos)} videos")
+    print(len(videos), "videos")
     if not videos:
         raise RuntimeError("empty feed")
 except Exception as ex:

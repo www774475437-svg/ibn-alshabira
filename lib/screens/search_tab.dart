@@ -7,6 +7,7 @@ import '../services/cloud.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'chapter_screen.dart';
+import 'trusted_screens.dart';
 
 /// Common topics shown in «الفهرس» (tap to search).
 const kIndexTopics = [
@@ -195,6 +196,20 @@ class _SearchTabState extends State<SearchTab> {
                   ],
                 ),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            child: SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF2E7D32), foregroundColor: Colors.white),
+                icon: const Icon(Icons.manage_search),
+                label: const Text('بحث الفتاوى من كتب الثقات'),
+                onPressed: () => Navigator.of(context)
+                    .push(MaterialPageRoute(builder: (_) => TrustedFatwaScreen(initial: _query.trim()))),
               ),
             ),
           ),

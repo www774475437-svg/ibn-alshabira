@@ -12,7 +12,7 @@ import 'favorites_tab.dart';
 import 'home_tab.dart';
 import 'more_tab.dart';
 import 'ask_screen.dart';
-import 'content_screens.dart';
+import 'trusted_screens.dart';
 import 'search_tab.dart';
 
 class HomeShell extends StatefulWidget {
@@ -103,7 +103,7 @@ class _HomeShellState extends State<HomeShell> {
             case 'admin':
               return const AdminScreen();
             case 'scholars':
-              return const ScholarsScreen();
+              return const TrustedScholarsScreen();
             default:
               return const MoreTab();
           }
