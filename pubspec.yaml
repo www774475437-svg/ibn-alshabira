@@ -1,7 +1,7 @@
 name: ibn_alshabira
 description: "تطبيق ابن الشابرة — فتاوى ومقالات وكتب الشيخ قايد بن غانم الشابرة"
 publish_to: 'none'
-version: 3.4.0+1
+version: 3.5.0+1
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -28,6 +28,8 @@ dependencies:
   firebase_auth: ^6.0.0
   google_sign_in: ^7.0.0
   cloud_firestore: ^6.0.0
+  firebase_app_check: any
+  firebase_ai: any
 
 dev_dependencies:
   flutter_test:

@@ -879,6 +879,8 @@ class Cloud extends ChangeNotifier {
       ];
       final mb = c['app']?['minBuild'];
       minBuild = mb is int ? mb : 0;
+      aiEnabled = c['ai']?['enabled'] != false;
+      aiSummary = c['ai']?['summary'] != false;
       aboutText = '${c['about']?['text'] ?? ''}';
       pinned = ((c['pinned']?['ids'] ?? []) as List).map((e) => '$e').toList();
       final ch = c['chapters'];
@@ -970,6 +972,28 @@ class Cloud extends ChangeNotifier {
 
   /// Builds older than this must update (0 = no forced update).
   int minBuild = 0;
+
+  /// The staff can switch the AI help off, or only its written summary.
+  bool aiEnabled = true;
+  bool aiSummary = true;
+
+  /// A reader reports a wrong AI summary; it reaches the staff's reports.
+  Future<String?> reportAi(String question, String summary) async {
+    if (!ready) return 'يحتاج اتصالاً بالإنترنت';
+    try {
+      final note = 'السؤال: $question\n\nالتلخيص: $summary';
+      await _db.collection('reports').add({
+        'answerId': 'ai',
+        'title': 'خطأ في تلخيص الذكاء الاصطناعي',
+        'note': note.length > 1900 ? note.substring(0, 1900) : note,
+        'by': email ?? '',
+        'at': FieldValue.serverTimestamp(),
+      });
+      return null;
+    } catch (_) {
+      return 'تعذّر الإرسال';
+    }
+  }
 
   Future<String?> setConfig(String id, Map<String, dynamic> data, String logText) async {
     try {
