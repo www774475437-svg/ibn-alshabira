@@ -1,12 +1,16 @@
 name: Probe audio channel
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.github/workflows/probe.yml']
 jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: |
-          cd tool && python3 - <<'P'
+          cd tool
+          cat > /tmp/probe.py <<'P'
           import fetch_recordings as f, re
           for before in (None, 1200, 300):
               for p in f.read_page(before):
@@ -14,3 +18,4 @@ jobs:
           b = f.get('https://t.me/s/QaidSandVe')
           i = b.find('voice_duration'); print(re.sub(r'\s+',' ', b[i-200:i+300]))
           P
+          python3 /tmp/probe.py
