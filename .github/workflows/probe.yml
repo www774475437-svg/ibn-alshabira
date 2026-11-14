@@ -11,11 +11,17 @@ jobs:
       - run: |
           cd tool
           cat > /tmp/probe.py <<'P'
-          import fetch_recordings as f, re
-          for before in (None, 1200, 300):
-              for p in f.read_page(before):
-                  print(p['id'], 'V' if p['voice'] else '-', p['dur'], repr(p['text'][:230]))
-          b = f.get('https://t.me/s/QaidSandVe')
-          i = b.find('voice_duration'); print(re.sub(r'\s+',' ', b[i-200:i+300]))
+          import fetch_recordings as f, re, collections
+          for before in (1186, 300, 900, 1700):
+              b = f.get('https://t.me/s/QaidSandVe?before=%d' % before)
+              for block in f.msg_re.findall(b):
+                  m = f.post_re.search(block)
+                  cls = sorted(set(re.findall(r'class="(tgme_widget_message_(?:voice|document|audio|video|photo|roundvideo)[a-z_]*)', block)))
+                  src = re.search(r'<audio[^>]+src="([^"]{0,40})', block)
+                  ttl = re.search(r'document_title[^>]*>([^<]*)<', block)
+                  extra = re.search(r'document_extra[^>]*>([^<]*)<', block)
+                  print('ID', m.group(1) if m else '?', cls[:4], 'SRC' if src else '', ttl.group(1) if ttl else '', extra.group(1) if extra else '', 'UNSUPPORTED' if 'message_media_not_supported' in block else '')
+          e = f.get('https://t.me/QaidSandVe/1180?embed=1&mode=tme')
+          print('EMBED1180', 'audio' in e, re.findall(r'class="(tgme_widget_message_[a-z_]+)', e)[:30])
           P
           PYTHONPATH=. python3 /tmp/probe.py
