@@ -738,7 +738,7 @@ class _LogoPicker extends StatelessWidget {
   Future<void> _pick(BuildContext context, int i) async {
     appLogo.value = i;
     final p = await SharedPreferences.getInstance();
-    await p.setInt('appLogo', i);
+    await p.setInt('appLogoV2', i);
     if (!kIsWeb) {
       try {
         await _channel.invokeMethod('set', i);

@@ -18,7 +18,7 @@ import 'theme.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final prefs = await SharedPreferences.getInstance();
-  appLogo.value = prefs.getInt('appLogo') ?? 0;
+  appLogo.value = prefs.getInt('appLogoV2') ?? 0;
   // The site opens at once with the newest answers, then brings the rest
   // of the library in the background (unless a link to one answer was opened).
   final quick = kIsWeb && AppConfig.idFromRoute(Uri.base.fragment) == null;

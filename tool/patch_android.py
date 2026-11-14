@@ -107,8 +107,8 @@ print("Launch background set")
 import glob, shutil
 res = Path("android/app/src/main/res/mipmap-xxxhdpi")
 res.mkdir(parents=True, exist_ok=True)
-for n in (2, 3):
-    shutil.copy(f"tool/launcher/ic_logo{n}.png", res / f"ic_logo{n}.png")
+for n in ("logo_green", "logo3"):
+    shutil.copy(f"tool/launcher/ic_{n}.png", res / f"ic_{n}.png")
 m = manifest.read_text(encoding="utf-8")
 if "activity-alias" not in m:
     launcher = re.compile(r'\s*<intent-filter>\s*<action android:name="android.intent.action.MAIN"\s*/>\s*'
@@ -121,7 +121,7 @@ if "activity-alias" not in m:
                 f' android:icon="@mipmap/{icon}" android:label="ابن الشابرة">'
                 '<intent-filter><action android:name="android.intent.action.MAIN"/>'
                 '<category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity-alias>')
-    aliases = alias("IconDefault", "ic_launcher", True) + alias("Icon2", "ic_logo2", False) + alias("Icon3", "ic_logo3", False)
+    aliases = alias("IconMain", "ic_launcher", True) + alias("IconGreen", "ic_logo_green", False) + alias("IconGold", "ic_logo3", False)
     i = m.index("</activity>") + len("</activity>")
     m = m[:i] + aliases + m[i:]
     manifest.write_text(m, encoding="utf-8")
@@ -147,7 +147,7 @@ class MainActivity : {base}() {{
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "ibn_alshabira/icon").setMethodCallHandler {{ call, result ->
             if (call.method == "set") {{
                 val chosen = (call.arguments as? Int) ?: 0
-                val names = listOf("IconDefault", "Icon2", "Icon3")
+                val names = listOf("IconMain", "IconGreen", "IconGold")
                 val pm = packageManager
                 try {{
                     // The chosen icon first, so the app is never without one.

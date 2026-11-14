@@ -3,6 +3,9 @@ on:
   schedule:
     - cron: '*/10 * * * *'
   workflow_dispatch:
+concurrency:
+  group: recordings
+  cancel-in-progress: false
 permissions:
   contents: write
 jobs:
@@ -23,6 +26,9 @@ jobs:
           # The private secret is used when it exists.
           BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN || '9080478362:AAG5t2TBfQEmopMu4ERAw1a6Qy-ahYxtmmQ' }}
         run: python3 -I ../code/tool/fetch_audio.py
+      - name: List all recordings of the channel (titles, dates)
+        working-directory: media
+        run: python3 -I ../code/tool/fetch_recordings.py
       - name: Save
         working-directory: media
         run: |
