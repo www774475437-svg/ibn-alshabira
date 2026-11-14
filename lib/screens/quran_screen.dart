@@ -406,57 +406,119 @@ class _MushafPageState extends State<_MushafPage> {
     final start = q.pageStart[widget.page - 1];
     final end = widget.page < QuranData.pages ? q.pageStart[widget.page] : q.verses.length;
     final ink = Theme.of(context).colorScheme.onSurface;
+    // One long-press recogniser per verse, shared by measuring and drawing.
+    final press = <int, LongPressGestureRecognizer>{
+      for (var i = start; i < end; i++) i: LongPressGestureRecognizer()..onLongPress = () => _menu(i),
+    };
+    _recognizers.addAll(press.values);
+
+    // The page as parts: a surah heading, or a run of verses.
+    final parts = <Object>[]; // (String name, bool basmala) or List<int>
+    var run = <int>[];
+    for (var i = start; i < end; i++) {
+      final (s, v) = q.at(i);
+      if (v == 1) {
+        if (run.isNotEmpty) parts.add(run);
+        run = <int>[];
+        parts.add((q.names[s - 1], s != 1 && s != 9));
+      }
+      run.add(i);
+    }
+    if (run.isNotEmpty) parts.add(run);
+
     return ListenableBuilder(
       listenable: QuranMarks.instance,
-      builder: (context, _) {
-        // Split the page into parts: a new part begins with each new surah.
-        final blocks = <Widget>[];
-        var spans = <InlineSpan>[];
-        void flush() {
-          if (spans.isEmpty) return;
-          blocks.add(Text.rich(
-            TextSpan(children: spans),
-            textAlign: TextAlign.justify,
-            textDirection: TextDirection.rtl,
-            style: TextStyle(fontFamily: 'AmiriQuran', fontSize: 23, height: 2.15, color: ink),
-          ));
-          spans = <InlineSpan>[];
-        }
+      builder: (context, _) => LayoutBuilder(
+        builder: (context, box) {
+          TextStyle style(double size) =>
+              TextStyle(fontFamily: 'AmiriQuran', fontSize: size, height: 1.95, color: ink);
+          TextSpan verses(List<int> run, double size) => TextSpan(
+                style: style(size),
+                children: [
+                  for (final i in run) ...[
+                    TextSpan(
+                      text: q.verses[i],
+                      recognizer: press[i],
+                      style: QuranMarks.instance.marks[i] == null
+                          ? null
+                          : TextStyle(
+                              backgroundColor:
+                                  _markColors[QuranMarks.instance.marks[i]!.$1]!.withValues(alpha: 0.45)),
+                    ),
+                    TextSpan(
+                      text: ' \u06DD${QuranData.digits(q.at(i).$2)} ',
+                      style: const TextStyle(color: kGold),
+                    ),
+                  ],
+                ],
+              );
+          double headerHeight(double size, bool basmala) => size * 2.5 + (basmala ? size * 2.1 : 0);
 
-        for (var i = start; i < end; i++) {
-          final (s, v) = q.at(i);
-          if (v == 1) {
-            flush();
-            blocks.add(_SurahHeader(name: q.names[s - 1], basmala: s != 1 && s != 9));
+          const outer = 10.0, inner = 12.0;
+          final width = box.maxWidth - 2 * (outer + inner) - 3;
+          final room = box.maxHeight - 2 * (outer + inner) - 6;
+          double heightAt(double size) {
+            var h = 0.0;
+            for (final p in parts) {
+              if (p is List<int>) {
+                final tp = TextPainter(
+                  text: verses(p, size),
+                  textDirection: TextDirection.rtl,
+                  textAlign: TextAlign.justify,
+                )..layout(maxWidth: width);
+                h += tp.height;
+                tp.dispose();
+              } else {
+                h += headerHeight(size, (p as (String, bool)).$2);
+              }
+            }
+            return h;
           }
-          final r = LongPressGestureRecognizer()..onLongPress = () => _menu(i);
-          _recognizers.add(r);
-          final mark = QuranMarks.instance.marks[i];
-          spans.add(TextSpan(
-            text: q.verses[i],
-            recognizer: r,
-            style: mark == null
-                ? null
-                : TextStyle(backgroundColor: _markColors[mark.$1]!.withValues(alpha: 0.45)),
-          ));
-          spans.add(TextSpan(
-            text: ' ۝${QuranData.digits(v)} ',
-            style: const TextStyle(color: kGold, fontFamily: 'AmiriQuran'),
-          ));
-        }
-        flush();
-        return SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+
+          // The largest letter size at which the whole page fits the screen,
+          // so the page is turned sideways only and never scrolled.
+          var size = 30.0;
+          var fits = false;
+          if (width > 50 && room > 100) {
+            while (size >= 9) {
+              if (heightAt(size) <= room) {
+                fits = true;
+                break;
+              }
+              size -= 0.5;
+            }
+          }
+          if (!fits) size = 16;
+
+          final content = Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: fits ? MainAxisSize.max : MainAxisSize.min,
+            children: [
+              for (final p in parts)
+                if (p is List<int>)
+                  Text.rich(verses(p, size), textAlign: TextAlign.justify, textDirection: TextDirection.rtl)
+                else
+                  SizedBox(
+                    height: headerHeight(size, (p as (String, bool)).$2),
+                    child: _SurahHeader(name: (p as (String, bool)).$1, basmala: (p as (String, bool)).$2, size: size),
+                  ),
+            ],
+          );
+          final framed = Container(
+            margin: const EdgeInsets.all(outer),
+            padding: const EdgeInsets.all(inner),
             decoration: BoxDecoration(
-              border: Border.all(color: kGold.withValues(alpha: 0.7), width: 1.4),
+              color: Theme.of(context).brightness == Brightness.dark ? null : const Color(0xFFFFFBF0),
+              border: Border.all(color: kGold.withValues(alpha: 0.8), width: 1.5),
               borderRadius: BorderRadius.circular(14),
             ),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: blocks),
-          ),
-        );
-      },
+            child: content,
+          );
+          // Very small windows only: fall back to scrolling.
+          return fits ? framed : SingleChildScrollView(child: framed);
+        },
+      ),
     );
   }
 }
@@ -464,30 +526,33 @@ class _MushafPageState extends State<_MushafPage> {
 class _SurahHeader extends StatelessWidget {
   final String name;
   final bool basmala;
-  const _SurahHeader({required this.name, required this.basmala});
+  final double size;
+  const _SurahHeader({required this.name, required this.basmala, this.size = 22});
 
   @override
   Widget build(BuildContext context) {
     return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Container(
           width: double.infinity,
-          margin: const EdgeInsets.symmetric(vertical: 8),
-          padding: const EdgeInsets.symmetric(vertical: 6),
+          height: size * 1.9,
+          alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: kGold.withValues(alpha: 0.14),
+            color: kGold.withValues(alpha: 0.16),
             border: Border.all(color: kGold),
             borderRadius: BorderRadius.circular(10),
           ),
           child: Text('سورة $name',
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontFamily: 'Amiri', fontSize: 20, fontWeight: FontWeight.bold)),
+              style: TextStyle(fontFamily: 'Amiri', fontSize: size * 0.85, height: 1.2, fontWeight: FontWeight.bold)),
         ),
         if (basmala)
-          const Padding(
-            padding: EdgeInsets.only(bottom: 4),
-            child: Text('بِسۡمِ ٱللَّهِ ٱلرَّحۡمَٰنِ ٱلرَّحِيمِ',
-                textAlign: TextAlign.center, style: TextStyle(fontFamily: 'AmiriQuran', fontSize: 22, height: 2.0)),
+          SizedBox(
+            height: size * 2.1,
+            child: Center(
+              child: Text('بِسۡمِ ٱللَّهِ ٱلرَّحۡمَٰنِ ٱلرَّحِيمِ',
+                  style: TextStyle(fontFamily: 'AmiriQuran', fontSize: size, height: 1.4)),
+            ),
           ),
       ],
     );
