@@ -4,7 +4,122 @@ import 'package:url_launcher/url_launcher.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
 
+/// Icons the staff can give to any chapter.
+const chapterIcons = <String, IconData>{
+  'i_shield_outlined': Icons.shield_outlined,
+  'i_mosque_outlined': Icons.mosque_outlined,
+  'i_water_drop_outlined': Icons.water_drop_outlined,
+  'i_volunteer_activism_outlined': Icons.volunteer_activism_outlined,
+  'i_nightlight_round': Icons.nightlight_round,
+  'i_flight_takeoff': Icons.flight_takeoff,
+  'i_handshake_outlined': Icons.handshake_outlined,
+  'i_family_restroom': Icons.family_restroom,
+  'i_favorite_border': Icons.favorite_border,
+  'i_alt_route': Icons.alt_route,
+  'i_spa_outlined': Icons.spa_outlined,
+  'i_library_books_outlined': Icons.library_books_outlined,
+  'i_menu_book_outlined': Icons.menu_book_outlined,
+  'i_auto_stories_outlined': Icons.auto_stories_outlined,
+  'i_school_outlined': Icons.school_outlined,
+  'i_gavel_outlined': Icons.gavel_outlined,
+  'i_balance_outlined': Icons.balance_outlined,
+  'i_account_balance_outlined': Icons.account_balance_outlined,
+  'i_paid_outlined': Icons.paid_outlined,
+  'i_storefront_outlined': Icons.storefront_outlined,
+  'i_work_outline': Icons.work_outline,
+  'i_home_outlined': Icons.home_outlined,
+  'i_groups_outlined': Icons.groups_outlined,
+  'i_person_outline': Icons.person_outline,
+  'i_child_care_outlined': Icons.child_care_outlined,
+  'i_elderly_outlined': Icons.elderly_outlined,
+  'i_woman_outlined': Icons.woman_outlined,
+  'i_man_outlined': Icons.man_outlined,
+  'i_restaurant_outlined': Icons.restaurant_outlined,
+  'i_local_drink_outlined': Icons.local_drink_outlined,
+  'i_checkroom_outlined': Icons.checkroom_outlined,
+  'i_medical_services_outlined': Icons.medical_services_outlined,
+  'i_healing_outlined': Icons.healing_outlined,
+  'i_psychology_outlined': Icons.psychology_outlined,
+  'i_lightbulb_outline': Icons.lightbulb_outline,
+  'i_star_border': Icons.star_border,
+  'i_wb_sunny_outlined': Icons.wb_sunny_outlined,
+  'i_bedtime_outlined': Icons.bedtime_outlined,
+  'i_calendar_month_outlined': Icons.calendar_month_outlined,
+  'i_schedule_outlined': Icons.schedule_outlined,
+  'i_public_outlined': Icons.public_outlined,
+  'i_travel_explore_outlined': Icons.travel_explore_outlined,
+  'i_directions_car_outlined': Icons.directions_car_outlined,
+  'i_phone_android_outlined': Icons.phone_android_outlined,
+  'i_campaign_outlined': Icons.campaign_outlined,
+  'i_record_voice_over_outlined': Icons.record_voice_over_outlined,
+  'i_mic_none_outlined': Icons.mic_none_outlined,
+  'i_edit_note_outlined': Icons.edit_note_outlined,
+  'i_question_answer_outlined': Icons.question_answer_outlined,
+  'i_help_outline': Icons.help_outline,
+  'i_warning_amber_outlined': Icons.warning_amber_outlined,
+  'i_block_outlined': Icons.block_outlined,
+  'i_verified_outlined': Icons.verified_outlined,
+  'i_security_outlined': Icons.security_outlined,
+  'i_eco_outlined': Icons.eco_outlined,
+  'i_park_outlined': Icons.park_outlined,
+  'i_pets_outlined': Icons.pets_outlined,
+  'i_agriculture_outlined': Icons.agriculture_outlined,
+  'i_landscape_outlined': Icons.landscape_outlined,
+  'i_terrain_outlined': Icons.terrain_outlined,
+  'i_celebration_outlined': Icons.celebration_outlined,
+  'i_card_giftcard_outlined': Icons.card_giftcard_outlined,
+  'i_savings_outlined': Icons.savings_outlined,
+  'i_receipt_long_outlined': Icons.receipt_long_outlined,
+  'i_inventory_2_outlined': Icons.inventory_2_outlined,
+  'i_bookmark_border': Icons.bookmark_border,
+  'i_label_outline': Icons.label_outline,
+  'i_flag_outlined': Icons.flag_outlined,
+  'i_explore_outlined': Icons.explore_outlined,
+  'i_diamond_outlined': Icons.diamond_outlined,
+  'i_emoji_events_outlined': Icons.emoji_events_outlined,
+  'i_front_hand_outlined': Icons.front_hand_outlined,
+  'i_clean_hands_outlined': Icons.clean_hands_outlined,
+  'i_self_improvement': Icons.self_improvement,
+  'i_visibility_outlined': Icons.visibility_outlined,
+  'i_hearing_outlined': Icons.hearing_outlined,
+};
+
+/// A sheet with all the icons; returns the key of the chosen one.
+Future<String?> pickChapterIcon(BuildContext context) => showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (ctx) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.of(ctx).size.height * 0.6,
+          child: Column(
+            children: [
+              const Padding(
+                padding: EdgeInsets.only(bottom: 8),
+                child: Text('اختر رمز الباب', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              ),
+              Expanded(
+                child: GridView.count(
+                  crossAxisCount: 6,
+                  padding: const EdgeInsets.all(10),
+                  children: [
+                    for (final e in chapterIcons.entries)
+                      IconButton(
+                        icon: Icon(e.value, size: 28),
+                        onPressed: () => Navigator.pop(ctx, e.key),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
 IconData chapterIcon(String key) {
+  final chosen = chapterIcons[key];
+  if (chosen != null) return chosen;
   switch (key) {
     case 'aqeedah':
       return Icons.shield_outlined;

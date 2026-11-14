@@ -342,10 +342,19 @@ class Repository extends ChangeNotifier {
   List<Chapter> _baseChapters = [];
 
   /// Renamed chapters and chapters added from the admin panel.
-  void applyChapterConfig(List<Chapter> extra, Map<String, String> names) {
+  /// Icons the staff chose for chapters: {chapter id: icon key}.
+  Map<String, String> chapterIconChoice = {};
+
+  void applyChapterConfig(List<Chapter> extra, Map<String, String> names,
+      [Map<String, String> icons = const {}]) {
+    chapterIconChoice = Map.of(icons);
     chapters = [
       for (final c in [..._baseChapters, ...extra])
-        Chapter(id: c.id, name: (names[c.id] ?? '').isNotEmpty ? names[c.id]! : c.name, icon: c.icon),
+        Chapter(
+          id: c.id,
+          name: (names[c.id] ?? '').isNotEmpty ? names[c.id]! : c.name,
+          icon: (icons[c.id] ?? '').isNotEmpty ? icons[c.id]! : c.icon,
+        ),
     ];
     for (final f in fatwas) {
       _index(f);

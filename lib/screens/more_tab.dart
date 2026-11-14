@@ -37,7 +37,9 @@ class MoreTab extends StatelessWidget {
               icon: Icons.auto_stories_outlined,
               title: 'المصحف',
               subtitle: 'مصحف المدينة برواية حفص، بلا إنترنت',
-              color: brandColor(context),
+              color: kGold,
+              fg: const Color(0xFF1B1B1B),
+              iconColor: const Color(0xFF1B1B1B),
               onTap: () =>
                   Navigator.of(context).push(MaterialPageRoute(builder: (_) => const QuranScreen())),
             ),
@@ -268,23 +270,25 @@ class MoreTab extends StatelessWidget {
               ListTile(
                 leading: const _IconBox(Icons.dark_mode_outlined),
                 title: const Text('المظهر'),
-                trailing: DropdownButton<ThemeMode>(
-                  value: repo.themeMode,
+                // One menu: 3 = dark after sunset, light by day.
+                trailing: DropdownButton<int>(
+                  value: repo.autoNight ? 3 : repo.themeMode.index,
                   underline: const SizedBox(),
-                  onChanged: (m) => repo.setThemeMode(m ?? ThemeMode.system),
-                  items: const [
-                    DropdownMenuItem(value: ThemeMode.system, child: Text('تلقائي')),
-                    DropdownMenuItem(value: ThemeMode.light, child: Text('فاتح')),
-                    DropdownMenuItem(value: ThemeMode.dark, child: Text('داكن')),
+                  onChanged: (v) {
+                    if (v == 3) {
+                      repo.setAutoNight(true);
+                    } else {
+                      repo.setAutoNight(false);
+                      repo.setThemeMode(ThemeMode.values[v ?? 0]);
+                    }
+                  },
+                  items: [
+                    DropdownMenuItem(value: ThemeMode.system.index, child: const Text('حسب الجهاز')),
+                    DropdownMenuItem(value: ThemeMode.light.index, child: const Text('فاتح')),
+                    DropdownMenuItem(value: ThemeMode.dark.index, child: const Text('داكن')),
+                    const DropdownMenuItem(value: 3, child: Text('داكن بعد المغرب')),
                   ],
                 ),
-              ),
-              SwitchListTile(
-                secondary: const _IconBox(Icons.nights_stay_outlined),
-                title: const Text('الوضع الليلي التلقائي'),
-                subtitle: const Text('داكن بعد المغرب، فاتح في النهار'),
-                value: repo.autoNight,
-                onChanged: repo.setAutoNight,
               ),
               SwitchListTile(
                 secondary: const _IconBox(Icons.text_increase),
@@ -456,9 +460,17 @@ class _BigCard extends StatelessWidget {
   final String title;
   final String subtitle;
   final Color color;
+  final Color fg;
+  final Color iconColor;
   final VoidCallback onTap;
   const _BigCard(
-      {required this.icon, required this.title, required this.subtitle, required this.color, required this.onTap});
+      {required this.icon,
+      required this.title,
+      required this.subtitle,
+      required this.color,
+      required this.onTap,
+      this.fg = Colors.white,
+      this.iconColor = kGold});
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -473,24 +485,24 @@ class _BigCard extends StatelessWidget {
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
-                  Icon(icon, color: kGold, size: 34),
+                  Icon(icon, color: iconColor, size: 34),
                   const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(title,
-                            style: const TextStyle(
+                            style: TextStyle(
                                 fontFamily: 'Tajawal',
-                                color: Colors.white,
+                                color: fg,
                                 fontSize: 19,
                                 fontWeight: FontWeight.bold)),
                         const SizedBox(height: 2),
-                        Text(subtitle, style: const TextStyle(color: Colors.white, fontSize: 13.5)),
+                        Text(subtitle, style: TextStyle(color: fg, fontSize: 13.5)),
                       ],
                     ),
                   ),
-                  const Icon(Icons.chevron_left, color: Colors.white),
+                  Icon(Icons.chevron_left, color: fg),
                 ],
               ),
             ),

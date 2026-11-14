@@ -365,43 +365,73 @@ class _AskName extends StatefulWidget {
 
 class _AskNameState extends State<_AskName> {
   final _c = TextEditingController();
+  String _saved = '';
+  bool get _dirty => _c.text.trim() != _saved;
 
   @override
   void initState() {
     super.initState();
     SharedPreferences.getInstance().then((p) {
-      if (mounted) _c.text = p.getString('askName') ?? '';
+      if (!mounted) return;
+      _saved = p.getString('askName') ?? '';
+      _c.text = _saved;
+    });
+    _c.addListener(() {
+      if (mounted) setState(() {});
     });
   }
 
   @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final p = await SharedPreferences.getInstance();
+    await p.setString('askName', _c.text.trim());
+    if (!mounted) return;
+    setState(() => _saved = _c.text.trim());
+    FocusScope.of(context).unfocus();
+    _toast(context, 'حُفظ الاسم ✅');
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        TextField(
-          controller: _c,
-          maxLength: 40,
-          decoration: InputDecoration(
-            labelText: 'اسمك أو كنيتك (اختياري)',
-            hintText: 'مثل: أبو عبد الرحمن',
-            helperText: 'يراه الشيخ والمشرفون فقط مع أسئلتك، ولا يظهر لأحد غيرهم ولا في الأجوبة المنشورة.',
-            helperMaxLines: 3,
-            border: const OutlineInputBorder(),
-            suffixIcon: IconButton(
-              tooltip: 'حفظ',
-              icon: const Icon(Icons.check),
-              onPressed: () async {
-                final p = await SharedPreferences.getInstance();
-                await p.setString('askName', _c.text.trim());
-                if (!context.mounted) return;
-                FocusScope.of(context).unfocus();
-                _toast(context, 'حُفظ الاسم');
-              },
+    // Once the reader starts typing, the page is left only after saving.
+    return PopScope(
+      canPop: !_dirty,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _toast(context, 'اضغط «حفظ» أولاً ليُحفظ الاسم');
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: _c,
+            maxLength: 40,
+            decoration: const InputDecoration(
+              labelText: 'اسمك أو كنيتك (اختياري)',
+              hintText: 'مثل: أبو عبد الرحمن',
+              helperText: 'يراه الشيخ والمشرفون فقط مع أسئلتك، ولا يظهر لأحد غيرهم ولا في الأجوبة المنشورة.',
+              helperMaxLines: 3,
+              border: OutlineInputBorder(),
             ),
           ),
-        ),
-      ],
+          const SizedBox(height: 6),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: _dirty ? Colors.red : Colors.green,
+              foregroundColor: Colors.white,
+              disabledBackgroundColor: Colors.green,
+              disabledForegroundColor: Colors.white,
+            ),
+            icon: Icon(_dirty ? Icons.save : Icons.check_circle),
+            label: Text(_dirty ? 'حفظ' : 'محفوظ'),
+            onPressed: _dirty ? _save : null,
+          ),
+        ],
+      ),
     );
   }
 }

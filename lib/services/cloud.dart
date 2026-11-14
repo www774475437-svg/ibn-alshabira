@@ -890,6 +890,9 @@ class Cloud extends ChangeNotifier {
         {
           for (final e in ((ch?['names'] ?? {}) as Map).entries) '${e.key}': '${e.value}',
         },
+        {
+          for (final e in ((ch?['icons'] ?? {}) as Map).entries) '${e.key}': '${e.value}',
+        },
       );
       final links = ((c['links']?['items'] ?? []) as List)
           .map((e) => SocialLink.fromJson(Map<String, dynamic>.from(e as Map)))

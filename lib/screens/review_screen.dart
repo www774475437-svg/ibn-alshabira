@@ -110,6 +110,11 @@ class _ReviewScreenState extends State<ReviewScreen> {
                                     : () => _act(
                                         () => Cloud.instance.setChapter(f.id, c.id, f.title), 'نُقل إلى ${c.name} ✅'),
                               ),
+                          ActionChip(
+                            avatar: const Icon(Icons.add, size: 16, color: Colors.green),
+                            label: const Text('باب جديد'),
+                            onPressed: () => addChapterDialog(context),
+                          ),
                         ],
                       ),
                       Row(
