@@ -52,6 +52,108 @@ InputDecoration _deco(String label) =>
 
 /// Admin: questions sent by users. Three choices for each question:
 /// reply and publish, reply privately, or hide.
+/// «أبو فلان · السائل رقم ١٢٣٤», or the number alone when no name was given.
+String askerLabel(Map<String, dynamic> q) {
+  final name = '${q['name'] ?? ''}'.trim();
+  final no = 'السائل رقم ${askerNo('${q['uid'] ?? ''}')}';
+  return name.isEmpty ? no : '$name · $no';
+}
+
+/// All the questions of one asker with the sheikh's replies, as one conversation.
+class AskerChatScreen extends StatelessWidget {
+  final String uid;
+  final String label;
+  const AskerChatScreen({super.key, required this.uid, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    final cloud = Cloud.instance;
+    return Scaffold(
+      appBar: AppBar(title: Text(label, style: const TextStyle(fontSize: 17))),
+      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: cloud.allQuestions(),
+        builder: (context, snap) {
+          if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+          // Oldest first, like a chat.
+          final docs = snap.data!.docs.where((d) => '${d.data()['uid']}' == uid).toList().reversed.toList();
+          if (docs.isEmpty) return const EmptyState(icon: Icons.forum_outlined, text: 'لا توجد رسائل');
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+            children: [
+              for (final d in docs) ...[
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 6, left: 40),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SelectableText('${d.data()['text'] ?? ''}', style: const TextStyle(fontSize: 16, height: 1.7)),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              tooltip: 'تمييز بنجمة',
+                              visualDensity: VisualDensity.compact,
+                              icon: Icon(d.data()['starred'] == true ? Icons.star : Icons.star_border,
+                                  size: 20, color: d.data()['starred'] == true ? Colors.amber : null),
+                              onPressed: () =>
+                                  cloud.setQuestionFlag(d.id, 'starred', d.data()['starred'] != true),
+                            ),
+                            IconButton(
+                              tooltip: 'تثبيت',
+                              visualDensity: VisualDensity.compact,
+                              icon: Icon(
+                                  d.data()['pinned'] == true ? Icons.push_pin : Icons.push_pin_outlined,
+                                  size: 18,
+                                  color: d.data()['pinned'] == true ? Colors.red : null),
+                              onPressed: () =>
+                                  cloud.setQuestionFlag(d.id, 'pinned', d.data()['pinned'] != true),
+                            ),
+                            TextButton.icon(
+                              icon: const Icon(Icons.reply, size: 18),
+                              label: Text('${d.data()['reply'] ?? ''}'.isEmpty ? 'الرد' : 'تعديل الرد'),
+                              onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                                builder: (_) => ReplyScreen(
+                                    id: d.id,
+                                    question: '${d.data()['text'] ?? ''}',
+                                    oldReply: '${d.data()['reply'] ?? ''}',
+                                    chapter: '${d.data()['chapter'] ?? ''}'),
+                              )),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if ('${d.data()['reply'] ?? ''}'.isNotEmpty)
+                  Align(
+                    alignment: AlignmentDirectional.centerEnd,
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 12, right: 40),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: kGold.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: SelectableText('${d.data()['reply']}', style: const TextStyle(fontSize: 16, height: 1.7)),
+                    ),
+                  ),
+              ],
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
 class QuestionsTab extends StatefulWidget {
   const QuestionsTab({super.key});
 
@@ -86,6 +188,49 @@ class _QuestionsTabState extends State<QuestionsTab> {
           );
         },
       );
+
+  /// One line per asker: all his questions are one private conversation.
+  Widget _chats(List<QueryDocumentSnapshot<Map<String, dynamic>>> all) {
+    final by = <String, List<QueryDocumentSnapshot<Map<String, dynamic>>>>{};
+    for (final d in all) {
+      by.putIfAbsent('${d.data()['uid']}', () => []).add(d); // newest first, as the stream gives them
+    }
+    bool has(List<QueryDocumentSnapshot<Map<String, dynamic>>> l, String f) => l.any((d) => d.data()[f] == true);
+    final chats = [
+      ...by.entries.where((e) => has(e.value, 'pinned')),
+      ...by.entries.where((e) => !has(e.value, 'pinned')),
+    ];
+    if (chats.isEmpty) return const EmptyState(icon: Icons.forum_outlined, text: 'لا توجد محادثات');
+    return ListView.builder(
+      padding: const EdgeInsets.only(bottom: 16),
+      itemCount: chats.length,
+      itemBuilder: (context, i) {
+        final list = chats[i].value;
+        final last = list.first.data();
+        final waiting = list.where((d) => (d.data()['status'] ?? 'new') == 'new').length;
+        return Card(
+          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+          child: ListTile(
+            leading: CircleAvatar(
+              backgroundColor: kGold.withValues(alpha: 0.18),
+              child: const Icon(Icons.person_outline, color: kGoldChip),
+            ),
+            title: Row(children: [
+              Expanded(
+                child: Text(askerLabel(last), style: const TextStyle(fontWeight: FontWeight.bold)),
+              ),
+              if (has(list, 'pinned')) const Icon(Icons.push_pin, size: 16, color: Colors.red),
+              if (has(list, 'starred')) const Icon(Icons.star, size: 18, color: Colors.amber),
+            ]),
+            subtitle: Text('${last['text'] ?? ''}', maxLines: 2, overflow: TextOverflow.ellipsis),
+            trailing: waiting > 0 ? Badge(label: Text('$waiting')) : Text('${list.length}'),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => AskerChatScreen(uid: chats[i].key, label: askerLabel(last)))),
+          ),
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -127,6 +272,8 @@ class _QuestionsTabState extends State<QuestionsTab> {
             segments: const [
               ButtonSegment(value: 'new', label: Text('جديدة')),
               ButtonSegment(value: 'answered', label: Text('أُجيب عنها')),
+              ButtonSegment(value: 'chats', label: Text('المحادثات')),
+              ButtonSegment(value: 'starred', label: Text('★ المميّزة')),
               ButtonSegment(value: 'hidden', label: Text('مخفية')),
               ButtonSegment(value: 'blocked', label: Text('المحظورون')),
             ],
@@ -144,8 +291,17 @@ class _QuestionsTabState extends State<QuestionsTab> {
                       return const EmptyState(icon: Icons.error_outline, text: 'تعذّر تحميل الأسئلة');
                     }
                     if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-                    final docs =
-                        snap.data!.docs.where((d) => (d.data()['status'] ?? 'new') == _filter).toList();
+                    if (_filter == 'chats') return _chats(snap.data!.docs);
+                    final shown = snap.data!.docs
+                        .where((d) => _filter == 'starred'
+                            ? d.data()['starred'] == true
+                            : (d.data()['status'] ?? 'new') == _filter)
+                        .toList();
+                    // Pinned questions stay on top; the order by time is kept inside each group.
+                    final docs = [
+                      ...shown.where((d) => d.data()['pinned'] == true),
+                      ...shown.where((d) => d.data()['pinned'] != true),
+                    ];
                     if (docs.isEmpty) {
                       return const EmptyState(icon: Icons.inbox_outlined, text: 'لا توجد أسئلة هنا');
                     }
@@ -171,16 +327,35 @@ class _QuestionsTabState extends State<QuestionsTab> {
                                     child: Text('باب ${repo.chapterName(chapter)}',
                                         style: const TextStyle(color: kGoldChip, fontSize: 12)),
                                   ),
-                                if ('${q['name'] ?? ''}'.isNotEmpty)
-                                  Padding(
-                                    padding: const EdgeInsets.only(bottom: 6),
-                                    child: Row(children: [
-                                      const Icon(Icons.person_outline, size: 16, color: kGoldChip),
-                                      const SizedBox(width: 4),
-                                      Text('${q['name']}',
-                                          style: const TextStyle(fontWeight: FontWeight.bold, color: kGoldChip)),
-                                    ]),
+                                Row(children: [
+                                  const Icon(Icons.person_outline, size: 16, color: kGoldChip),
+                                  const SizedBox(width: 4),
+                                  Expanded(
+                                    child: Text(askerLabel(q),
+                                        style: const TextStyle(fontWeight: FontWeight.bold, color: kGoldChip)),
                                   ),
+                                  IconButton(
+                                    tooltip: 'محادثة هذا السائل',
+                                    visualDensity: VisualDensity.compact,
+                                    icon: const Icon(Icons.forum_outlined, size: 20),
+                                    onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                                        builder: (_) => AskerChatScreen(uid: '${q['uid']}', label: askerLabel(q)))),
+                                  ),
+                                  IconButton(
+                                    tooltip: 'تمييز بنجمة',
+                                    visualDensity: VisualDensity.compact,
+                                    icon: Icon(q['starred'] == true ? Icons.star : Icons.star_border,
+                                        size: 22, color: q['starred'] == true ? Colors.amber : null),
+                                    onPressed: () => cloud.setQuestionFlag(d.id, 'starred', q['starred'] != true),
+                                  ),
+                                  IconButton(
+                                    tooltip: 'تثبيت في الأعلى',
+                                    visualDensity: VisualDensity.compact,
+                                    icon: Icon(q['pinned'] == true ? Icons.push_pin : Icons.push_pin_outlined,
+                                        size: 20, color: q['pinned'] == true ? Colors.red : null),
+                                    onPressed: () => cloud.setQuestionFlag(d.id, 'pinned', q['pinned'] != true),
+                                  ),
+                                ]),
                                 SelectableText(text, style: const TextStyle(fontSize: 16, height: 1.7)),
                                 if (reply.isNotEmpty) ...[
                                   const Divider(height: 20),

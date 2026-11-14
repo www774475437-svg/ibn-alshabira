@@ -96,6 +96,11 @@ class _AskScreenState extends State<AskScreen> {
           }
           return Column(
             children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                child: Text('رقمك عند الشيخ: ${askerNo(cloud.user!.uid)} — محادثتك معه خاصة بك',
+                    textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey, fontSize: 12.5)),
+              ),
               Expanded(
                 child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                   stream: cloud.myQuestions(),
