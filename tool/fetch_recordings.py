@@ -15,7 +15,7 @@ import urllib.request
 from pathlib import Path
 
 CHANNEL = "QaidSandVe"
-VERSION = 4
+VERSION = 5
 OUT = Path(os.environ.get("MEDIA_ROOT", ".")) / "recordings.json"
 
 msg_re = re.compile(r'<div class="tgme_widget_message_wrap.*?(?=<div class="tgme_widget_message_wrap|\Z)', re.S)
@@ -87,6 +87,25 @@ def title_of(text):
     if main + 1 < len(lines) and PART.match(lines[main + 1][0]):
         t += " — " + lines[main + 1][0]
     return shorten(t)
+
+
+def lesson_title(text):
+    """For lesson posts that list their points: series — lesson: first point."""
+    series = lesson = point = ""
+    for raw in text.split("\n"):
+        line = raw.strip()
+        if not series and line.startswith("#"):
+            series = trim_edges(line.split()[0].replace("_", " "))
+        core = trim_edges(line)
+        if not lesson and PART.match(core) and len(core) < 40:
+            lesson = core
+        if not point and line.startswith("■"):
+            point = trim_edges(line)
+    parts = [x for x in (series, lesson) if x]
+    t = " — ".join(parts)
+    if point:
+        t = f"{t}: {point}" if t else point
+    return shorten(t) if t else ""
 
 
 def speaker_of(text, extra):
@@ -187,13 +206,12 @@ def main():
                     desc = q
                     break
         text = desc["text"] if desc else ""
-        t = title_of(text) or title_of(p["text"])
+        t = title_of(text) or lesson_title(text) or title_of(p["text"])
         file_title = "" if generic(p["dtitle"]) else shorten(trim_edges(p["dtitle"].replace("#", " ").replace("_", " ")))
         if (not t or t.startswith("محتويات")) and len(file_title) > 6:
             t = file_title
         t = re.sub(r"\s+", " ", t.replace("#", " ").replace("_", " ")).strip()
-        if i in (1476, 1473, 1442):
-            print("DEBUG", i, repr(text[:400]), "| file:", repr(p["dtitle"]), repr(p["dextra"]))
+
         if not t:
             t = f"تسجيل صوتي {p['date']}".strip()
         dur = p["dur"] if p["dur"] not in ("", "0:00") else ""
