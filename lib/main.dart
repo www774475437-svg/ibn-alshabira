@@ -36,6 +36,8 @@ Future<void> main() async {
       minute: Repository.instance.notifyMinute,
     ),
   );
+  // A notification to every reader when a new version comes out.
+  Future.delayed(const Duration(seconds: 3), UpdateWatch.start);
 }
 
 /// Routes: "/" home, "/fatwa/<id>" a single fatwa (shareable web link).

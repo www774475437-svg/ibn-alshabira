@@ -10,3 +10,8 @@ class DailyNotifications {
 class AdhkarNotifications {
   static Future<void> set(int id, bool enabled, int hour, int minute, String title) async {}
 }
+
+class UpdateWatch {
+  static Future<void> start() async {}
+  static Future<void> checkNow() async {}
+}
