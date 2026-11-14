@@ -24,7 +24,7 @@ class AboutSheikhScreen extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         children: [
           Center(
-            child: ClipOval(child: Image.asset('assets/icon/icon.png', width: 110, height: 110)),
+            child: ClipOval(child: AppLogo(size: 110)),
           ),
           const SizedBox(height: 16),
           const Text('الشيخ قايد بن غانم الشابرة',
@@ -256,6 +256,7 @@ class PrivacyScreen extends StatelessWidget {
 
 /// «ما الجديد»: what each version added, newest first.
 const whatsNew = <(String, List<String>)>[
+  ('3.9.2', ['«شعار التطبيق» في الإعدادات: اختر شعاراً من ثلاثة، ويتغيّر معه شعار الأيقونة على الجوال', 'تسجيلات الشيخ الصوتية تصل إلى التطبيق خلال دقائق']),
   ('3.9.1', ['إصلاح «تعذّر الاتصال بموقع تراث» في بحث الفتاوى من كتب الثقات']),
   (
     '3.9.0',

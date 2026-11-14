@@ -441,7 +441,7 @@ class _Header extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  ClipOval(child: Image.asset('assets/icon/icon.png', width: 40, height: 40)),
+                  ClipOval(child: AppLogo(size: 40)),
                   const SizedBox(width: 10),
                   Text('ابن الشابرة',
                       style: TextStyle(

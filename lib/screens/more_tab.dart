@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/services.dart';
 
 import '../config.dart';
 import '../services/notifications.dart';
@@ -261,6 +263,13 @@ class MoreTab extends StatelessWidget {
             ]),
             const _Group('الإعدادات'),
             _Section(children: [
+              ListTile(
+                leading: const _IconBox(Icons.palette_outlined),
+                title: const Text('شعار التطبيق'),
+                subtitle: const Text('اختر الشعار الذي يظهر في التطبيق وعلى شاشة الجوال'),
+                trailing: ClipRRect(borderRadius: BorderRadius.circular(8), child: const AppLogo(size: 36)),
+                onTap: () => showModalBottomSheet(context: context, showDragHandle: true, builder: (_) => const _LogoPicker()),
+              ),
               if (!kIsWeb) ...[
                 SwitchListTile(
                   secondary: const _IconBox(Icons.notifications_active_outlined),
@@ -715,6 +724,69 @@ class _DownloadAllState extends State<_DownloadAll> {
           child: Text(_finished ? 'تم' : 'إيقاف'),
         ),
       ],
+    );
+  }
+}
+
+
+/// «شعار التطبيق»: the reader picks one of the logos.
+class _LogoPicker extends StatelessWidget {
+  const _LogoPicker();
+
+  static const _channel = MethodChannel('ibn_alshabira/icon');
+
+  Future<void> _pick(BuildContext context, int i) async {
+    appLogo.value = i;
+    final p = await SharedPreferences.getInstance();
+    await p.setInt('appLogo', i);
+    if (!kIsWeb) {
+      try {
+        await _channel.invokeMethod('set', i);
+      } catch (_) {}
+    }
+    if (context.mounted) {
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(kIsWeb ? 'تم تغيير الشعار ✅' : 'تم تغيير الشعار ✅ قد يتأخر تغيّر أيقونة الجوال قليلاً')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('شعار التطبيق', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+            const SizedBox(height: 14),
+            ValueListenableBuilder<int>(
+              valueListenable: appLogo,
+              builder: (context, cur, _) => Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  for (var i = 0; i < logoAssets.length; i++)
+                    GestureDetector(
+                      onTap: () => _pick(context, i),
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(22),
+                          border: Border.all(color: i == cur ? kGold : Colors.transparent, width: 3),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(18),
+                          child: Image.asset(logoAssets[i], width: 88, height: 88, fit: BoxFit.cover, cacheWidth: 264),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

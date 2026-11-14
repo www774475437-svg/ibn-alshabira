@@ -1,3 +1,4 @@
+import 'widgets/common.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -17,6 +18,7 @@ import 'theme.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final prefs = await SharedPreferences.getInstance();
+  appLogo.value = prefs.getInt('appLogo') ?? 0;
   // The site opens at once with the newest answers, then brings the rest
   // of the library in the background (unless a link to one answer was opened).
   final quick = kIsWeb && AppConfig.idFromRoute(Uri.base.fragment) == null;

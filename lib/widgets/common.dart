@@ -293,3 +293,24 @@ class EmptyState extends StatelessWidget {
     );
   }
 }
+
+
+// ------------------------------------------------------------ App logo
+/// The logos the reader may choose from (settings → «شعار التطبيق»).
+const logoAssets = ['assets/icon/icon.png', 'assets/icon/logo_2.jpg', 'assets/icon/logo_3.jpg'];
+
+/// Which logo is shown inside the app (and as the phone icon on Android).
+final appLogo = ValueNotifier<int>(0);
+
+/// The chosen logo, updated at once when the choice changes.
+class AppLogo extends StatelessWidget {
+  final double size;
+  const AppLogo({super.key, required this.size});
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<int>(
+        valueListenable: appLogo,
+        builder: (_, i, __) => Image.asset(logoAssets[i.clamp(0, logoAssets.length - 1)],
+            width: size, height: size, fit: BoxFit.cover, cacheWidth: (size * 3).round()),
+      );
+}

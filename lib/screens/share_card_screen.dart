@@ -1,3 +1,4 @@
+import '../widgets/common.dart';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -182,7 +183,7 @@ class _Card extends StatelessWidget {
             // Small, tidy header: the text is what matters.
             Row(
               children: [
-                ClipOval(child: Image.asset('assets/icon/icon.png', width: 20, height: 20)),
+                ClipOval(child: AppLogo(size: 20)),
                 const SizedBox(width: 6),
                 const Text('ابن الشابرة',
                     style: TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.bold, fontSize: 11, color: ink)),

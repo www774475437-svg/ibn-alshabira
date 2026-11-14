@@ -102,3 +102,70 @@ for d in ["drawable", "drawable-v21"]:
 </layer-list>
 ''', encoding="utf-8")
 print("Launch background set")
+
+# --- Choosable phone icon («شعار التطبيق»): launcher aliases -------------
+import glob, shutil
+res = Path("android/app/src/main/res/mipmap-xxxhdpi")
+res.mkdir(parents=True, exist_ok=True)
+for n in (2, 3):
+    shutil.copy(f"tool/launcher/ic_logo{n}.png", res / f"ic_logo{n}.png")
+m = manifest.read_text(encoding="utf-8")
+if "activity-alias" not in m:
+    launcher = re.compile(r'\s*<intent-filter>\s*<action android:name="android.intent.action.MAIN"\s*/>\s*'
+                          r'<category android:name="android.intent.category.LAUNCHER"\s*/>\s*</intent-filter>')
+    assert launcher.search(m), "launcher intent-filter not found"
+    m = launcher.sub("", m, count=1)
+    def alias(name, icon, on):
+        return (f'\n        <activity-alias android:name=".{name}" android:targetActivity=".MainActivity"'
+                f' android:enabled="{"true" if on else "false"}" android:exported="true"'
+                f' android:icon="@mipmap/{icon}" android:label="ابن الشابرة">'
+                '<intent-filter><action android:name="android.intent.action.MAIN"/>'
+                '<category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity-alias>')
+    aliases = alias("IconDefault", "ic_launcher", True) + alias("Icon2", "ic_logo2", False) + alias("Icon3", "ic_logo3", False)
+    i = m.index("</activity>") + len("</activity>")
+    m = m[:i] + aliases + m[i:]
+    manifest.write_text(m, encoding="utf-8")
+    print("Icon aliases added")
+
+for f in glob.glob("android/app/src/main/kotlin/**/MainActivity.kt", recursive=True):
+    k = Path(f).read_text(encoding="utf-8")
+    if "ibn_alshabira/icon" in k:
+        continue
+    pkg = re.search(r"^package\s+(\S+)", k, re.M).group(1)
+    base = re.search(r"class MainActivity\s*:\s*(\w+)", k).group(1)
+    Path(f).write_text(f"""package {pkg}
+
+import android.content.ComponentName
+import android.content.pm.PackageManager
+import io.flutter.embedding.android.{base}
+import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.MethodChannel
+
+class MainActivity : {base}() {{
+    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {{
+        super.configureFlutterEngine(flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "ibn_alshabira/icon").setMethodCallHandler {{ call, result ->
+            if (call.method == "set") {{
+                val chosen = (call.arguments as? Int) ?: 0
+                val names = listOf("IconDefault", "Icon2", "Icon3")
+                val pm = packageManager
+                try {{
+                    // The chosen icon first, so the app is never without one.
+                    pm.setComponentEnabledSetting(ComponentName(this, "$packageName.${{names[chosen]}}"),
+                        PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP)
+                    names.forEachIndexed {{ i, n ->
+                        if (i != chosen) pm.setComponentEnabledSetting(ComponentName(this, "$packageName.$n"),
+                            PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP)
+                    }}
+                    result.success(true)
+                }} catch (e: Exception) {{
+                    result.error("icon", e.message, null)
+                }}
+            }} else {{
+                result.notImplemented()
+            }}
+        }}
+    }}
+}}
+""", encoding="utf-8")
+    print("MainActivity: icon channel added")

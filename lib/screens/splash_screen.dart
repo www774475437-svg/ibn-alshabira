@@ -1,3 +1,4 @@
+import '../widgets/common.dart';
 import 'package:flutter/material.dart';
 
 import '../theme.dart';
@@ -69,7 +70,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                       ).createShader(rect);
                     },
                     child: ClipOval(
-                      child: Image.asset('assets/icon/icon.png', width: 190, height: 190),
+                      child: AppLogo(size: 190),
                     ),
                   ),
                 ),

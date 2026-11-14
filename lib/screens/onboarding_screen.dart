@@ -1,3 +1,4 @@
+import '../widgets/common.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -83,7 +84,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with SingleTickerPr
                   opacity: show,
                   child: Transform.scale(
                     scale: 0.85 + 0.15 * show,
-                    child: ClipOval(child: Image.asset('assets/icon/icon.png', width: 168, height: 168)),
+                    child: ClipOval(child: AppLogo(size: 168)),
                   ),
                 ),
               ],
