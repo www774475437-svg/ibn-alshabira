@@ -15,7 +15,7 @@ import urllib.request
 from pathlib import Path
 
 CHANNEL = "QaidSandVe"
-VERSION = 5
+VERSION = 6
 OUT = Path(os.environ.get("MEDIA_ROOT", ".")) / "recordings.json"
 
 msg_re = re.compile(r'<div class="tgme_widget_message_wrap.*?(?=<div class="tgme_widget_message_wrap|\Z)', re.S)
@@ -100,7 +100,7 @@ def lesson_title(text):
         if not lesson and PART.match(core) and len(core) < 40:
             lesson = core
         if not point and line.startswith("■"):
-            point = trim_edges(line)
+            point = re.sub(r"^[\d:]+\s*", "", trim_edges(line))
     parts = [x for x in (series, lesson) if x]
     t = " — ".join(parts)
     if point:
