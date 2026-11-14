@@ -3,6 +3,7 @@ name: Build APK and website
 on:
   push:
     branches: [main]
+    paths-ignore: ['tool/probe_turath.py', '.github/workflows/probe.yml']
   workflow_dispatch:
   # Every day: refresh the site with the sheikh's newest channel posts.
   schedule:
