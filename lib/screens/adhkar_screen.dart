@@ -1,10 +1,12 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/repository.dart' show normalizeArabic;
+import '../services/notifications.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 
@@ -61,6 +63,16 @@ class _AdhkarScreenState extends State<AdhkarScreen> {
       appBar: AppBar(
         title: const Text('الأذكار'),
         actions: [
+          if (!kIsWeb)
+            IconButton(
+              tooltip: 'تذكير الأذكار',
+              icon: const Icon(Icons.notifications_active_outlined),
+              onPressed: () => showModalBottomSheet(
+                context: context,
+                showDragHandle: true,
+                builder: (_) => const _ReminderSheet(),
+              ),
+            ),
           IconButton(
             tooltip: 'عدّاد التسبيح',
             icon: const Icon(Icons.touch_app_outlined),
@@ -359,6 +371,73 @@ class _TasbihScreenState extends State<TasbihScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+
+/// Morning and evening reminders: off until the user turns them on.
+class _ReminderSheet extends StatefulWidget {
+  const _ReminderSheet();
+
+  @override
+  State<_ReminderSheet> createState() => _ReminderSheetState();
+}
+
+class _ReminderSheetState extends State<_ReminderSheet> {
+  SharedPreferences? _p;
+
+  @override
+  void initState() {
+    super.initState();
+    SharedPreferences.getInstance().then((p) {
+      if (mounted) setState(() => _p = p);
+    });
+  }
+
+  Widget _row(String key, int id, String title, IconData icon, int defHour) {
+    final p = _p!;
+    final on = p.getBool('${key}On') ?? false;
+    final h = p.getInt('${key}H') ?? defHour;
+    final m = p.getInt('${key}M') ?? 0;
+    final t = TimeOfDay(hour: h, minute: m);
+    Future<void> apply(bool v, TimeOfDay time) async {
+      await p.setBool('${key}On', v);
+      await p.setInt('${key}H', time.hour);
+      await p.setInt('${key}M', time.minute);
+      await AdhkarNotifications.set(id, v, time.hour, time.minute, title);
+      if (mounted) setState(() {});
+    }
+
+    return ListTile(
+      leading: Icon(icon, color: kGold),
+      title: Text(title),
+      subtitle: Text(on ? 'كل يوم الساعة ${t.format(context)}' : 'متوقف'),
+      onTap: () async {
+        final picked = await showTimePicker(context: context, initialTime: t);
+        if (picked != null) await apply(true, picked);
+      },
+      trailing: Switch(value: on, onChanged: (v) => apply(v, t)),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_p == null) return const SizedBox(height: 120, child: Center(child: CircularProgressIndicator()));
+    return SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(bottom: 4),
+            child: Text('تذكير الأذكار', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+          ),
+          const Text('اضغط على السطر لاختيار الوقت', style: TextStyle(color: Colors.grey, fontSize: 12.5)),
+          _row('adhkarMorning', 2, 'أذكار الصباح', Icons.wb_sunny_outlined, 6),
+          _row('adhkarEvening', 3, 'أذكار المساء', Icons.nights_stay_outlined, 17),
+          const SizedBox(height: 8),
+        ],
       ),
     );
   }

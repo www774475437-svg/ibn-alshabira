@@ -1,8 +1,14 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:just_audio/just_audio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../config.dart';
+import '../data/models.dart';
 import '../services/cloud.dart';
+import 'content_screens.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 
@@ -66,8 +72,58 @@ class AudioLibraryScreen extends StatelessWidget {
       builder: (context, _) {
         final staff = cloud.ready && cloud.isFullAdmin;
         final items = cloud.lessons;
+        // Lessons grouped by their series, in the order they were added.
+        final groups = <String, List<int>>{};
+        for (var i = 0; i < items.length; i++) {
+          groups.putIfAbsent(items[i].group.isEmpty ? 'دروس متفرقة' : items[i].group, () => []).add(i);
+        }
+        Widget lessonTile(int i) {
+          final l = items[i];
+          final playable = _isAudioFile(l.url);
+          final yt = VideosScreen.videoIdFrom(l.url);
+          return Card(
+            margin: const EdgeInsets.only(bottom: 8),
+            child: ListTile(
+              leading: CircleAvatar(
+                backgroundColor: kGold.withValues(alpha: 0.18),
+                child: Icon(
+                    playable ? Icons.play_arrow : (yt != null ? Icons.smart_display_outlined : Icons.open_in_new),
+                    color: kGoldChip),
+              ),
+              title: Text(l.title, style: const TextStyle(fontWeight: FontWeight.w600)),
+              trailing: staff
+                  ? PopupMenuButton<String>(
+                      onSelected: (v) async {
+                        if (v == 'edit') {
+                          _edit(context, index: i);
+                        } else {
+                          await cloud.setLessons([...items]..removeAt(i), 'حذف درس صوتي');
+                        }
+                      },
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(value: 'edit', child: Text('تعديل')),
+                        PopupMenuItem(value: 'delete', child: Text('حذف')),
+                      ],
+                    )
+                  : null,
+              onTap: () {
+                if (playable) {
+                  showModalBottomSheet(
+                      context: context, showDragHandle: true, builder: (_) => _Player(lesson: l));
+                } else if (yt != null) {
+                  // YouTube lessons play inside the app.
+                  Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => VideoPlayerScreen(video: Video(id: yt, title: l.title, published: ''))));
+                } else {
+                  openUrl(context, l.url);
+                }
+              },
+            ),
+          );
+        }
+
         return Scaffold(
-          appBar: AppBar(title: const Text('المكتبة الصوتية')),
+          appBar: AppBar(title: const Text('الدروس والتسجيلات الصوتية')),
           floatingActionButton: staff
               ? FloatingActionButton.extended(
                   icon: const Icon(Icons.add),
@@ -75,51 +131,99 @@ class AudioLibraryScreen extends StatelessWidget {
                   onPressed: () => _edit(context),
                 )
               : null,
-          body: items.isEmpty
-              ? const EmptyState(icon: Icons.headphones, text: 'تُضاف دروس الشيخ الصوتية هنا قريباً بإذن الله.')
-              : ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
-                  itemCount: items.length,
-                  itemBuilder: (context, i) {
-                    final l = items[i];
-                    final playable = _isAudioFile(l.url);
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      child: ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: kGold.withValues(alpha: 0.18),
-                          child: Icon(playable ? Icons.play_arrow : Icons.open_in_new, color: kGoldChip),
-                        ),
-                        title: Text(l.title, style: const TextStyle(fontWeight: FontWeight.w600)),
-                        subtitle: l.group.isEmpty ? null : Text(l.group),
-                        trailing: staff
-                            ? PopupMenuButton<String>(
-                                onSelected: (v) async {
-                                  if (v == 'edit') {
-                                    _edit(context, index: i);
-                                  } else {
-                                    await cloud.setLessons([...items]..removeAt(i), 'حذف درس صوتي');
-                                  }
-                                },
-                                itemBuilder: (_) => const [
-                                  PopupMenuItem(value: 'edit', child: Text('تعديل')),
-                                  PopupMenuItem(value: 'delete', child: Text('حذف')),
-                                ],
-                              )
-                            : null,
-                        onTap: () => playable
-                            ? showModalBottomSheet(
-                                context: context,
-                                showDragHandle: true,
-                                builder: (_) => _Player(lesson: l),
-                              )
-                            : openUrl(context, l.url),
-                      ),
-                    );
-                  },
+          body: ListView(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
+            children: [
+              const _Recordings(),
+              for (final g in groups.entries) ...[
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(6, 14, 6, 8),
+                  child: Row(children: [
+                    Icon(Icons.playlist_play, color: kGoldChip),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text('${g.key} (${g.value.length})',
+                          style: const TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.bold, fontSize: 17)),
+                    ),
+                  ]),
                 ),
+                for (final i in g.value) lessonTile(i),
+              ],
+              if (items.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Text('تُضاف سلاسل دروس الشيخ هنا بإذن الله.',
+                      textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
+                ),
+            ],
+          ),
         );
       },
+    );
+  }
+}
+
+/// The sheikh's voice recordings taken from his Telegram channel by the bot.
+class _Recordings extends StatefulWidget {
+  const _Recordings();
+
+  @override
+  State<_Recordings> createState() => _RecordingsState();
+}
+
+class _RecordingsState extends State<_Recordings> {
+  static const _base = 'https://raw.githubusercontent.com/${AppConfig.owner}/${AppConfig.repo}/media/';
+  List<Map<String, dynamic>> _list = [];
+  bool _all = false;
+
+  @override
+  void initState() {
+    super.initState();
+    http.get(Uri.parse('${_base}audio.json')).timeout(const Duration(seconds: 15)).then((res) {
+      if (res.statusCode != 200 || !mounted) return;
+      final l = jsonDecode(utf8.decode(res.bodyBytes)) as List;
+      setState(() => _list = [for (final e in l.reversed) Map<String, dynamic>.from(e as Map)]);
+    }).catchError((_) {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_list.isEmpty) return const SizedBox.shrink();
+    final shown = _all ? _list : _list.take(5).toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(6, 4, 6, 8),
+          child: Row(children: [
+            Icon(Icons.mic_none, color: kGoldChip),
+            const SizedBox(width: 6),
+            const Expanded(
+              child: Text('تسجيلات الشيخ الصوتية',
+                  style: TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.bold, fontSize: 17)),
+            ),
+          ]),
+        ),
+        for (final r in shown)
+          Card(
+            margin: const EdgeInsets.only(bottom: 8),
+            child: ListTile(
+              leading: CircleAvatar(
+                backgroundColor: kGold.withValues(alpha: 0.18),
+                child: Icon(Icons.play_arrow, color: kGoldChip),
+              ),
+              title: Text('${r['title'] ?? ''}', maxLines: 2, overflow: TextOverflow.ellipsis),
+              subtitle: Text('${r['date'] ?? ''}'),
+              onTap: () => showModalBottomSheet(
+                context: context,
+                showDragHandle: true,
+                builder: (_) => _Player(lesson: Lesson('${r['title'] ?? ''}', '$_base${r['file']}', 'تسجيلات الشيخ')),
+              ),
+            ),
+          ),
+        if (_list.length > 5 && !_all)
+          TextButton(onPressed: () => setState(() => _all = true), child: Text('عرض الكل (${_list.length})')),
+      ],
     );
   }
 }

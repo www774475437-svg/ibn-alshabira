@@ -18,6 +18,7 @@ import 'channel_screen.dart';
 import 'book_reader_screen.dart';
 import 'content_screens.dart';
 import 'chapter_screen.dart';
+import 'audio_library.dart';
 import 'trusted_screens.dart';
 import 'quran_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -251,6 +252,22 @@ class _HomeTabState extends State<HomeTab> {
 
           // ------------------------------------------------ للمشاهدة والمتابعة
           const SliverToBoxAdapter(child: _GroupTitle('للمشاهدة والمتابعة', Icons.play_circle_outline)),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+              child: Card(
+                margin: EdgeInsets.zero,
+                child: ListTile(
+                  leading: const Icon(Icons.headphones, color: kGold, size: 28),
+                  title: const Text('الدروس والتسجيلات الصوتية', style: TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: const Text('سلاسل الدروس وتسجيلات الشيخ'),
+                  trailing: const Icon(Icons.chevron_left),
+                  onTap: () => Navigator.of(context)
+                      .push(MaterialPageRoute(builder: (_) => const AudioLibraryScreen())),
+                ),
+              ),
+            ),
+          ),
           if (repo.videos.isEmpty)
             SliverToBoxAdapter(
               child: Column(

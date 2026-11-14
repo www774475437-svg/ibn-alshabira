@@ -301,6 +301,73 @@ class Cloud extends ChangeNotifier {
     await FirebaseAuth.instance.signOut();
   }
 
+  // ---------------------------------------------------- Deleting an account
+  /// When the owner asked for his account to be deleted (null: not asked).
+  DateTime? pendingDeleteAt;
+
+  /// The owner asks to delete his account: it is kept 30 days, then deleted.
+  Future<String?> requestDeletion() async {
+    final u = user;
+    if (!ready || u == null) return 'سجّل الدخول أولاً';
+    try {
+      final at = DateTime.now().add(const Duration(days: 30));
+      await _db.doc('users/${u.uid}').set({'deleteAt': Timestamp.fromDate(at)}, SetOptions(merge: true));
+      pendingDeleteAt = at;
+      await signOut();
+      return null;
+    } catch (_) {
+      return 'تعذّر الطلب، حاول مرة أخرى';
+    }
+  }
+
+  /// The owner takes his deletion request back within the 30 days.
+  Future<String?> cancelDeletion() async {
+    final u = user;
+    if (!ready || u == null) return 'سجّل الدخول أولاً';
+    try {
+      await _db.doc('users/${u.uid}').set({'deleteAt': FieldValue.delete()}, SetOptions(merge: true));
+      pendingDeleteAt = null;
+      notifyListeners();
+      return null;
+    } catch (_) {
+      return 'تعذّر الاستعادة';
+    }
+  }
+
+  /// Deletes the account now: his questions, his saved data, and the account.
+  Future<String?> deleteNow() async {
+    if (!ready || user == null) return 'سجّل الدخول أولاً';
+    final err = await _deleteEverything();
+    return err;
+  }
+
+  Future<String?> _deleteEverything() async {
+    final u = user;
+    if (u == null) return 'سجّل الدخول أولاً';
+    try {
+      final qs = await _db.collection('questions').where('uid', isEqualTo: u.uid).get();
+      for (final d in qs.docs) {
+        try {
+          await d.reference.delete();
+        } catch (_) {}
+      }
+      await _db.doc('users/${u.uid}').delete();
+      pendingDeleteAt = null;
+      try {
+        await u.delete();
+      } on FirebaseAuthException catch (e) {
+        if (e.code == 'requires-recent-login') {
+          await signOut();
+          return 'حُذفت بياناتك. سجّل الدخول مرة أخرى ثم احذف الحساب لإتمام حذفه';
+        }
+      }
+      await signOut();
+      return null;
+    } catch (_) {
+      return 'تعذّر الحذف، حاول مرة أخرى';
+    }
+  }
+
   // ---------------------------------------------- Saved items sync (per user)
   Future<void> _syncUserData() async {
     final u = user;
@@ -310,10 +377,18 @@ class Cloud extends ChangeNotifier {
       final doc = _db.doc('users/${u.uid}');
       final snap = await doc.get();
       final data = snap.data() ?? {};
+      // A deletion the owner asked for: after 30 days it is carried out on
+      // his next sign-in; before that he may take it back.
+      final del = data['deleteAt'];
+      pendingDeleteAt = del is Timestamp ? del.toDate() : null;
+      if (pendingDeleteAt != null && DateTime.now().isAfter(pendingDeleteAt!)) {
+        await _deleteEverything();
+        return;
+      }
       final favs = {...repo.favorites, ...((data['favorites'] ?? []) as List).map((e) => '$e')};
       final later = {...repo.readLater, ...((data['readLater'] ?? []) as List).map((e) => '$e')};
       repo.replaceSavedLists(favs, later);
-      await doc.set({'favorites': favs.toList(), 'readLater': later.toList()});
+      await doc.set({'favorites': favs.toList(), 'readLater': later.toList()}, SetOptions(merge: true));
     } catch (e) {
       debugPrint('sync failed: $e');
     }
@@ -328,7 +403,7 @@ class Cloud extends ChangeNotifier {
       await _db.doc('users/${u.uid}').set({
         'favorites': repo.favorites.toList(),
         'readLater': repo.readLater.toList(),
-      });
+      }, SetOptions(merge: true));
     } catch (_) {}
   }
 
