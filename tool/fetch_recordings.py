@@ -15,7 +15,7 @@ import urllib.request
 from pathlib import Path
 
 CHANNEL = "QaidSandVe"
-VERSION = 2
+VERSION = 3
 OUT = Path(os.environ.get("MEDIA_ROOT", ".")) / "recordings.json"
 
 msg_re = re.compile(r'<div class="tgme_widget_message_wrap.*?(?=<div class="tgme_widget_message_wrap|\Z)', re.S)
@@ -186,8 +186,10 @@ def main():
                     break
         text = desc["text"] if desc else ""
         t = title_of(text) or title_of(p["text"])
-        if not t and not generic(p["dtitle"]):
-            t = shorten(trim_edges(p["dtitle"]))
+        file_title = "" if generic(p["dtitle"]) else shorten(trim_edges(p["dtitle"].replace("#", " ").replace("_", " ")))
+        if (not t or t.startswith("محتويات")) and len(file_title) > 6:
+            t = file_title
+        t = re.sub(r"\s+", " ", t.replace("#", " ").replace("_", " ")).strip()
         if not t:
             t = f"تسجيل صوتي {p['date']}".strip()
         dur = p["dur"] if p["dur"] not in ("", "0:00") else ""

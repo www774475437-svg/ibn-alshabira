@@ -1,12 +1,14 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:just_audio/just_audio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config.dart';
 import '../data/models.dart';
+import '../data/repository.dart' show normalizeArabic;
 import '../services/cloud.dart';
 import 'content_screens.dart';
 import '../theme.dart';
@@ -163,7 +165,120 @@ class AudioLibraryScreen extends StatelessWidget {
   }
 }
 
-/// The sheikh's voice recordings taken from his Telegram channel by the bot.
+/// One recording of the sheikh's channel (t.me/QaidSandVe).
+class Recording {
+  final int id;
+  final String kind; // v: voice note, a: audio file
+  final String title, by, date, dur;
+  String file = ''; // the audio file kept by the bot, when there is one
+  Recording(this.id, this.kind, this.title, this.by, this.date, this.dur);
+
+  String get telegram => 'https://t.me/$recordingsChannel/$id';
+
+  /// Plays inside the app: voice notes always (on Android), files once the bot has them.
+  bool get playable => file.isNotEmpty || (kind == 'v' && !kIsWeb);
+
+  String get playUrl => file.isNotEmpty ? file : 'tg:$id';
+}
+
+const recordingsChannel = 'QaidSandVe';
+const _mediaBase = 'https://raw.githubusercontent.com/${AppConfig.owner}/${AppConfig.repo}/media/';
+
+/// The list of recordings, kept on the phone so it opens at once.
+class Recordings {
+  static List<Recording>? _cache;
+
+  static Future<List<Recording>> load({bool fresh = false}) async {
+    if (_cache != null && !fresh) return _cache!;
+    final prefs = await SharedPreferences.getInstance();
+    String? body;
+    try {
+      final res = await http.get(Uri.parse('${_mediaBase}recordings.json')).timeout(const Duration(seconds: 15));
+      if (res.statusCode == 200) {
+        body = utf8.decode(res.bodyBytes);
+        await prefs.setString('recordingsList', body);
+      }
+    } catch (_) {}
+    body ??= prefs.getString('recordingsList');
+    final list = <Recording>[];
+    if (body != null) {
+      try {
+        final j = jsonDecode(body);
+        final items = (j is Map ? j['items'] : j) as List;
+        for (final e in items) {
+          final m = e as Map;
+          list.add(Recording(((m['id'] ?? 0) as num).toInt(), '${m['k'] ?? 'v'}', '${m['t'] ?? m['title'] ?? ''}',
+              '${m['b'] ?? ''}', '${m['d'] ?? m['date'] ?? ''}', '${m['u'] ?? m['dur'] ?? ''}'));
+        }
+      } catch (_) {}
+    }
+    // Files the bot took from the channel: played from our own copy.
+    try {
+      final res = await http.get(Uri.parse('${_mediaBase}audio.json')).timeout(const Duration(seconds: 15));
+      if (res.statusCode == 200) {
+        final byId = {for (final r in list) r.id: r};
+        for (final e in jsonDecode(utf8.decode(res.bodyBytes)) as List) {
+          final m = e as Map;
+          final id = int.tryParse('${m['key']}'.split('_').last) ?? 0;
+          final url = '$_mediaBase${m['file']}';
+          final r = byId[id];
+          if (r != null) {
+            r.file = url;
+          } else {
+            list.add(Recording(id, 'a', '${m['title'] ?? ''}', '', '${m['date'] ?? ''}', '')..file = url);
+          }
+        }
+        list.sort((a, b) => b.id.compareTo(a.id));
+      }
+    } catch (_) {}
+    if (list.isNotEmpty) _cache = list;
+    return list;
+  }
+
+  /// Asks Telegram for the playable link of a voice note.
+  static Future<String?> voiceLink(int id) async {
+    try {
+      final res = await http
+          .get(Uri.parse('https://t.me/$recordingsChannel/$id?embed=1&mode=tme'))
+          .timeout(const Duration(seconds: 15));
+      final m = RegExp(r'<audio[^>]+src="([^"]+)"').firstMatch(utf8.decode(res.bodyBytes));
+      return m?.group(1)?.replaceAll('&amp;', '&');
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
+void openRecording(BuildContext context, Recording r) {
+  if (r.playable) {
+    showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      builder: (_) => _Player(lesson: Lesson(r.title, r.playUrl, r.by), telegram: r.telegram),
+    );
+  } else {
+    openUrl(context, r.telegram); // older audio files play in Telegram
+  }
+}
+
+Widget _recordingTile(BuildContext context, Recording r) => Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: kGold.withValues(alpha: 0.18),
+          child: Icon(r.playable ? Icons.play_arrow : Icons.send_outlined, color: kGoldChip),
+        ),
+        title: Text(r.title, maxLines: 3, overflow: TextOverflow.ellipsis, style: const TextStyle(height: 1.5)),
+        subtitle: Text(
+          [if (r.by.isNotEmpty) r.by, if (r.dur.isNotEmpty) '⏱ ${r.dur}', r.date].join('  ·  '),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        onTap: () => openRecording(context, r),
+      ),
+    );
+
+/// The sheikh's recordings from his channel: the newest five, and all of them.
 class _Recordings extends StatefulWidget {
   const _Recordings();
 
@@ -172,24 +287,19 @@ class _Recordings extends StatefulWidget {
 }
 
 class _RecordingsState extends State<_Recordings> {
-  static const _base = 'https://raw.githubusercontent.com/${AppConfig.owner}/${AppConfig.repo}/media/';
-  List<Map<String, dynamic>> _list = [];
-  bool _all = false;
+  List<Recording> _list = [];
 
   @override
   void initState() {
     super.initState();
-    http.get(Uri.parse('${_base}audio.json')).timeout(const Duration(seconds: 15)).then((res) {
-      if (res.statusCode != 200 || !mounted) return;
-      final l = jsonDecode(utf8.decode(res.bodyBytes)) as List;
-      setState(() => _list = [for (final e in l.reversed) Map<String, dynamic>.from(e as Map)]);
-    }).catchError((_) {});
+    Recordings.load().then((l) {
+      if (mounted) setState(() => _list = l);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     if (_list.isEmpty) return const SizedBox.shrink();
-    final shown = _all ? _list : _list.take(5).toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -198,39 +308,91 @@ class _RecordingsState extends State<_Recordings> {
           child: Row(children: [
             Icon(Icons.mic_none, color: kGoldChip),
             const SizedBox(width: 6),
-            const Expanded(
-              child: Text('تسجيلات الشيخ الصوتية',
-                  style: TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.bold, fontSize: 17)),
+            Expanded(
+              child: Text('التسجيلات الصوتية (${_list.length})',
+                  style: const TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.bold, fontSize: 17)),
             ),
           ]),
         ),
-        for (final r in shown)
-          Card(
-            margin: const EdgeInsets.only(bottom: 8),
-            child: ListTile(
-              leading: CircleAvatar(
-                backgroundColor: kGold.withValues(alpha: 0.18),
-                child: Icon(Icons.play_arrow, color: kGoldChip),
-              ),
-              title: Text('${r['title'] ?? ''}', maxLines: 2, overflow: TextOverflow.ellipsis),
-              subtitle: Text('${r['date'] ?? ''}'),
-              onTap: () => showModalBottomSheet(
-                context: context,
-                showDragHandle: true,
-                builder: (_) => _Player(lesson: Lesson('${r['title'] ?? ''}', '$_base${r['file']}', 'تسجيلات الشيخ')),
-              ),
-            ),
-          ),
-        if (_list.length > 5 && !_all)
-          TextButton(onPressed: () => setState(() => _all = true), child: Text('عرض الكل (${_list.length})')),
+        for (final r in _list.take(5)) _recordingTile(context, r),
+        FilledButton.tonalIcon(
+          icon: const Icon(Icons.library_music_outlined),
+          label: Text('كل التسجيلات (${_list.length})'),
+          onPressed: () =>
+              Navigator.of(context).push(MaterialPageRoute(builder: (_) => const RecordingsScreen())),
+        ),
+        const SizedBox(height: 8),
       ],
+    );
+  }
+}
+
+/// «التسجيلات الصوتية»: every recording of the channel, with search.
+class RecordingsScreen extends StatefulWidget {
+  const RecordingsScreen({super.key});
+
+  @override
+  State<RecordingsScreen> createState() => _RecordingsScreenState();
+}
+
+class _RecordingsScreenState extends State<RecordingsScreen> {
+  List<Recording>? _all;
+  String _q = '';
+
+  @override
+  void initState() {
+    super.initState();
+    Recordings.load().then((l) {
+      if (mounted) setState(() => _all = l);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final all = _all;
+    final q = normalizeArabic(_q.trim());
+    final shown = all == null || q.isEmpty
+        ? (all ?? <Recording>[])
+        : all.where((r) => normalizeArabic('${r.title} ${r.by}').contains(q)).toList();
+    return Scaffold(
+      appBar: AppBar(title: const Text('التسجيلات الصوتية')),
+      body: all == null
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+                  child: TextField(
+                    decoration: const InputDecoration(
+                      prefixIcon: Icon(Icons.search),
+                      hintText: 'ابحث في عناوين التسجيلات',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    onChanged: (v) => setState(() => _q = v),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                  child: Text('${shown.length} تسجيلاً', style: const TextStyle(color: Colors.grey)),
+                ),
+                Expanded(
+                  child: ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
+                    itemCount: shown.length,
+                    itemBuilder: (context, i) => _recordingTile(context, shown[i]),
+                  ),
+                ),
+              ],
+            ),
     );
   }
 }
 
 class _Player extends StatefulWidget {
   final Lesson lesson;
-  const _Player({required this.lesson});
+  final String telegram; // where to listen if it cannot play here
+  const _Player({required this.lesson, this.telegram = ''});
 
   @override
   State<_Player> createState() => _PlayerState();
@@ -251,7 +413,13 @@ class _PlayerState extends State<_Player> {
 
   Future<void> _start() async {
     try {
-      await _player.setUrl(widget.lesson.url);
+      var url = widget.lesson.url;
+      if (url.startsWith('tg:')) {
+        final link = await Recordings.voiceLink(int.parse(url.substring(3)));
+        if (link == null) throw Exception('no link');
+        url = link;
+      }
+      await _player.setUrl(url);
       final prefs = await SharedPreferences.getInstance();
       final pos = prefs.getInt(_key) ?? 0;
       if (pos > 0) await _player.seek(Duration(seconds: pos));
@@ -291,7 +459,15 @@ class _PlayerState extends State<_Player> {
                 textAlign: TextAlign.center, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
             if (_error != null)
-              Text(_error!, style: const TextStyle(color: Colors.red))
+              Column(children: [
+                Text(_error!, style: const TextStyle(color: Colors.red)),
+                if (widget.telegram.isNotEmpty)
+                  TextButton.icon(
+                    icon: const Icon(Icons.send_outlined),
+                    label: const Text('استمع في تيليجرام'),
+                    onPressed: () => openUrl(context, widget.telegram),
+                  ),
+              ])
             else
               StreamBuilder<Duration>(
                 stream: _player.positionStream,
