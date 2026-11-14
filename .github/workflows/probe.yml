@@ -1,0 +1,16 @@
+name: Probe audio channel
+on: workflow_dispatch
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          cd tool && python3 - <<'P'
+          import fetch_recordings as f, re
+          for before in (None, 1200, 300):
+              for p in f.read_page(before):
+                  print(p['id'], 'V' if p['voice'] else '-', p['dur'], repr(p['text'][:230]))
+          b = f.get('https://t.me/s/QaidSandVe')
+          i = b.find('voice_duration'); print(re.sub(r'\s+',' ', b[i-200:i+300]))
+          P
