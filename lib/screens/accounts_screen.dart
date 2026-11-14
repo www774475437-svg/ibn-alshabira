@@ -17,6 +17,9 @@ class AccountsScreen extends StatelessWidget {
     'whatsapp': 'واتساب',
     'facebook': 'فيسبوك',
     'x': 'إكس',
+    'instagram': 'إنستغرام',
+    'tiktok': 'تيك توك',
+    'snapchat': 'سناب شات',
     'audio': 'صوتيات',
     'group': 'مجموعة',
     'link': 'موقع أو رابط آخر',
@@ -39,11 +42,11 @@ class AccountsScreen extends StatelessWidget {
         final people = cloud.accounts;
         final canEdit = cloud.ready && cloud.isFullAdmin;
         return Scaffold(
-          appBar: AppBar(title: const Text('قنوات وحسابات')),
+          appBar: AppBar(title: const Text('قنوات وحسابات أنصح بها')),
           floatingActionButton: canEdit
               ? FloatingActionButton.extended(
                   icon: const Icon(Icons.person_add_alt),
-                  label: const Text('إضافة صاحب حساب'),
+                  label: const Text('إضافة شيخ أو قناة'),
                   onPressed: () async {
                     final p = await Navigator.of(context).push<Map<String, dynamic>>(
                         MaterialPageRoute(builder: (_) => const _PersonEditor()));
@@ -61,6 +64,56 @@ class AccountsScreen extends StatelessWidget {
                   for (final l in repo.sheikhLinks) {'platform': l.platform, 'name': l.name, 'url': l.url},
                 ],
                 highlight: true,
+                // The sheikh or an admin adds another account of the sheikh's own here.
+                onEdit: canEdit
+                    ? () async {
+                        final p = await Navigator.of(context).push<Map<String, dynamic>>(MaterialPageRoute(
+                            builder: (_) => _PersonEditor(
+                                  sheikh: true,
+                                  person: {
+                                    'name': 'الشيخ قايد بن غانم الشابرة',
+                                    'links': [
+                                      for (final l in repo.sheikhLinks)
+                                        {'platform': l.platform, 'name': l.name, 'url': l.url},
+                                    ],
+                                  },
+                                )));
+                        if (p == null || !context.mounted) return;
+                        final err = await cloud.setConfig(
+                          'links',
+                          {
+                            'items': [
+                              for (final l in (p['links'] ?? []) as List)
+                                {'platform': l['platform'], 'name': l['name'], 'url': l['url']},
+                            ],
+                          },
+                          'تعديل حسابات الشيخ',
+                        );
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err ?? 'تم الحفظ ✅')));
+                        }
+                      }
+                    : null,
+              ),
+              // The heading of what the sheikh recommends.
+              Container(
+                margin: const EdgeInsets.only(top: 6, bottom: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFB3261E),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.recommend_outlined, color: Colors.white),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text('قنوات وحسابات مشايخ أنصح بها',
+                          style: TextStyle(
+                              fontFamily: 'Tajawal', color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
               ),
               for (var i = 0; i < people.length; i++)
                 _PersonCard(
@@ -86,7 +139,7 @@ class AccountsScreen extends StatelessWidget {
               if (people.isEmpty && canEdit)
                 const Padding(
                   padding: EdgeInsets.all(20),
-                  child: Text('اضغط «إضافة صاحب حساب» لتضيف شيخاً أو طالب علم مع حساباته.',
+                  child: Text('اضغط «إضافة شيخ أو قناة» لتضيف شيخاً أو طالب علم مع حساباته.',
                       textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
                 ),
             ],
@@ -124,7 +177,10 @@ class _PersonCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(
+              InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: onEdit,
+                child: Row(
                 children: [
                   CircleAvatar(
                     backgroundColor: kGold.withValues(alpha: 0.18),
@@ -144,6 +200,7 @@ class _PersonCard extends StatelessWidget {
                   if (onEdit != null)
                     IconButton(tooltip: 'تعديل', icon: const Icon(Icons.edit_outlined), onPressed: onEdit),
                 ],
+                ),
               ),
               if (about.isNotEmpty)
                 Padding(
@@ -173,7 +230,10 @@ class _PersonCard extends StatelessWidget {
 /// The form for one owner: name, title, a note, and his links.
 class _PersonEditor extends StatefulWidget {
   final Map<String, dynamic>? person;
-  const _PersonEditor({this.person});
+
+  /// The sheikh's own card: only his accounts are edited.
+  final bool sheikh;
+  const _PersonEditor({this.person, this.sheikh = false});
 
   @override
   State<_PersonEditor> createState() => _PersonEditorState();
@@ -275,7 +335,7 @@ class _PersonEditorState extends State<_PersonEditor> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text(isNew ? 'إضافة صاحب حساب' : 'تعديل'),
+          title: Text(widget.sheikh ? 'حسابات الشيخ' : (isNew ? 'إضافة شيخ أو قناة' : 'تعديل')),
           actions: [
             if (_changed)
               TextButton(
@@ -290,6 +350,7 @@ class _PersonEditorState extends State<_PersonEditor> {
         body: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            if (!widget.sheikh) ...[
             TextField(
                 controller: _name,
                 onChanged: (_) => setState(() => _changed = true),
@@ -306,6 +367,7 @@ class _PersonEditorState extends State<_PersonEditor> {
                 onChanged: (_) => setState(() => _changed = true),
                 decoration: _deco('نبذة وتفاصيل (اختياري)')),
             const SizedBox(height: 16),
+            ],
             const Text('الحسابات والقنوات', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             for (var i = 0; i < _links.length; i++)
               ListTile(
@@ -351,7 +413,7 @@ class _PersonEditorState extends State<_PersonEditor> {
                 WidgetsBinding.instance.addPostFrameCallback((_) => Navigator.pop(context, out));
               },
             ),
-            if (!isNew)
+            if (!isNew && !widget.sheikh)
               TextButton.icon(
                 icon: const Icon(Icons.delete_outline, color: Colors.red),
                 label: const Text('حذف صاحب الحساب وكل حساباته', style: TextStyle(color: Colors.red)),

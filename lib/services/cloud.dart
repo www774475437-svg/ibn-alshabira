@@ -879,9 +879,12 @@ class Cloud extends ChangeNotifier {
       ];
       final mb = c['app']?['minBuild'];
       minBuild = mb is int ? mb : 0;
-      accounts = [
-        for (final p in (c['accounts']?['people'] ?? []) as List) Map<String, dynamic>.from(p as Map),
-      ];
+      // Until the staff save their own list, the first entry the developer asked for is shown.
+      if (c['accounts'] != null) {
+        accounts = [
+          for (final p in (c['accounts']?['people'] ?? []) as List) Map<String, dynamic>.from(p as Map),
+        ];
+      }
       aiEnabled = c['ai']?['enabled'] != false;
       aiSummary = c['ai']?['summary'] != false;
       aboutText = '${c['about']?['text'] ?? ''}';
@@ -977,7 +980,16 @@ class Cloud extends ChangeNotifier {
   int minBuild = 0;
 
   /// Scholars and others added by the staff, each with his accounts.
-  List<Map<String, dynamic>> accounts = [];
+  List<Map<String, dynamic>> accounts = [
+    {
+      'name': 'الشيخ سلمان صالح العماد',
+      'title': '',
+      'about': '',
+      'links': [
+        {'platform': 'telegram', 'name': 'قناة الشيخ على تيليجرام', 'url': 'https://t.me/salmansalehalemad', 'note': ''},
+      ],
+    },
+  ];
 
   /// The staff can switch the AI help off, or only its written summary.
   bool aiEnabled = true;
