@@ -65,15 +65,20 @@ try:
     if not videos:
         # The feed is closed to this server: read the videos listed on the channel page itself.
         seen = set()
-        for m in re.finditer(r'"videoRenderer":\{"videoId":"([\w-]{11})"', page):
+        print("page marks:", {k: page.count(k) for k in ("videoRenderer", "lockupViewModel", "contentId", "videoId")})
+        title_pat = (r'"title":\{(?:"runs":\[\{"text"|"simpleText"|"content"):"((?:[^"\\]|\\.)*)"')
+        for m in re.finditer(r'"(?:videoId|contentId)":"([\w-]{11})"', page):
             vid = m.group(1)
             if vid in seen:
                 continue
-            chunk = page[m.end():m.end() + 3000]
-            t = re.search(r'"title":\{"runs":\[\{"text":"((?:[^"\\]|\\.)*)"', chunk)
+            t = re.search(title_pat, page[m.end():m.end() + 4000])
             if t:
                 seen.add(vid)
-                videos.append({"id": vid, "title": json.loads('"' + t.group(1) + '"'), "published": ""})
+                try:
+                    videos.append({"id": vid, "title": json.loads('"' + t.group(1) + '"'), "published": ""})
+                except Exception:
+                    pass
+        videos = videos[:30]
         print("from the channel page:", len(videos))
     if videos:
         OUT.write_text(json.dumps(videos, ensure_ascii=False, indent=1), encoding="utf-8")
