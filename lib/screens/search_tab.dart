@@ -207,7 +207,7 @@ class _SearchTabState extends State<SearchTab> {
                 style: FilledButton.styleFrom(
                     backgroundColor: const Color(0xFF2E7D32), foregroundColor: Colors.white),
                 icon: const Icon(Icons.manage_search),
-                label: const Text('بحث الفتاوى من كتب الثقات'),
+                label: const Text('بحث الفتاوى من كتب الثقات بالذكاء الاصطناعي'),
                 onPressed: () => Navigator.of(context)
                     .push(MaterialPageRoute(builder: (_) => TrustedFatwaScreen(initial: _query.trim()))),
               ),
