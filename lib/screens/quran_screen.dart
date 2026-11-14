@@ -53,7 +53,21 @@ class QuranData {
 
   /// (surah 1-based, verse 1-based) of a global verse index.
   /// The words of a verse without the number mark at its end.
-  String words(int index) => verses[index].split('\u00A0').first.trim();
+  String words(int index) {
+    final v = verses[index];
+    // Only the LAST no-break space separates the number mark: a verse that
+    // opens with the quarter mark ۞ has another one right after that mark.
+    final i = v.lastIndexOf('\u00A0');
+    return (i < 0 ? v : v.substring(0, i)).trim();
+  }
+
+  static const juzNames = [
+    'الأول', 'الثاني', 'الثالث', 'الرابع', 'الخامس', 'السادس', 'السابع', 'الثامن', 'التاسع', 'العاشر',
+    'الحادي عشر', 'الثاني عشر', 'الثالث عشر', 'الرابع عشر', 'الخامس عشر', 'السادس عشر', 'السابع عشر',
+    'الثامن عشر', 'التاسع عشر', 'العشرون', 'الحادي والعشرون', 'الثاني والعشرون', 'الثالث والعشرون',
+    'الرابع والعشرون', 'الخامس والعشرون', 'السادس والعشرون', 'السابع والعشرون', 'الثامن والعشرون',
+    'التاسع والعشرون', 'الثلاثون',
+  ];
 
   /// The number mark at the end of a verse (drawn by the mushaf font).
   String mark(int index) {
@@ -367,6 +381,19 @@ class _QuranScreenState extends State<QuranScreen> {
       body: Column(
         children: [
           if (_full) SizedBox(height: MediaQuery.of(context).padding.top),
+          // As at the head of a printed page: the juz on one side, the surah on the other.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(22, 6, 22, 0),
+            child: Row(
+              children: [
+                Text('الجزء ${QuranData.juzNames[(q.juzOfPage(_page) - 1).clamp(0, 29)]}',
+                    style: TextStyle(fontFamily: 'Amiri', fontSize: 14, color: _night ? Colors.white60 : Colors.brown)),
+                const Spacer(),
+                Text(q.names[surah - 1],
+                    style: TextStyle(fontFamily: 'Amiri', fontSize: 14, color: _night ? Colors.white60 : Colors.brown)),
+              ],
+            ),
+          ),
           Expanded(
             child: PageView.builder(
               controller: _pages,
@@ -390,23 +417,29 @@ class _QuranScreenState extends State<QuranScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
               child: Text(khatma, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12.5)),
             ),
-          if (!_full)
-          Material(
-            color: Theme.of(context).colorScheme.surfaceContainerHighest,
-            child: InkWell(
-              onTap: _askPage,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
-                child: Row(
-                  children: [
-                    Text('الجزء ${QuranData.digits(q.juzOfPage(_page))}', style: const TextStyle(fontSize: 13)),
-                    const Spacer(),
-                    Text('صفحة ${QuranData.digits(_page)}',
-                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                    const Spacer(),
-                    const Text('ضغطة مطوّلة: الآية · ضغطتان: القراءة فقط',
-                        style: TextStyle(fontSize: 10.5, color: Colors.grey)),
-                  ],
+          // The foot of the page: its number and the hizb, inside a gold frame.
+          InkWell(
+            onTap: _askPage,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 2, bottom: 8),
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: kGold, width: 1.2),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 22),
+                        child: Text(QuranData.digits(_page),
+                            style: TextStyle(
+                                fontSize: 15, fontWeight: FontWeight.bold, color: _night ? Colors.white : null)),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

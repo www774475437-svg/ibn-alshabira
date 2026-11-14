@@ -3,7 +3,6 @@ name: Build APK and website
 on:
   push:
     branches: [main]
-    paths-ignore: ['tool/probe_turath.py', '.github/workflows/probe.yml']
   workflow_dispatch:
   # Every day: refresh the site with the sheikh's newest channel posts.
   schedule:
@@ -69,6 +68,9 @@ jobs:
       - name: Latest videos from the sheikh's YouTube channel
         run: python3 tool/fetch_youtube.py
 
+      - name: Trusted scholars and their books (names only) from Turath
+        run: python3 tool/fetch_scholars.py
+
       - name: Answers from the sheikh's Telegram channel (fetched once)
         uses: actions/download-artifact@v4
         with:
@@ -118,6 +120,9 @@ jobs:
 
       - name: Latest videos from the sheikh's YouTube channel
         run: python3 tool/fetch_youtube.py
+
+      - name: Trusted scholars and their books (names only) from Turath
+        run: python3 tool/fetch_scholars.py
 
       - name: Answers from the sheikh's Telegram channel (fetched once)
         uses: actions/download-artifact@v4
