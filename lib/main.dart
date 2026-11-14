@@ -69,7 +69,7 @@ class IbnAlshabiraApp extends StatelessWidget {
         darkTheme: buildTheme(Brightness.dark, repo.fontFamily, repo.palette),
         themeMode: repo.palette == 'black'
             ? ThemeMode.dark
-            : (repo.palette == 'paper' ? ThemeMode.light : repo.themeMode),
+            : (repo.palette == 'paper' ? ThemeMode.light : repo.effectiveThemeMode),
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context).copyWith(
             textScaler: TextScaler.linear(repo.fontScale),

@@ -111,6 +111,7 @@ class _HomeTabState extends State<HomeTab> {
               ),
             ),
           ),
+          const SliverToBoxAdapter(child: _MostSearched()),
           if (repo.latest().isNotEmpty) ...[
             const SliverToBoxAdapter(child: _SectionTitle('أُضيف حديثاً')),
             SliverToBoxAdapter(
@@ -768,6 +769,90 @@ class _TodayStrip extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+
+/// «الأكثر بحثاً هذا الأسبوع»: answers people reached most through search.
+class _MostSearched extends StatefulWidget {
+  const _MostSearched();
+
+  @override
+  State<_MostSearched> createState() => _MostSearchedState();
+}
+
+class _MostSearchedState extends State<_MostSearched> {
+  List<Fatwa> _items = [];
+
+  @override
+  void initState() {
+    super.initState();
+    Future.delayed(const Duration(seconds: 2), _load);
+  }
+
+  Future<void> _load() async {
+    final ids = await Cloud.instance.mostSearched();
+    final repo = Repository.instance;
+    final items = [
+      for (final id in ids)
+        if (repo.findById(id) != null) repo.findById(id)!,
+    ];
+    if (mounted && items.length >= 3) setState(() => _items = items);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_items.isEmpty) return const SizedBox.shrink();
+    final repo = Repository.instance;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const _SectionTitle('الأكثر بحثاً هذا الأسبوع'),
+        SizedBox(
+          height: 132,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            itemCount: _items.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 10),
+            itemBuilder: (context, i) {
+              final f = _items[i];
+              return SizedBox(
+                width: 240,
+                child: Card(
+                  margin: EdgeInsets.zero,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(18),
+                    onTap: () => openFatwa(context, f),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(children: [
+                            const Icon(Icons.trending_up, size: 16, color: kGold),
+                            const SizedBox(width: 4),
+                            Text(repo.chapterName(f.chapter),
+                                style: const TextStyle(color: kGoldChip, fontSize: 12)),
+                          ]),
+                          const SizedBox(height: 6),
+                          Expanded(
+                            child: Text(f.title,
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(height: 1.6, fontWeight: FontWeight.w600)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }

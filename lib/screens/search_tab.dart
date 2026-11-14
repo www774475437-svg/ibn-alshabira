@@ -252,7 +252,10 @@ class _SearchTabState extends State<SearchTab> {
                             );
                           }
                           return GestureDetector(
-                            onTapDown: (_) => repo.addRecentSearch(_query),
+                            onTapDown: (_) {
+                              repo.addRecentSearch(_query);
+                              Cloud.instance.countSearchOpen((row as Fatwa).id);
+                            },
                             child: FatwaTile(fatwa: row as Fatwa),
                           );
                         },

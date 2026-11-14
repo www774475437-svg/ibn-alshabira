@@ -132,6 +132,7 @@ class Repository extends ChangeNotifier {
       folders = {};
     }
     themeMode = ThemeMode.values[prefs.getInt('themeMode') ?? ThemeMode.system.index];
+    autoNight = prefs.getBool('autoNight') ?? false;
     fontScale = prefs.getDouble('fontScale') ?? 1.0;
     dailyNotification = prefs.getBool('dailyNotification') ?? true;
     notifyHour = prefs.getInt('notifyHour') ?? 8;
@@ -769,6 +770,32 @@ class Repository extends ChangeNotifier {
   }
 
   List<Fatwa> get favoriteFatwas => fatwas.where((f) => favorites.contains(f.id)).toList();
+
+  /// Optional: dark from sunset to dawn (about 6 pm to 5 am), light by day.
+  bool autoNight = false;
+
+  void setAutoNight(bool v) {
+    autoNight = v;
+    _prefs.setBool('autoNight', v);
+    notifyListeners();
+  }
+
+  ThemeMode get effectiveThemeMode {
+    if (!autoNight) return themeMode;
+    final h = DateTime.now().hour;
+    return h >= 18 || h < 5 ? ThemeMode.dark : ThemeMode.light;
+  }
+
+  /// Where the reader stopped inside a long answer (scroll offset).
+  double readPosition(String id) => _prefs.getDouble('pos_$id') ?? 0;
+
+  void saveReadPosition(String id, double offset) {
+    if (offset < 400) {
+      _prefs.remove('pos_$id');
+    } else {
+      _prefs.setDouble('pos_$id', offset);
+    }
+  }
 
   void setThemeMode(ThemeMode m) {
     themeMode = m;

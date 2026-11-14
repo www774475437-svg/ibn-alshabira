@@ -41,6 +41,10 @@ service cloud.firestore {
       allow create, update: if request.resource.data.keys().hasOnly(['count']) && stepOk('count');
       allow read, delete: if isAdmin();
     }
+    match /searches/{week} {
+      allow read: if true;
+      allow create, update: if request.resource.data.size() <= 5000;
+    }
     match /reports/{id} {
       allow create: if request.resource.data.keys().hasOnly(['answerId', 'title', 'note', 'by', 'at'])
         && request.resource.data.note is string && request.resource.data.note.size() < 2000;
