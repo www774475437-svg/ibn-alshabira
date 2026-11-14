@@ -101,6 +101,26 @@ class MoreTab extends StatelessWidget {
             if (Cloud.instance.ready && Cloud.instance.isAdmin) ...[
               const _Group('أدوات المشرفين'),
               _Section(children: [
+                if (Cloud.instance.isFullAdmin) ...[
+                  SwitchListTile(
+                    secondary: const _IconBox(Icons.auto_awesome_outlined),
+                    title: const Text('الذكاء الاصطناعي في بحث كتب الثقات'),
+                    subtitle: const Text('يقسّم السؤال إلى مسائله'),
+                    value: Cloud.instance.aiEnabled,
+                    onChanged: (v) => Cloud.instance.setConfig(
+                        'ai', {'enabled': v, 'summary': Cloud.instance.aiSummary}, 'تشغيل/إيقاف الذكاء'),
+                  ),
+                  SwitchListTile(
+                    secondary: const _IconBox(Icons.short_text),
+                    title: const Text('الحكم المختصر الآلي'),
+                    subtitle: const Text('تلخيص من نصوص الشيخ؛ أطفئه لتُعرض النصوص وحدها'),
+                    value: Cloud.instance.aiSummary,
+                    onChanged: Cloud.instance.aiEnabled
+                        ? (v) => Cloud.instance
+                            .setConfig('ai', {'enabled': true, 'summary': v}, 'تشغيل/إيقاف الحكم المختصر')
+                        : null,
+                  ),
+                ],
                 ListTile(
                   leading: const _IconBox(Icons.rule_folder_outlined),
                   title: const Text('لم يُتحقق منها'),

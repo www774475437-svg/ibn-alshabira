@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
+import '../services/ai.dart';
+import '../services/cloud.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'content_screens.dart';
@@ -327,6 +329,19 @@ List<InlineSpan> _spans(String raw, {required Color mark}) {
 
 String _plain(String raw) => raw.replaceAll(RegExp(r'<[^>]*>'), '').trim();
 
+/// One question of the message, and what was found for it.
+class _Found {
+  final String title;
+  final List<String> queries;
+  bool busy = true;
+  String status = '';
+  int at = -1; // index in [_order] of the scholar the texts are from
+  List<_Hit> hits = [];
+  String summary = '';
+  bool reported = false;
+  _Found(this.title, this.queries);
+}
+
 class TrustedFatwaScreen extends StatefulWidget {
   final String initial;
   const TrustedFatwaScreen({super.key, this.initial = ''});
@@ -340,14 +355,16 @@ class _TrustedFatwaScreenState extends State<TrustedFatwaScreen> {
   bool _busy = false;
   String _status = '';
   String _error = '';
-  int _at = -1; // which scholar the results are from
-  List<_Hit> _hits = [];
-  int _count = 0;
+  String _note = '';
+  List<_Found> _found = [];
+  int _run = 0; // a newer search cancels an older one
+
+  bool get _ai => Ai.supported && Cloud.instance.aiEnabled;
 
   @override
   void initState() {
     super.initState();
-    if (widget.initial.trim().length > 2) WidgetsBinding.instance.addPostFrameCallback((_) => _search(0));
+    if (widget.initial.trim().length > 2) WidgetsBinding.instance.addPostFrameCallback((_) => _search());
   }
 
   @override
@@ -356,7 +373,7 @@ class _TrustedFatwaScreenState extends State<TrustedFatwaScreen> {
     super.dispose();
   }
 
-  Future<(int, List<_Hit>)> _ask(int author, String q) async {
+  Future<List<_Hit>> _ask(int author, String q) async {
     final res = await http
         .get(Uri.parse('https://api.turath.io/search?q=${Uri.encodeQueryComponent(q)}&author=$author&ver=3'))
         .timeout(const Duration(seconds: 25));
@@ -379,46 +396,107 @@ class _TrustedFatwaScreenState extends State<TrustedFatwaScreen> {
         '${m['text'] ?? m['snip'] ?? ''}',
       ));
     }
-    return (((j['count'] ?? hits.length) as num).toInt(), hits);
+    return hits;
   }
 
-  /// Searches the scholars in order, starting from [from], and stops at the
-  /// first one who has something on the question.
-  Future<void> _search(int from) async {
+  Future<void> _search() async {
     final q = _c.text.trim();
     if (q.length < 3 || _busy) return;
     FocusScope.of(context).unfocus();
+    final run = ++_run;
     setState(() {
       _busy = true;
       _error = '';
-      _hits = [];
-      _at = -1;
+      _note = '';
+      _found = [];
+      _status = _ai ? 'جارٍ قراءة السؤال وتقسيمه إلى مسائله…' : 'جارٍ البحث…';
+    });
+    List<AiIssue>? issues;
+    if (_ai) issues = await Ai.split(q);
+    if (!mounted || run != _run) return;
+    final found = [
+      if (issues != null)
+        for (final i in issues) _Found(i.title, i.queries)
+      else
+        _Found(q, [q]),
+    ];
+    setState(() {
+      _found = found;
+      _busy = false;
+      if (issues == null && _ai) {
+        _note = 'تعذّر الوصول إلى الذكاء الاصطناعي الآن، فبُحث عن السؤال كما كتبته. اكتب المسألة باختصار لنتيجة أدق.';
+      }
+    });
+    for (final f in found) {
+      await _fill(f, 0, run, summarize: issues != null && Cloud.instance.aiSummary);
+      if (!mounted || run != _run) return;
+    }
+  }
+
+  /// Looks for one question at the scholars in order, starting from [from].
+  /// With [summarize], a scholar is kept only when his texts do speak of the
+  /// question, and a short ruling is written from those texts alone.
+  Future<void> _fill(_Found f, int from, int run, {required bool summarize}) async {
+    setState(() {
+      f.busy = true;
+      f.hits = [];
+      f.summary = '';
+      f.at = -1;
     });
     try {
       for (var i = from; i < _order.length; i++) {
-        setState(() => _status = 'جارٍ البحث في كتب الشيخ ${_order[i].$2}…');
-        final (count, hits) = await _ask(_order[i].$1, q);
-        if (hits.isNotEmpty) {
-          if (!mounted) return;
+        if (!mounted || run != _run) return;
+        setState(() => f.status = 'جارٍ البحث في كتب الشيخ ${_order[i].$2}…');
+        final hits = <_Hit>[];
+        for (final q in f.queries) {
+          for (final h in await _ask(_order[i].$1, q)) {
+            if (hits.length < 6 && !hits.any((x) => x.bookId == h.bookId && x.pageId == h.pageId)) hits.add(h);
+          }
+          if (hits.length >= 6) break;
+        }
+        if (hits.isEmpty) continue;
+        if (!summarize) {
+          if (!mounted || run != _run) return;
           setState(() {
-            _at = i;
-            _hits = hits;
-            _count = count;
-            _busy = false;
+            f.at = i;
+            f.hits = hits;
+            f.busy = false;
           });
           return;
         }
+        if (!mounted || run != _run) return;
+        setState(() => f.status = 'جارٍ قراءة كلام الشيخ ${_order[i].$2}…');
+        final sum = await Ai.summarize(_order[i].$2, f.title, [for (final h in hits) _plain(h.text)]);
+        if (!mounted || run != _run) return;
+        if (sum == null) {
+          // The AI did not answer: show the texts alone.
+          setState(() {
+            f.at = i;
+            f.hits = hits;
+            f.busy = false;
+          });
+          return;
+        }
+        if (!sum.found) continue; // these texts are about something else
+        setState(() {
+          f.at = i;
+          f.summary = sum.text;
+          // The texts the ruling rests on come first; the rest are left out.
+          f.hits = sum.used.isEmpty ? hits.take(2).toList() : [for (final u in sum.used) hits[u]];
+          f.busy = false;
+        });
+        return;
       }
-      if (!mounted) return;
+      if (!mounted || run != _run) return;
       setState(() {
-        _busy = false;
-        _error = 'لم أجد كلاماً بهذه الألفاظ في كتب المشايخ. اكتب المسألة بكلمات أقل، مثل: «قتل النمل».';
+        f.busy = false;
+        f.status = 'لم أجد للمشايخ كلاماً في هذه المسألة بهذه الألفاظ.';
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || run != _run) return;
       setState(() {
-        _busy = false;
-        _error = kIsWeb
+        f.busy = false;
+        f.status = kIsWeb
             ? 'البحث في كتب الثقات يعمل الآن من تطبيق أندرويد. موقع «تراث» لا يسمح بالبحث من داخل المواقع الأخرى.'
             : 'تعذّر الاتصال بموقع «تراث». حاول بعد قليل.';
       });
@@ -436,11 +514,9 @@ class _TrustedFatwaScreenState extends State<TrustedFatwaScreen> {
           TextField(
             controller: _c,
             minLines: 1,
-            maxLines: 4,
-            textInputAction: TextInputAction.search,
-            onSubmitted: (_) => _search(0),
+            maxLines: 6,
             decoration: InputDecoration(
-              hintText: 'اكتب المسألة باختصار، مثل: حكم قتل النمل',
+              hintText: _ai ? 'اكتب سؤالك كما تريد، ولو كان فيه أكثر من مسألة' : 'اكتب المسألة باختصار، مثل: حكم قتل النمل',
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
             ),
           ),
@@ -450,12 +526,12 @@ class _TrustedFatwaScreenState extends State<TrustedFatwaScreen> {
                 backgroundColor: const Color(0xFF2E7D32), foregroundColor: Colors.white, minimumSize: const Size(0, 48)),
             icon: const Icon(Icons.search),
             label: const Text('ابحث في كتب المشايخ', style: TextStyle(fontSize: 16)),
-            onPressed: _busy ? null : () => _search(0),
+            onPressed: _busy ? null : _search,
           ),
           const SizedBox(height: 6),
           Text(
             'الترتيب: ${_order.map((e) => e.$2).join('، ثم ')}.\n'
-            'يُعرض كلام الشيخ بنصّه من كتبه في «تراث» مع اسم الكتاب والصفحة، دون أي كلام مؤلَّف.',
+            'يُعرض كلام الشيخ بنصّه من كتبه في «تراث» مع اسم الكتاب والصفحة.',
             style: const TextStyle(color: Colors.grey, fontSize: 12.5, height: 1.7),
           ),
           if (_busy)
@@ -474,81 +550,146 @@ class _TrustedFatwaScreenState extends State<TrustedFatwaScreen> {
               padding: const EdgeInsets.all(20),
               child: Text(_error, textAlign: TextAlign.center, style: const TextStyle(height: 1.8)),
             ),
-          if (_at >= 0) ...[
-            const SizedBox(height: 14),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: kGold.withValues(alpha: 0.16),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Text(
-                'من كتب الشيخ ${_order[_at].$2} · ${_ar(_count)} موضعاً',
-                style: const TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.bold, fontSize: 16),
-              ),
+          if (_note.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: Text(_note, style: const TextStyle(color: Colors.orange, fontSize: 13, height: 1.7)),
             ),
-            const SizedBox(height: 8),
-            for (final h in _hits)
-              Card(
-                margin: const EdgeInsets.only(bottom: 10),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (h.headings.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 6),
-                          child: Text(h.headings.last,
-                              style: TextStyle(color: kGoldChip, fontWeight: FontWeight.bold)),
-                        ),
-                      SelectableText.rich(
-                        TextSpan(children: _spans(h.text, mark: mark)),
-                        style: const TextStyle(fontSize: 17, height: 1.95),
-                      ),
-                      const SizedBox(height: 8),
-                      Text('📓 ${h.source}', style: const TextStyle(color: Colors.grey, fontSize: 13)),
-                      Wrap(
-                        alignment: WrapAlignment.end,
-                        children: [
-                          TextButton.icon(
-                            icon: const Icon(Icons.copy, size: 18),
-                            label: const Text('نسخ'),
-                            onPressed: () {
-                              Clipboard.setData(ClipboardData(
-                                  text: '${_plain(h.text)}\n\n[${_order[_at].$2}: ${h.source}]\n${h.url}'));
-                              ScaffoldMessenger.of(context)
-                                  .showSnackBar(const SnackBar(content: Text('نُسخ النص مع المصدر')));
-                            },
-                          ),
-                          TextButton.icon(
-                            icon: const Icon(Icons.article_outlined, size: 18),
-                            label: const Text('الصفحة كاملة'),
-                            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-                                builder: (_) => _TurathPage(hit: h, scholar: _order[_at].$2, mark: mark))),
-                          ),
-                          TextButton.icon(
-                            icon: const Icon(Icons.open_in_new, size: 18),
-                            label: const Text('فتح في «تراث»'),
-                            onPressed: () => openTurath(context, h.url),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            if (_at + 1 < _order.length)
-              OutlinedButton.icon(
-                icon: const Icon(Icons.skip_next),
-                label: Text('ابحث عند الشيخ التالي: ${_order[_at + 1].$2}'),
-                onPressed: () => _search(_at + 1),
-              ),
-          ],
+          for (final f in _found) ..._issue(f, mark),
         ],
       ),
     );
   }
+
+  List<Widget> _issue(_Found f, Color mark) {
+    return [
+      const SizedBox(height: 16),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFF2E7D32).withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Text(f.title,
+            style: const TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.bold, fontSize: 17)),
+      ),
+      if (f.busy)
+        Padding(
+          padding: const EdgeInsets.all(18),
+          child: Row(
+            children: [
+              const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.4)),
+              const SizedBox(width: 12),
+              Expanded(child: Text(f.status)),
+            ],
+          ),
+        )
+      else if (f.at < 0)
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text(f.status, style: const TextStyle(height: 1.8)),
+        )
+      else ...[
+        if (f.summary.isNotEmpty)
+          Card(
+            margin: const EdgeInsets.only(top: 8),
+            color: kGold.withValues(alpha: 0.14),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text('خلاصة كلام الشيخ ${_order[f.at].$2}',
+                      style: TextStyle(color: kGoldChip, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 6),
+                  SelectableText(f.summary, style: const TextStyle(fontSize: 17, height: 1.9)),
+                  const SizedBox(height: 6),
+                  const Text('هذا تلخيص آلي لكلام الشيخ قد يخطئ، والمرجع نصّه المنقول أدناه.',
+                      style: TextStyle(color: Colors.grey, fontSize: 12)),
+                  Align(
+                    alignment: AlignmentDirectional.centerEnd,
+                    child: TextButton.icon(
+                      icon: Icon(f.reported ? Icons.check : Icons.flag_outlined, size: 18),
+                      label: Text(f.reported ? 'وصل البلاغ' : 'إبلاغ عن خطأ في التلخيص'),
+                      onPressed: f.reported
+                          ? null
+                          : () async {
+                              final err = await Cloud.instance.reportAi('${_c.text.trim()}\nالمسألة: ${f.title}', f.summary);
+                              if (!mounted) return;
+                              setState(() => f.reported = err == null);
+                              ScaffoldMessenger.of(context)
+                                  .showSnackBar(SnackBar(content: Text(err ?? 'وصل بلاغك، جزاك الله خيراً')));
+                            },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        Padding(
+          padding: const EdgeInsets.only(top: 10, bottom: 6, right: 4),
+          child: Text('نص كلام الشيخ ${_order[f.at].$2} من كتبه:',
+              style: const TextStyle(fontWeight: FontWeight.bold)),
+        ),
+        for (final h in f.hits) _hitCard(h, f.at, mark),
+        if (f.at + 1 < _order.length)
+          OutlinedButton.icon(
+            icon: const Icon(Icons.skip_next),
+            label: Text('ابحث عند الشيخ التالي: ${_order[f.at + 1].$2}'),
+            onPressed: () => _fill(f, f.at + 1, _run, summarize: f.summary.isNotEmpty),
+          ),
+      ],
+    ];
+  }
+
+  Widget _hitCard(_Hit h, int at, Color mark) => Card(
+        margin: const EdgeInsets.only(bottom: 10),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (h.headings.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Text(h.headings.last, style: TextStyle(color: kGoldChip, fontWeight: FontWeight.bold)),
+                ),
+              SelectableText.rich(
+                TextSpan(children: _spans(h.text, mark: mark)),
+                style: const TextStyle(fontSize: 17, height: 1.95),
+              ),
+              const SizedBox(height: 8),
+              Text('📓 ${h.source}', style: const TextStyle(color: Colors.grey, fontSize: 13)),
+              Wrap(
+                alignment: WrapAlignment.end,
+                children: [
+                  TextButton.icon(
+                    icon: const Icon(Icons.copy, size: 18),
+                    label: const Text('نسخ'),
+                    onPressed: () {
+                      Clipboard.setData(
+                          ClipboardData(text: '${_plain(h.text)}\n\n[${_order[at].$2}: ${h.source}]\n${h.url}'));
+                      ScaffoldMessenger.of(context)
+                          .showSnackBar(const SnackBar(content: Text('نُسخ النص مع المصدر')));
+                    },
+                  ),
+                  TextButton.icon(
+                    icon: const Icon(Icons.article_outlined, size: 18),
+                    label: const Text('الصفحة كاملة'),
+                    onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                        builder: (_) => _TurathPage(hit: h, scholar: _order[at].$2, mark: mark))),
+                  ),
+                  TextButton.icon(
+                    icon: const Icon(Icons.open_in_new, size: 18),
+                    label: const Text('فتح في «تراث»'),
+                    onPressed: () => openTurath(context, h.url),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
 }
 
 /// A whole page of the book, read inside the app, with next and previous.
