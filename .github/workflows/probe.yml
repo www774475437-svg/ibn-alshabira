@@ -1,0 +1,11 @@
+name: Probe
+on:
+  workflow_dispatch:
+  push:
+    paths: ['tool/probe_turath.py']
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tool/probe_turath.py
