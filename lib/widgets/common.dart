@@ -160,6 +160,12 @@ IconData platformIcon(String p) {
       return Icons.alternate_email;
     case 'whatsapp':
       return Icons.chat;
+    case 'instagram':
+      return Icons.camera_alt_outlined;
+    case 'tiktok':
+      return Icons.music_note_outlined;
+    case 'snapchat':
+      return Icons.photo_camera_front_outlined;
     case 'audio':
       return Icons.headphones;
     case 'group':
