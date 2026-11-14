@@ -4,7 +4,7 @@ class AppConfig {
   static const repo = 'ibn-alshabira';
 
   /// The website (GitHub Pages).
-  static const siteUrl = 'https://$owner.github.io/$repo/';
+  static const siteUrl = 'https://ibnalshabira.com/';
 
   /// Always points to the newest APK.
   static const apkUrl = 'https://github.com/$owner/$repo/releases/latest/download/ibn-alshabira.apk';
