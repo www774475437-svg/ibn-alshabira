@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
@@ -60,9 +62,9 @@ class _HomeTabState extends State<HomeTab> {
             child: Padding(
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
               child: Material(
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(16),
                 clipBehavior: Clip.antiAlias,
-                elevation: 3,
+                elevation: 2,
                 child: Ink(
                   decoration: const BoxDecoration(
                     gradient: LinearGradient(
@@ -74,21 +76,13 @@ class _HomeTabState extends State<HomeTab> {
                   child: InkWell(
                     onTap: () => Navigator.of(context)
                         .push(MaterialPageRoute(builder: (_) => const TrustedFatwaScreen())),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                       child: Row(
                         children: [
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Colors.white.withValues(alpha: 0.14),
-                              border: Border.all(color: kGold, width: 1.5),
-                            ),
-                            child: const Icon(Icons.auto_awesome, color: kGold, size: 28),
-                          ),
-                          const SizedBox(width: 14),
-                          const Expanded(
+                          Icon(Icons.smart_toy_outlined, color: kGold, size: 30),
+                          SizedBox(width: 12),
+                          Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
@@ -96,22 +90,19 @@ class _HomeTabState extends State<HomeTab> {
                                     style: TextStyle(
                                         fontFamily: 'Tajawal',
                                         color: Colors.white,
-                                        fontSize: 19,
+                                        fontSize: 16.5,
                                         fontWeight: FontWeight.bold)),
-                                SizedBox(height: 3),
+                                SizedBox(height: 2),
                                 Text('باستخدام الذكاء الاصطناعي',
                                     style: TextStyle(
                                         fontFamily: 'Tajawal',
                                         color: kGold,
-                                        fontSize: 15,
+                                        fontSize: 13.5,
                                         fontWeight: FontWeight.bold)),
-                                SizedBox(height: 4),
-                                Text('اكتب سؤالك، فيأتيك كلام الشيخ بنصّه من كتبه',
-                                    style: TextStyle(color: Colors.white, fontSize: 13)),
                               ],
                             ),
                           ),
-                          const Icon(Icons.chevron_left, color: Colors.white),
+                          Icon(Icons.chevron_left, color: Colors.white),
                         ],
                       ),
                     ),
@@ -138,6 +129,7 @@ class _HomeTabState extends State<HomeTab> {
               child: _Banner(
                 icon: Icons.android,
                 title: 'حمّل تطبيق «ابن الشابرة»',
+                color: Color(0xFFB3261E),
                 subtitle: 'لأجهزة أندرويد — يعمل دون إنترنت',
                 url: AppConfig.apkUrl,
               ),
@@ -345,16 +337,7 @@ class _HomeTabState extends State<HomeTab> {
                       .push(MaterialPageRoute(builder: (_) => const VideosScreen()))),
             ),
             SliverToBoxAdapter(
-              child: SizedBox(
-                height: 215,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  itemCount: repo.videos.length > 8 ? 8 : repo.videos.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 10),
-                  itemBuilder: (context, i) => VideoCard(video: repo.videos[i], width: 240),
-                ),
-              ),
+              child: _VideoStrip(videos: repo.videos.take(8).toList()),
             ),
           ],
           const SliverToBoxAdapter(child: _SectionTitle('أحدث ما نُشر')),
@@ -744,16 +727,18 @@ class _Banner extends StatelessWidget {
   final String subtitle;
   final String url;
   final String? note;
-  const _Banner({required this.icon, required this.title, required this.subtitle, required this.url, this.note});
+  final Color? color;
+  const _Banner(
+      {required this.icon, required this.title, required this.subtitle, required this.url, this.note, this.color});
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
       child: Card(
-        color: brandColor(context),
+        color: color ?? brandColor(context),
         child: ListTile(
-          leading: Icon(icon, color: kGold, size: 30),
+          leading: Icon(icon, color: color == null ? kGold : Colors.white, size: 30),
           title: Text(title,
               style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           subtitle: Column(
@@ -764,12 +749,61 @@ class _Banner extends StatelessWidget {
                 Text(note!, style: const TextStyle(color: Colors.white60, fontSize: 12)),
             ],
           ),
-          trailing: const Icon(Icons.download, color: kGold),
+          trailing: Icon(Icons.download, color: color == null ? kGold : Colors.white),
           onTap: () => openUrl(context, url),
         ),
       ),
     );
   }
+}
+
+/// The newest videos in a row that moves by itself, and by the finger.
+class _VideoStrip extends StatefulWidget {
+  final List<Video> videos;
+  const _VideoStrip({required this.videos});
+
+  @override
+  State<_VideoStrip> createState() => _VideoStripState();
+}
+
+class _VideoStripState extends State<_VideoStrip> {
+  final _scroll = ScrollController();
+  Timer? _timer;
+  bool _forward = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (!mounted || !_scroll.hasClients) return;
+      final p = _scroll.position;
+      if (p.maxScrollExtent <= 0 || p.isScrollingNotifier.value) return;
+      if (p.pixels >= p.maxScrollExtent - 4) _forward = false;
+      if (p.pixels <= 4) _forward = true;
+      final next = (p.pixels + (_forward ? 250 : -250)).clamp(0.0, p.maxScrollExtent);
+      _scroll.animateTo(next, duration: const Duration(milliseconds: 700), curve: Curves.easeInOut);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        height: 215,
+        child: ListView.separated(
+          controller: _scroll,
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          itemCount: widget.videos.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 10),
+          itemBuilder: (context, i) => VideoCard(video: widget.videos[i], width: 240),
+        ),
+      );
 }
 
 class _SectionTitle extends StatelessWidget {

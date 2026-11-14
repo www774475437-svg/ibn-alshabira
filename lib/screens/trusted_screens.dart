@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../config.dart';
 import '../services/ai.dart';
 import '../services/cloud.dart';
 import '../theme.dart';
@@ -117,7 +118,7 @@ class TrustedScholarsScreen extends StatelessWidget {
                     padding: EdgeInsets.all(16),
                     child: Row(
                       children: [
-                        Icon(Icons.manage_search, color: Colors.white, size: 32),
+                        Icon(Icons.smart_toy_outlined, color: Colors.white, size: 30),
                         SizedBox(width: 12),
                         Expanded(
                           child: Text('بحث الفتاوى من كتب الثقات\nباستخدام الذكاء الاصطناعي',
@@ -592,9 +593,8 @@ class _TrustedFatwaScreenState extends State<TrustedFatwaScreen> {
     return hits;
   }
 
-  String _offline() => kIsWeb
-      ? 'البحث في كتب الثقات يعمل الآن من تطبيق أندرويد. موقع «تراث» لا يسمح بالبحث من داخل المواقع الأخرى.'
-      : 'تعذّر الاتصال بموقع «تراث». حاول بعد قليل.';
+  String _offline() =>
+      kIsWeb ? 'هذا البحث يعمل في تطبيق أندرويد.' : 'تعذّر الاتصال بموقع «تراث». حاول بعد قليل.';
 
   /// With the AI: Ibn Uthaymeen first. If his texts do not speak of the
   /// question, all the other scholars are searched at once and the AI keeps
@@ -743,6 +743,19 @@ class _TrustedFatwaScreenState extends State<TrustedFatwaScreen> {
             label: const Text('ابحث في كتب المشايخ', style: TextStyle(fontSize: 16)),
             onPressed: _busy ? null : _search,
           ),
+          if (kIsWeb)
+            // On the site: a small line that downloads the Android app.
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: TextButton.icon(
+                style: TextButton.styleFrom(
+                    foregroundColor: const Color(0xFFB3261E), visualDensity: VisualDensity.compact),
+                icon: const Icon(Icons.android, size: 18),
+                label: const Text('حمّل تطبيق أندرويد (APK) لاستعمال هذا البحث',
+                    style: TextStyle(fontSize: 13, decoration: TextDecoration.underline)),
+                onPressed: () => openTurath(context, AppConfig.apkUrl),
+              ),
+            ),
           const SizedBox(height: 6),
           Text(
             'الترتيب: ${_order.map((e) => e.$2).join('، ثم ')}.\n'
