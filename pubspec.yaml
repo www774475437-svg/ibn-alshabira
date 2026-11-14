@@ -1,7 +1,7 @@
 name: ibn_alshabira
 description: "تطبيق ابن الشابرة — فتاوى ومقالات وكتب الشيخ قايد بن غانم الشابرة"
 publish_to: 'none'
-version: 3.1.1+1
+version: 3.2.0+1
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -53,9 +53,9 @@ flutter:
         - asset: assets/fonts/Amiri-Regular.ttf
         - asset: assets/fonts/Amiri-Bold.ttf
           weight: 700
-    - family: AmiriQuran
+    - family: UthmanicHafs
       fonts:
-        - asset: assets/fonts/AmiriQuran-Regular.ttf
+        - asset: assets/fonts/UthmanicHafs.ttf
     - family: Tajawal
       fonts:
         - asset: assets/fonts/Tajawal-Medium.ttf

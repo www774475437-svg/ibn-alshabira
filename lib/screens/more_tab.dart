@@ -12,6 +12,8 @@ import 'audio_library.dart';
 import 'channel_screen.dart';
 import 'account_screens.dart';
 import 'adhkar_screen.dart';
+import 'quran_screen.dart';
+import 'package:share_plus/share_plus.dart';
 import 'content_screens.dart';
 import 'extra_screens.dart';
 import 'review_screen.dart';
@@ -30,69 +32,34 @@ class MoreTab extends StatelessWidget {
         builder: (context, _) => ListView(
           padding: const EdgeInsets.symmetric(vertical: 8),
           children: [
-            if (Cloud.instance.ready && Cloud.instance.isAdmin)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 6, 12, 4),
-                child: Material(
-                  color: kGold,
-                  borderRadius: BorderRadius.circular(18),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(18),
-                    onTap: () => Navigator.of(context)
-                        .push(MaterialPageRoute(builder: (_) => const AdminScreen())),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.admin_panel_settings, size: 34, color: Colors.white),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(Cloud.instance.isFullAdmin ? 'لوحة الإدارة' : 'لوحة المحرّر',
-                                    style: const TextStyle(
-                                        fontFamily: 'Tajawal',
-                                        color: Colors.white,
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.bold)),
-                                Text(
-                                    Cloud.instance.newQuestions > 0
-                                        ? 'أسئلة جديدة تنتظر الرد: ${Cloud.instance.newQuestions}'
-                                        : 'الأسئلة، النشر، الإحصائيات',
-                                    style: const TextStyle(color: Colors.white)),
-                              ],
-                            ),
-                          ),
-                          if (Cloud.instance.newQuestions > 0)
-                            CircleAvatar(
-                              radius: 15,
-                              backgroundColor: Colors.red,
-                              child: Text('${Cloud.instance.newQuestions}',
-                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                            ),
-                          const Icon(Icons.chevron_left, color: Colors.white),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+            _ReaderStats(count: repo.readThisMonth),
+            _BigCard(
+              icon: Icons.auto_stories_outlined,
+              title: 'المصحف',
+              subtitle: 'مصحف المدينة برواية حفص، بلا إنترنت',
+              color: brandColor(context),
+              onTap: () =>
+                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => const QuranScreen())),
+            ),
+            _BigCard(
+              icon: Icons.spa_outlined,
+              title: 'الأذكار',
+              subtitle: 'حصن المسلم كاملاً، وعدّاد التسبيح',
+              color: const Color(0xFF2E7D32),
+              onTap: () =>
+                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AdhkarScreen())),
+            ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(12, 6, 12, 4),
-              child: Card(
-                margin: EdgeInsets.zero,
-                child: ListTile(
-                  leading: const _IconBox(Icons.spa_outlined),
-                  title: const Text('الأذكار', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
-                  subtitle: const Text('حصن المسلم كاملاً، وعدّاد التسبيح'),
-                  trailing: const Icon(Icons.chevron_left),
-                  onTap: () => Navigator.of(context)
-                      .push(MaterialPageRoute(builder: (_) => const AdhkarScreen())),
-                ),
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.send_outlined, size: 18),
+                label: const Text('أرسل التطبيق لصديق'),
+                onPressed: () {
+                  Cloud.instance.countAppShare();
+                  Share.share(shareAppText());
+                },
               ),
             ),
-            _ReaderStats(count: repo.readThisMonth),
             const _Group('الحساب'),
             _Section(children: [
               ListTile(
@@ -482,6 +449,55 @@ Widget _soon(BuildContext context, IconData icon, String title, String text) => 
       onTap: () => Navigator.of(context).push(MaterialPageRoute(
           builder: (_) => ComingSoonScreen(title: title, icon: icon, text: text))),
     );
+
+/// A wide coloured card: the mushaf and the adhkar look alike.
+class _BigCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Color color;
+  final VoidCallback onTap;
+  const _BigCard(
+      {required this.icon, required this.title, required this.subtitle, required this.color, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+        child: Material(
+          color: color,
+          borderRadius: BorderRadius.circular(18),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(18),
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Icon(icon, color: kGold, size: 34),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(title,
+                            style: const TextStyle(
+                                fontFamily: 'Tajawal',
+                                color: Colors.white,
+                                fontSize: 19,
+                                fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 2),
+                        Text(subtitle, style: const TextStyle(color: Colors.white, fontSize: 13.5)),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.chevron_left, color: Colors.white),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+}
 
 class _ReaderStats extends StatelessWidget {
   final int count;

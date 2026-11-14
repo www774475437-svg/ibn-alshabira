@@ -169,6 +169,8 @@ class Video {
         published: (j['published'] ?? '') as String,
       );
 
+  Map<String, dynamic> toJson() => {'id': id, 'title': title, 'published': published};
+
   String get url => 'https://www.youtube.com/watch?v=$id';
   String get thumbnail => 'https://i.ytimg.com/vi/$id/hqdefault.jpg';
 }

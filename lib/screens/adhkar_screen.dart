@@ -63,42 +63,109 @@ class _AdhkarScreenState extends State<AdhkarScreen> {
           final all = snap.data!;
           final n = normalizeArabic(_q);
           final items = n.isEmpty ? all : all.where((c) => normalizeArabic(c.name).contains(n)).toList();
-          return Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
-                child: TextField(
-                  onChanged: (v) => setState(() => _q = v),
-                  decoration: InputDecoration(
-                    hintText: 'ابحث في الأبواب، مثل: النوم، السفر',
-                    prefixIcon: const Icon(Icons.search),
-                    isDense: true,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+          void open(_Category c) =>
+              Navigator.of(context).push(MaterialPageRoute(builder: (_) => _CategoryScreen(category: c)));
+          _Category? at(int i) => i < all.length ? all[i] : null;
+          // The four everyday chapters, as big squares on top.
+          final squares = <(String, IconData, List<Color>, _Category?)>[
+            ('أذكار الصباح', Icons.wb_sunny_outlined, const [Color(0xFFF2A93B), Color(0xFFE2762A)], at(0)),
+            ('أذكار المساء', Icons.nights_stay_outlined, const [Color(0xFF3F4C8C), Color(0xFF232B57)], at(0)),
+            ('أذكار النوم', Icons.bedtime_outlined, const [Color(0xFF5B4B9A), Color(0xFF342A63)], at(1)),
+            ('أذكار بعد الصلاة', Icons.mosque_outlined, const [Color(0xFF2E8B57), Color(0xFF1B5E3A)], at(26)),
+          ];
+          return CustomScrollView(
+            slivers: [
+              if (n.isEmpty)
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+                  sliver: SliverGrid.count(
+                    crossAxisCount: 2,
+                    mainAxisSpacing: 10,
+                    crossAxisSpacing: 10,
+                    childAspectRatio: 1.45,
+                    children: [
+                      for (final (name, icon, colors, c) in squares)
+                        Material(
+                          borderRadius: BorderRadius.circular(20),
+                          clipBehavior: Clip.antiAlias,
+                          child: Ink(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                  begin: Alignment.topRight, end: Alignment.bottomLeft, colors: colors),
+                            ),
+                            child: InkWell(
+                              onTap: c == null ? null : () => open(c),
+                              child: Padding(
+                                padding: const EdgeInsets.all(14),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Icon(icon, color: Colors.white, size: 32),
+                                    Text(name,
+                                        style: const TextStyle(
+                                            fontFamily: 'Tajawal',
+                                            color: Colors.white,
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.bold)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+                  child: TextField(
+                    onChanged: (v) => setState(() => _q = v),
+                    decoration: InputDecoration(
+                      hintText: 'ابحث في الأبواب، مثل: النوم، السفر',
+                      prefixIcon: const Icon(Icons.search),
+                      isDense: true,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
                   ),
                 ),
               ),
-              Expanded(
-                child: ListView.builder(
-                  padding: const EdgeInsets.only(bottom: 20),
-                  itemCount: items.length,
-                  itemBuilder: (context, i) {
-                    final c = items[i];
-                    return ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: kGold.withValues(alpha: 0.18),
-                        child: Text('${all.indexOf(c) + 1}', style: const TextStyle(color: kGoldChip, fontSize: 13)),
-                      ),
-                      title: Text(c.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                      trailing: const Icon(Icons.chevron_left),
-                      onTap: () => Navigator.of(context)
-                          .push(MaterialPageRoute(builder: (_) => _CategoryScreen(category: c))),
-                    );
-                  },
+              const SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(18, 8, 18, 4),
+                  child: Text('الفهرس',
+                      style: TextStyle(fontFamily: 'Tajawal', fontSize: 19, fontWeight: FontWeight.bold)),
                 ),
               ),
-              const Padding(
-                padding: EdgeInsets.all(8),
-                child: Text('من كتاب «حصن المسلم» بترتيبه', style: TextStyle(color: Colors.grey, fontSize: 12)),
+              SliverList.builder(
+                itemCount: items.length,
+                itemBuilder: (context, i) {
+                  final c = items[i];
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+                    child: Card(
+                      margin: EdgeInsets.zero,
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: kGold.withValues(alpha: 0.18),
+                          child:
+                              Text('${all.indexOf(c) + 1}', style: const TextStyle(color: kGoldChip, fontSize: 13)),
+                        ),
+                        title: Text(c.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                        trailing: const Icon(Icons.chevron_left),
+                        onTap: () => open(c),
+                      ),
+                    ),
+                  );
+                },
+              ),
+              const SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.all(12),
+                  child: Text('من كتاب «حصن المسلم» بترتيبه',
+                      textAlign: TextAlign.center, style: TextStyle(color: Colors.grey, fontSize: 12)),
+                ),
               ),
             ],
           );

@@ -35,4 +35,15 @@ Future<void> loadFreshPosts() async {
     apply(body);
     await prefs.setString('freshPosts', body);
   } catch (_) {}
+  // The newest list of videos, so the section never goes empty.
+  try {
+    final res = await http
+        .get(Uri.parse('${AppConfig.siteUrl}assets/assets/data/videos.json'))
+        .timeout(const Duration(seconds: 12));
+    if (res.statusCode == 200) {
+      final list = jsonDecode(utf8.decode(res.bodyBytes)) as List;
+      Repository.instance
+          .setFetchedVideos([for (final e in list) Video.fromJson(e as Map<String, dynamic>)]);
+    }
+  } catch (_) {}
 }
