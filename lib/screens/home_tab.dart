@@ -36,6 +36,8 @@ class _HomeTabState extends State<HomeTab> {
   List<Object> _feed = [];
   int _feedKey = -1;
   List<TrustedScholar> _scholars = [];
+  final _home = ScrollController();
+  bool _showTop = false;
 
   /// The long list under the sections: every answer and article once, in an
   /// order that changes each day, with a book and a scholar now and then.
@@ -63,6 +65,10 @@ class _HomeTabState extends State<HomeTab> {
   @override
   void initState() {
     super.initState();
+    _home.addListener(() {
+      final far = _home.offset > 900;
+      if (far != _showTop) setState(() => _showTop = far);
+    });
     loadTrustedScholars().then((l) {
       if (mounted) setState(() => _scholars = l.where((x) => x.bio.isNotEmpty).toList());
     }).catchError((_) {});
@@ -77,12 +83,15 @@ class _HomeTabState extends State<HomeTab> {
     final repo = Repository.instance;
     return ListenableBuilder(
       listenable: repo,
-      builder: (context, _) => RefreshIndicator(
+      builder: (context, _) => Stack(
+        children: [
+      RefreshIndicator(
         onRefresh: () async {
           await loadFreshPosts();
           await Future<void>.delayed(const Duration(milliseconds: 400));
         },
         child: CustomScrollView(
+        controller: _home,
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           SliverToBoxAdapter(child: _Header(onOpenSearch: onOpenSearch, onOpenMore: widget.onOpenMore)),
@@ -352,6 +361,28 @@ class _HomeTabState extends State<HomeTab> {
           const SliverToBoxAdapter(child: SizedBox(height: 24)),
         ],
         ),
+      ),
+          // Back to the top, once the reader has gone far down.
+          if (_showTop)
+            PositionedDirectional(
+              bottom: 16,
+              start: 16,
+              child: Material(
+                color: brandColor(context),
+                shape: const CircleBorder(side: BorderSide(color: kGold, width: 1.5)),
+                elevation: 4,
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: () =>
+                      _home.animateTo(0, duration: const Duration(milliseconds: 500), curve: Curves.easeOutCubic),
+                  child: const Padding(
+                    padding: EdgeInsets.all(11),
+                    child: Icon(Icons.keyboard_arrow_up, color: kGold, size: 28),
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -844,13 +875,11 @@ class _ChapterStrip extends StatelessWidget {
     final repo = Repository.instance;
     return Padding(
       padding: const EdgeInsets.only(top: 12),
-      child: SizedBox(
-        height: 96,
-        child: ListView.separated(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: _AutoRow(
+          height: 96,
+          step: 164,
+          gap: 6,
           itemCount: repo.chapters.length,
-          separatorBuilder: (_, __) => const SizedBox(width: 6),
           itemBuilder: (context, i) {
             final c = repo.chapters[i];
             return InkWell(
@@ -882,7 +911,6 @@ class _ChapterStrip extends StatelessWidget {
               ),
             );
           },
-        ),
       ),
     );
   }
@@ -1082,6 +1110,35 @@ class _VideoStrip extends StatefulWidget {
 }
 
 class _VideoStripState extends State<_VideoStrip> {
+  @override
+  Widget build(BuildContext context) => _AutoRow(
+        height: 215,
+        step: 250,
+        gap: 10,
+        itemCount: widget.videos.length,
+        itemBuilder: (context, i) => VideoCard(video: widget.videos[i], width: 240),
+      );
+}
+
+/// A row that moves right and left by itself every few seconds, and by the finger.
+class _AutoRow extends StatefulWidget {
+  final double height;
+  final double step;
+  final double gap;
+  final int itemCount;
+  final IndexedWidgetBuilder itemBuilder;
+  const _AutoRow(
+      {required this.height,
+      required this.step,
+      required this.gap,
+      required this.itemCount,
+      required this.itemBuilder});
+
+  @override
+  State<_AutoRow> createState() => _AutoRowState();
+}
+
+class _AutoRowState extends State<_AutoRow> {
   final _scroll = ScrollController();
   Timer? _timer;
   bool _forward = true;
@@ -1095,7 +1152,7 @@ class _VideoStripState extends State<_VideoStrip> {
       if (p.maxScrollExtent <= 0 || p.isScrollingNotifier.value) return;
       if (p.pixels >= p.maxScrollExtent - 4) _forward = false;
       if (p.pixels <= 4) _forward = true;
-      final next = (p.pixels + (_forward ? 250 : -250)).clamp(0.0, p.maxScrollExtent);
+      final next = (p.pixels + (_forward ? widget.step : -widget.step)).clamp(0.0, p.maxScrollExtent);
       _scroll.animateTo(next, duration: const Duration(milliseconds: 700), curve: Curves.easeInOut);
     });
   }
@@ -1109,14 +1166,14 @@ class _VideoStripState extends State<_VideoStrip> {
 
   @override
   Widget build(BuildContext context) => SizedBox(
-        height: 215,
+        height: widget.height,
         child: ListView.separated(
           controller: _scroll,
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 12),
-          itemCount: widget.videos.length,
-          separatorBuilder: (_, __) => const SizedBox(width: 10),
-          itemBuilder: (context, i) => VideoCard(video: widget.videos[i], width: 240),
+          itemCount: widget.itemCount,
+          separatorBuilder: (_, __) => SizedBox(width: widget.gap),
+          itemBuilder: widget.itemBuilder,
         ),
       );
 }

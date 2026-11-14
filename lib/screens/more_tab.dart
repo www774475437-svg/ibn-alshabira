@@ -43,6 +43,59 @@ class MoreTab extends StatelessWidget {
               onTap: () =>
                   Navigator.of(context).push(MaterialPageRoute(builder: (_) => const QuranScreen())),
             ),
+            // A small gold strip: the sheikh's channels and accounts.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              child: Material(
+                color: kGold.withValues(alpha: 0.16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  side: const BorderSide(color: kGold),
+                ),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(14),
+                  onTap: () => showModalBottomSheet<void>(
+                    context: context,
+                    showDragHandle: true,
+                    builder: (ctx) => SafeArea(
+                      child: ListView(
+                        shrinkWrap: true,
+                        children: [
+                          const Padding(
+                            padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+                            child: Text('قنوات وحسابات الشيخ',
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+                          ),
+                          for (final l in repo.sheikhLinks)
+                            ListTile(
+                              leading: _IconBox(platformIcon(l.platform)),
+                              title: Text(l.name),
+                              subtitle: l.url.isEmpty ? const Text('يُضاف قريباً') : null,
+                              trailing: const Icon(Icons.chevron_left),
+                              enabled: l.url.isNotEmpty,
+                              onTap: () => openUrl(context, l.url),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    child: Row(
+                      children: [
+                        Icon(Icons.campaign_outlined, color: kGoldChip, size: 22),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: Text('قنوات وحسابات الشيخ',
+                              style: TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.bold, fontSize: 15)),
+                        ),
+                        Icon(Icons.chevron_left, size: 20),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
             _BigCard(
               icon: Icons.spa_outlined,
               title: 'الأذكار',
