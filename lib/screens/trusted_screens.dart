@@ -405,10 +405,20 @@ class _TrustedFatwaScreenState extends State<TrustedFatwaScreen> {
   }
 
   Future<List<_Hit>> _ask(int author, String q) async {
-    final res = await http
-        .get(Uri.parse('https://api.turath.io/search?q=${Uri.encodeQueryComponent(q)}&author=$author&ver=3'))
-        .timeout(const Duration(seconds: 25));
-    if (res.statusCode != 200) throw Exception('status ${res.statusCode}');
+    // «تراث» may refuse when asked too much at once: wait and try again.
+    http.Response? res;
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        res = await http
+            .get(Uri.parse('https://api.turath.io/search?q=${Uri.encodeQueryComponent(q)}&author=$author&ver=3'))
+            .timeout(const Duration(seconds: 25));
+        if (res.statusCode == 200) break;
+      } catch (_) {
+        res = null;
+      }
+      await Future.delayed(Duration(milliseconds: 800 * (attempt + 1)));
+    }
+    if (res == null || res.statusCode != 200) throw Exception('status ${res?.statusCode}');
     final j = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
     final hits = <_Hit>[];
     for (final e in (j['data'] ?? []) as List) {
@@ -583,7 +593,16 @@ class _TrustedFatwaScreenState extends State<TrustedFatwaScreen> {
 
   /// The texts of one scholar for a question: its phrases are searched together.
   Future<List<_Hit>> _hitsOf(int author, List<String> queries, int max) async {
-    final lists = await Future.wait([for (final q in queries) _ask(author, q)]);
+    // One phrase failing does not spoil the others.
+    var failed = 0;
+    final lists = await Future.wait([
+      for (final q in queries)
+        _ask(author, q).catchError((_) {
+          failed++;
+          return <_Hit>[];
+        }),
+    ]);
+    if (failed == queries.length && queries.isNotEmpty) throw Exception('turath unreachable');
     final hits = <_Hit>[];
     for (final l in lists) {
       for (final h in l) {
@@ -629,7 +648,15 @@ class _TrustedFatwaScreenState extends State<TrustedFatwaScreen> {
         }
       }
       done(() => f.status = 'جارٍ البحث في كتب بقية المشايخ…');
-      final rest = await Future.wait([for (var i = 1; i < _order.length; i++) _hitsOf(_order[i].$1, f.queries, 3)]);
+      // The other scholars, three at a time so «تراث» does not refuse.
+      final rest = <List<_Hit>>[];
+      for (var i = 1; i < _order.length; i += 3) {
+        if (!live()) return;
+        rest.addAll(await Future.wait([
+          for (var j = i; j < i + 3 && j < _order.length; j++)
+            _hitsOf(_order[j].$1, f.queries, 3).catchError((_) => <_Hit>[]),
+        ]));
+      }
       if (!live()) return;
       final groups = <(int, List<_Hit>)>[
         for (var i = 0; i < rest.length; i++)

@@ -256,6 +256,7 @@ class PrivacyScreen extends StatelessWidget {
 
 /// «ما الجديد»: what each version added, newest first.
 const whatsNew = <(String, List<String>)>[
+  ('3.9.1', ['إصلاح «تعذّر الاتصال بموقع تراث» في بحث الفتاوى من كتب الثقات']),
   (
     '3.9.0',
     [
