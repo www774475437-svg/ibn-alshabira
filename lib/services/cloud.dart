@@ -879,6 +879,9 @@ class Cloud extends ChangeNotifier {
       ];
       final mb = c['app']?['minBuild'];
       minBuild = mb is int ? mb : 0;
+      accounts = [
+        for (final p in (c['accounts']?['people'] ?? []) as List) Map<String, dynamic>.from(p as Map),
+      ];
       aiEnabled = c['ai']?['enabled'] != false;
       aiSummary = c['ai']?['summary'] != false;
       aboutText = '${c['about']?['text'] ?? ''}';
@@ -972,6 +975,9 @@ class Cloud extends ChangeNotifier {
 
   /// Builds older than this must update (0 = no forced update).
   int minBuild = 0;
+
+  /// Scholars and others added by the staff, each with his accounts.
+  List<Map<String, dynamic>> accounts = [];
 
   /// The staff can switch the AI help off, or only its written summary.
   bool aiEnabled = true;
