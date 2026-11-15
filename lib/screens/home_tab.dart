@@ -1,3 +1,5 @@
+import 'benefit_card.dart';
+import 'quiz_screens.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -43,7 +45,7 @@ class _HomeTabState extends State<HomeTab> {
 
   /// The long list under the sections: every answer and article once, in an
   /// order that changes each day, with a book and a scholar now and then.
-  /// Nothing shown in «أُضيف حديثاً» or «جواب اليوم» is repeated here.
+  /// Nothing shown in «أحدث ما نُشر» or «جواب اليوم» is repeated here.
   List<Object> _feedFor(Repository repo) {
     final key = repo.fatwas.length * 31 + repo.books.length * 7 + _scholars.length + _recs.length * 1000003;
     if (key == _feedKey) return _feed;
@@ -192,6 +194,7 @@ class _HomeTabState extends State<HomeTab> {
           if (repo.fatwaOfDay != null)
             SliverToBoxAdapter(child: _FatwaOfDay(fatwa: repo.fatwaOfDay!)),
           const SliverToBoxAdapter(child: _DailyVerse()),
+          const SliverToBoxAdapter(child: BenefitCard()),
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
@@ -215,52 +218,6 @@ class _HomeTabState extends State<HomeTab> {
 
           // ------------------------------------------------ للقراءة
           const SliverToBoxAdapter(child: _GroupTitle('للقراءة', Icons.menu_book_outlined)),
-          if (repo.latest().isNotEmpty) ...[
-            const SliverToBoxAdapter(child: _SectionTitle('أُضيف حديثاً')),
-            SliverToBoxAdapter(
-              child: SizedBox(
-                height: 132,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  itemCount: repo.latest().length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 10),
-                  itemBuilder: (context, i) {
-                    final f = repo.latest()[i];
-                    return SizedBox(
-                      width: 240,
-                      child: Card(
-                        margin: EdgeInsets.zero,
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(18),
-                          onTap: () => openFatwa(context, f),
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('${repo.chapterName(f.chapter)} · ${Hijri.parse(f.date) ?? f.date}',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(color: kGoldChip, fontSize: 12)),
-                                const SizedBox(height: 6),
-                                Expanded(
-                                  child: Text(f.title,
-                                      maxLines: 3,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(height: 1.6, fontWeight: FontWeight.w600)),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ),
-          ],
           const SliverToBoxAdapter(child: _MostRead()),
           const SliverToBoxAdapter(child: _MostSearched()),
 
@@ -333,6 +290,9 @@ class _HomeTabState extends State<HomeTab> {
               child: _VideoStrip(videos: repo.videos.take(8).toList()),
             ),
           ],
+          // «الأسئلة»: today's question and a button to the section, after the videos.
+          const SliverToBoxAdapter(child: _GroupTitle('الأسئلة', Icons.quiz_outlined)),
+          const SliverToBoxAdapter(child: QuizHomeStrip()),
           if (repo.channel.isNotEmpty) ...[
             SliverToBoxAdapter(
               child: _SectionTitle('أحدث منشورات القناة',
@@ -1460,7 +1420,7 @@ class _LatestBoard extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(children: [
-              const Icon(Icons.auto_awesome, color: kGold, size: 22),
+              const Icon(Icons.campaign_rounded, color: kGold, size: 24),
               const SizedBox(width: 8),
               const Text('أحدث ما نُشر',
                   style: TextStyle(fontFamily: 'Tajawal', fontSize: 19, fontWeight: FontWeight.bold, color: Colors.white)),

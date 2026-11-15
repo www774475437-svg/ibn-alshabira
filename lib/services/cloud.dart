@@ -148,6 +148,9 @@ class Cloud extends ChangeNotifier {
     }
   }
 
+  /// The staff log, for screens outside this file.
+  Future<void> logAction(String action, [String target = '']) => _log(action, target);
+
   Future<void> _log(String action, [String target = '']) async {
     try {
       await _db.collection('log').add({

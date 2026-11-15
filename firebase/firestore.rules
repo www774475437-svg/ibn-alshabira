@@ -62,6 +62,29 @@ service cloud.firestore {
       allow update: if isAdmin();
       allow delete: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
     }
+    // «الأسئلة»
+    match /quizCats/{id} { allow read: if true; allow write: if isAdmin(); }
+    match /quizQs/{id}   { allow read: if true; allow write: if isAdmin(); }
+    match /quizStats/{id} {
+      allow read: if true;
+      allow create, update: if request.resource.data.keys().hasOnly(['n', 'ok']) && stepOk('n') && stepOk('ok');
+      allow delete: if isAdmin();
+    }
+    match /quizUsers/{uid} {
+      allow read: if true;
+      allow write: if signedIn() && request.auth.uid == uid;
+      // Each answer is written once and never changed.
+      match /a/{qid} {
+        allow read: if signedIn() && request.auth.uid == uid;
+        allow create: if signedIn() && request.auth.uid == uid;
+      }
+    }
+    match /quizSuggest/{id} {
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid
+        && request.resource.data.text is string && request.resource.data.text.size() < 2000;
+      allow read, delete: if isAdmin();
+    }
+    match /benefits/{id} { allow read: if true; allow write: if isAdmin(); }
     match /users/{uid} {
       allow read, write: if signedIn() && request.auth.uid == uid;
     }

@@ -20,11 +20,21 @@ class _ReviewScreenState extends State<ReviewScreen> {
   late String _from = Repository.instance.chapters.last.id; // '' = all chapters
   final _skipped = <String>{};
   bool _busy = false;
+  bool _verifiedTab = false;
+
+  List<Fatwa> get _pool {
+    final repo = Repository.instance;
+    return _from.isEmpty ? repo.fatwas : repo.byChapter(_from);
+  }
+
+  List<Fatwa> get _verified {
+    final ids = Repository.instance.verifiedIds;
+    return _pool.where((f) => ids.contains(f.id)).toList();
+  }
 
   List<Fatwa> get _queue {
     final repo = Repository.instance;
-    final pool = _from.isEmpty ? repo.fatwas : repo.byChapter(_from);
-    return pool.where((f) => !_skipped.contains(f.id) && !repo.verifiedIds.contains(f.id)).toList();
+    return _pool.where((f) => !_skipped.contains(f.id) && !repo.verifiedIds.contains(f.id)).toList();
   }
 
   Future<void> _act(Future<String?> Function() job, String ok) async {
@@ -39,14 +49,63 @@ class _ReviewScreenState extends State<ReviewScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: Repository.instance,
+        builder: (context, _) => _build(context),
+      );
+
+  Widget _tabButton(String label, int count, IconData icon, Color color, bool on, VoidCallback tap) => Expanded(
+        child: Material(
+          color: on ? color.withValues(alpha: .14) : Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: BorderSide(color: on ? color : Colors.grey.withValues(alpha: .35), width: on ? 2 : 1),
+          ),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: tap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
+              child: Column(
+                children: [
+                  Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    Icon(icon, color: color, size: 20),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(label,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontWeight: FontWeight.bold, color: on ? color : null)),
+                    ),
+                  ]),
+                  const SizedBox(height: 4),
+                  Text('$count',
+                      style: TextStyle(fontFamily: 'Tajawal', fontSize: 20, fontWeight: FontWeight.bold, color: color)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+  Widget _build(BuildContext context) {
     final repo = Repository.instance;
     final queue = _queue;
-    final f = queue.isEmpty ? null : queue.first;
+    final verified = _verified;
+    final f = _verifiedTab || queue.isEmpty ? null : queue.first;
     return Scaffold(
-      appBar: AppBar(title: Text('لم يُتحقق منها (${queue.length})')),
+      appBar: AppBar(title: const Text('المتحقق منه وغير المتحقق منه')),
       body: Column(
         children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+            child: Row(children: [
+              _tabButton('غير المتحقق منه', queue.length, Icons.pending_actions_outlined, const Color(0xFFC0392B),
+                  !_verifiedTab, () => setState(() => _verifiedTab = false)),
+              const SizedBox(width: 10),
+              _tabButton('المتحقق منه', verified.length, Icons.verified_outlined, const Color(0xFF2E8B57),
+                  _verifiedTab, () => setState(() => _verifiedTab = true)),
+            ]),
+          ),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
             child: DropdownButtonFormField<String>(
@@ -65,6 +124,33 @@ class _ReviewScreenState extends State<ReviewScreen> {
               }),
             ),
           ),
+          if (_verifiedTab)
+            Expanded(
+              child: verified.isEmpty
+                  ? const EmptyState(icon: Icons.verified_outlined, text: 'لم يُتحقق من شيء في هذا الباب بعد.')
+                  : ListView.separated(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      itemCount: verified.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (context, i) {
+                        final v = verified[i];
+                        return ListTile(
+                          leading: const Icon(Icons.verified, color: Color(0xFF2E8B57)),
+                          title: Text(v.title, maxLines: 2, overflow: TextOverflow.ellipsis),
+                          subtitle: Text(repo.chapterName(v.chapter), style: const TextStyle(fontSize: 12)),
+                          onTap: () => openFatwa(context, v),
+                          trailing: TextButton(
+                            onPressed: _busy
+                                ? null
+                                : () => _act(() => Cloud.instance.setVerified(v.id, false, v.title),
+                                    'أُعيد إلى غير المتحقق منه'),
+                            child: const Text('إلغاء التحقق', style: TextStyle(fontSize: 12)),
+                          ),
+                        );
+                      },
+                    ),
+            )
+          else
           Expanded(
             child: f == null
                 ? const EmptyState(icon: Icons.task_alt, text: 'لا شيء يحتاج مراجعة في هذا الباب.')

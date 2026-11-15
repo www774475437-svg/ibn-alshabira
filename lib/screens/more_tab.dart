@@ -22,6 +22,7 @@ import 'package:share_plus/share_plus.dart';
 import 'content_screens.dart';
 import 'extra_screens.dart';
 import 'review_screen.dart';
+import 'quiz_screens.dart';
 import '../services/cloud.dart';
 
 class MoreTab extends StatelessWidget {
@@ -55,6 +56,13 @@ class MoreTab extends StatelessWidget {
               color: const Color(0xFF2E7D32),
               onTap: () =>
                   Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AdhkarScreen())),
+            ),
+            _BigCard(
+              icon: Icons.quiz_outlined,
+              title: 'الأسئلة والأجوبة',
+              subtitle: 'اختبر علمك بأسئلة الشيخ، والمتصدرون',
+              color: const Color(0xFF3B4A8C),
+              onTap: () => openQuiz(context),
             ),
             // A small gold strip: channels and accounts of the sheikh and of those the staff add.
             Padding(
@@ -158,8 +166,8 @@ class MoreTab extends StatelessWidget {
                 ],
                 ListTile(
                   leading: const _IconBox(Icons.rule_folder_outlined),
-                  title: const Text('لم يُتحقق منها'),
-                  subtitle: const Text('راجع المنشورات واحداً واحداً: صحّح، انقل، ثم تحقّق'),
+                  title: const Text('المتحقق منه وغير المتحقق منه'),
+                  subtitle: const Text('غير المتحقق منه: صحّح وانقل ثم تحقّق — والمتحقق منه في تبويب مستقل'),
                   trailing: const Icon(Icons.chevron_left),
                   onTap: () => Navigator.of(context)
                       .push(MaterialPageRoute(builder: (_) => const ReviewScreen())),
