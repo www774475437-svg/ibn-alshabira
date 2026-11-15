@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -389,6 +390,11 @@ class _TrustedFatwaScreenState extends State<TrustedFatwaScreen> {
   String _note = '';
   List<_Found> _found = [];
   int _run = 0; // a newer search cancels an older one
+  /// The conversation so far: earlier questions and what was found for them.
+  final List<(String, List<_Found>)> _earlier = [];
+  String _asked = ''; // the question the current results answer
+  String _clarify = '';
+  final _follow = TextEditingController();
 
   bool get _ai => Ai.supported && Cloud.instance.aiEnabled;
 
@@ -401,6 +407,7 @@ class _TrustedFatwaScreenState extends State<TrustedFatwaScreen> {
   @override
   void dispose() {
     _c.dispose();
+    _follow.dispose();
     super.dispose();
   }
 
@@ -440,21 +447,35 @@ class _TrustedFatwaScreenState extends State<TrustedFatwaScreen> {
     return hits;
   }
 
-  Future<void> _search() async {
-    final q = _c.text.trim();
+  /// A new question; [followUp] keeps the earlier answers above and lets the
+  /// AI read the new question in the light of the previous one.
+  Future<void> _search({String? followUp}) async {
+    final q = (followUp ?? _c.text).trim();
     if (q.length < 3 || _busy) return;
     FocusScope.of(context).unfocus();
+    final previous = followUp != null ? _asked : (_clarify.isNotEmpty ? _asked : '');
     final run = ++_run;
     setState(() {
+      if (followUp != null && _found.isNotEmpty) _earlier.add((_asked, _found));
+      if (followUp == null && _clarify.isEmpty) _earlier.clear();
       _busy = true;
       _error = '';
       _note = '';
+      _clarify = '';
       _found = [];
+      _asked = previous.isEmpty ? q : '$previous\n— $q';
       _status = _ai ? 'جارٍ قراءة السؤال وتقسيمه إلى مسائله…' : 'جارٍ البحث…';
     });
     List<AiIssue>? issues;
-    if (_ai) issues = await Ai.split(q);
+    if (_ai) issues = await Ai.split(q, previous: previous);
     if (!mounted || run != _run) return;
+    if (issues == null && Ai.lastClarify != null) {
+      setState(() {
+        _busy = false;
+        _clarify = Ai.lastClarify!;
+      });
+      return;
+    }
     final found = [
       if (issues != null)
         for (final i in issues) _Found(i.title, i.queries)
@@ -471,7 +492,7 @@ class _TrustedFatwaScreenState extends State<TrustedFatwaScreen> {
     // All the questions are looked up at the same time.
     final summarize = issues != null && Cloud.instance.aiSummary;
     await Future.wait([for (final f in found) summarize ? _answer(f, run) : _plainSearch(f, 0, run)]);
-    if (mounted && run == _run) _remember(q, found);
+    if (mounted && run == _run) _remember(_asked, found);
   }
 
   // ---- The record of earlier searches, kept on this phone only.
@@ -747,6 +768,8 @@ class _TrustedFatwaScreenState extends State<TrustedFatwaScreen> {
       appBar: AppBar(
         title: const Text('بحث الفتاوى من كتب الثقات', style: TextStyle(fontSize: 17)),
         actions: [
+          if (_found.isNotEmpty && !_busy)
+            IconButton(tooltip: 'مشاركة المحادثة مع المصادر', icon: const Icon(Icons.share_outlined), onPressed: _share),
           IconButton(tooltip: 'السجل', icon: const Icon(Icons.menu), onPressed: _openHistory),
         ],
       ),
@@ -810,10 +833,136 @@ class _TrustedFatwaScreenState extends State<TrustedFatwaScreen> {
               padding: const EdgeInsets.only(top: 10),
               child: Text(_note, style: const TextStyle(color: Colors.orange, fontSize: 13, height: 1.7)),
             ),
+          for (final t in _earlier) ...[
+            const SizedBox(height: 14),
+            _bubble(t.$1),
+            for (final f in t.$2) ..._issue(f, mark),
+            const Divider(height: 30),
+          ],
+          if (_earlier.isNotEmpty && (_found.isNotEmpty || _busy)) _bubble(_asked.split('\n— ').last),
+          if (_clarify.isNotEmpty) _clarifyBox(),
           for (final f in _found) ..._issue(f, mark),
+          if (_found.isNotEmpty && !_busy && _found.every((f) => !f.busy) && _ai) _followUps(),
         ],
       ),
     );
+  }
+
+  Widget _bubble(String q) => Align(
+        alignment: AlignmentDirectional.centerEnd,
+        child: Container(
+          margin: const EdgeInsets.only(top: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          constraints: const BoxConstraints(maxWidth: 520),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.primary.withValues(alpha: .12),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Text(q, style: const TextStyle(height: 1.7)),
+        ),
+      );
+
+  Widget _clarifyBox() {
+    final ctrl = TextEditingController();
+    return Card(
+      margin: const EdgeInsets.only(top: 14),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          const Row(children: [
+            Icon(Icons.help_outline, color: kGold),
+            SizedBox(width: 6),
+            Text('استيضاح قبل البحث', style: TextStyle(fontWeight: FontWeight.bold)),
+          ]),
+          const SizedBox(height: 6),
+          Text(_clarify, style: const TextStyle(fontSize: 16, height: 1.8)),
+          const SizedBox(height: 8),
+          TextField(
+            controller: ctrl,
+            decoration: const InputDecoration(hintText: 'اكتب التوضيح هنا', border: OutlineInputBorder(), isDense: true),
+            onSubmitted: (v) {
+              if (v.trim().isNotEmpty) _search(followUp: v.trim());
+            },
+          ),
+          const SizedBox(height: 8),
+          FilledButton(
+            onPressed: () {
+              if (ctrl.text.trim().isNotEmpty) _search(followUp: ctrl.text.trim());
+            },
+            child: const Text('أرسل التوضيح'),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  /// After the answer: buttons for the usual next questions, and a field to
+  /// ask more about the same matter.
+  Widget _followUps() => Padding(
+        padding: const EdgeInsets.only(top: 14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Wrap(spacing: 8, runSpacing: 4, children: [
+            ActionChip(
+              avatar: const Icon(Icons.menu_book_outlined, size: 18, color: kGold),
+              label: const Text('ما الدليل؟'),
+              onPressed: () => _search(followUp: 'ما الدليل على ذلك؟'),
+            ),
+            ActionChip(
+              avatar: const Icon(Icons.people_outline, size: 18, color: kGold),
+              label: const Text('قول عالم آخر'),
+              onPressed: () {
+                for (final f in _found) {
+                  if (f.at >= 0 && f.at + 1 < _order.length && f.queries.isNotEmpty) _plainSearch(f, f.at + 1, _run);
+                }
+              },
+            ),
+          ]),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _follow,
+            minLines: 1,
+            maxLines: 4,
+            decoration: InputDecoration(
+              hintText: 'اسأل متابعةً عن نفس المسألة…',
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+              suffixIcon: IconButton(
+                icon: const Icon(Icons.send),
+                onPressed: () {
+                  final t = _follow.text.trim();
+                  if (t.isEmpty) return;
+                  _follow.clear();
+                  _search(followUp: t);
+                },
+              ),
+            ),
+          ),
+        ]),
+      );
+
+  void _share() {
+    final b = StringBuffer();
+    void add(String q, List<_Found> found) {
+      b.writeln('السؤال: $q');
+      for (final f in found) {
+        b.writeln('\n■ ${f.title}');
+        if (f.at < 0) {
+          b.writeln(f.status);
+          continue;
+        }
+        if (f.summary.isNotEmpty) b.writeln('الخلاصة (تلخيص آلي): ${f.summary}');
+        for (final h in f.hits) {
+          b.writeln('\n«${_plain(h.text)}»\n[${_order[f.at].$2}: ${h.source}]\n${h.url}');
+        }
+      }
+      b.writeln();
+    }
+
+    for (final t in _earlier) {
+      add(t.$1, t.$2);
+    }
+    add(_asked, _found);
+    b.writeln('من «بحث الفتاوى من كتب الثقات» — تطبيق ابن الشابرة\nhttps://ibnalshabira.com');
+    Share.share(b.toString());
   }
 
   List<Widget> _issue(_Found f, Color mark) {
@@ -899,6 +1048,11 @@ class _TrustedFatwaScreenState extends State<TrustedFatwaScreen> {
 
   Widget _hitCard(_Hit h, int at, Color mark) => Card(
         margin: const EdgeInsets.only(bottom: 10),
+        // The scholar's own words: framed in green, apart from the AI's words in gold.
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: const BorderSide(color: Color(0xFF2E7D32), width: 1.4),
+        ),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
           child: Column(
@@ -938,6 +1092,17 @@ class _TrustedFatwaScreenState extends State<TrustedFatwaScreen> {
                     icon: const Icon(Icons.open_in_new, size: 18),
                     label: const Text('فتح في «تراث»'),
                     onPressed: () => openTurath(context, h.url),
+                  ),
+                  TextButton.icon(
+                    style: TextButton.styleFrom(foregroundColor: const Color(0xFFC62828)),
+                    icon: const Icon(Icons.flag_outlined, size: 18),
+                    label: const Text('أخطأ'),
+                    onPressed: () async {
+                      final err = await Cloud.instance.reportAi('$_asked\nنقل غير مناسب: ${h.source}\n${h.url}', _plain(h.text));
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context)
+                          .showSnackBar(SnackBar(content: Text(err ?? 'وصل بلاغك، جزاك الله خيراً')));
+                    },
                   ),
                 ],
               ),

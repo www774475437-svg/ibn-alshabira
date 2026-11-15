@@ -48,7 +48,18 @@ class _BooksTabState extends State<BooksTab> {
     final q = normalizeArabic(_filter);
     final books = q.isEmpty ? all : all.where((b) => normalizeArabic(b.title).contains(q)).toList();
     return Scaffold(
-      appBar: AppBar(title: Text('كتب الشيخ (${all.length})')),
+      appBar: AppBar(
+        title: Text('كتب الشيخ (${all.length})'),
+        actions: [
+          if (!kIsWeb)
+            IconButton(
+              tooltip: 'دفتر ملاحظاتي',
+              icon: const Icon(Icons.edit_note),
+              onPressed: () =>
+                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ReaderNotebookScreen())),
+            ),
+        ],
+      ),
       body: all.isEmpty
           ? const EmptyState(icon: Icons.menu_book_outlined, text: 'ستُضاف كتب الشيخ هنا قريباً بإذن الله.')
           : CustomScrollView(
