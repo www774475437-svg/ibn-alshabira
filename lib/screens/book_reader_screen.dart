@@ -90,7 +90,7 @@ class ReaderStore {
 
   static Future<(int, int, int)> stats() async {
     final p = await SharedPreferences.getInstance();
-    final today = (p.getStringList('reader_day_${today()}') ?? const []).length;
+    final todayPages = (p.getStringList('reader_day_${ReaderStore.today()}') ?? const []).length;
     final all = p.getInt('reader_time_all') ?? 0;
     // Days in a row with at least one page read.
     var streak = 0;
@@ -101,7 +101,7 @@ class ReaderStore {
       streak++;
       d = d.subtract(const Duration(days: 1));
     }
-    return (today, all, streak);
+    return (todayPages, all, streak);
   }
 }
 
