@@ -17,6 +17,8 @@ class AppConfig {
 
   /// Set at build time: --dart-define=BUILD_NUMBER=<run number>.
   static const buildNumber = int.fromEnvironment('BUILD_NUMBER', defaultValue: 0);
+  /// The copy published on Google Play: Play updates it, so no APK update notices.
+  static const fromPlay = bool.fromEnvironment('PLAY');
 
   static const version = '3.9.5';
 

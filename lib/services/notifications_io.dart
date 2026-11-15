@@ -143,7 +143,7 @@ void updateWatchDispatcher() {
 
 class UpdateWatch {
   static Future<void> start() async {
-    if (AppConfig.buildNumber == 0) return;
+    if (AppConfig.buildNumber == 0 || AppConfig.fromPlay) return;
     try {
       await Workmanager().initialize(updateWatchDispatcher);
       await Workmanager().registerPeriodicTask(

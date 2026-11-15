@@ -7,7 +7,7 @@ import '../config.dart';
 
 /// Returns true when GitHub has a newer APK build than this one.
 Future<bool> isUpdateAvailable() async {
-  if (kIsWeb || AppConfig.buildNumber == 0) return false;
+  if (kIsWeb || AppConfig.buildNumber == 0 || AppConfig.fromPlay) return false;
   try {
     final res = await http
         .get(Uri.parse(AppConfig.latestReleaseApi))
@@ -23,7 +23,7 @@ Future<bool> isUpdateAvailable() async {
 
 /// When the newer build was published (null when there is no update).
 Future<DateTime?> updatePublishedAt() async {
-  if (kIsWeb || AppConfig.buildNumber == 0) return null;
+  if (kIsWeb || AppConfig.buildNumber == 0 || AppConfig.fromPlay) return null;
   try {
     final res = await http
         .get(Uri.parse(AppConfig.latestReleaseApi))

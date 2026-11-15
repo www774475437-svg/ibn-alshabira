@@ -89,13 +89,20 @@ jobs:
       - name: Rename APK
         run: cp build/app/outputs/flutter-apk/app-release.apk ibn-alshabira.apk
 
+      - name: Build the Google Play bundle (AAB)
+        run: |
+          flutter build appbundle --release --build-number=${{ github.run_number }} --dart-define=BUILD_NUMBER=${{ github.run_number }} --dart-define=PLAY=true
+          cp build/app/outputs/bundle/release/app-release.aab ibn-alshabira-play.aab
+
       - name: Publish as latest release (direct download link)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
           name: ابن الشابرة — نسخة ${{ github.run_number }}
           make_latest: true
-          files: ibn-alshabira.apk
+          files: |
+            ibn-alshabira.apk
+            ibn-alshabira-play.aab
 
   website:
     needs: [data, android]
@@ -135,6 +142,9 @@ jobs:
 
       - name: Build website
         run: flutter build web --release --no-web-resources-cdn --base-href / --dart-define=BUILD_NUMBER=0
+
+      - name: Privacy and account deletion pages (for Google Play)
+        run: cp tool/web_pages/*.html build/web/
 
       - name: The APK on our own domain (ibnalshabira.com/ibn-alshabira.apk)
         env:
