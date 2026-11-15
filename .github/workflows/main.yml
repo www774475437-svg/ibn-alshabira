@@ -144,7 +144,7 @@ jobs:
         run: flutter build web --release --no-web-resources-cdn --base-href / --dart-define=BUILD_NUMBER=0
 
       - name: Privacy and account deletion pages (for Google Play)
-        run: cp tool/web_pages/*.html build/web/
+        run: cp -r tool/web_pages/. build/web/
 
       - name: The APK on our own domain (ibnalshabira.com/ibn-alshabira.apk)
         env:
