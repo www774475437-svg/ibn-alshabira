@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'cloud.dart';
+import 'ai.dart';
 import 'day_log.dart';
 import 'site_files.dart';
 
@@ -710,6 +711,89 @@ class Quiz extends ChangeNotifier {
       return null;
     } catch (e) {
       return 'تعذّر الحفظ: $e';
+    }
+  }
+
+  // ------------------------------------------------ AI suggestions (staff)
+  /// All AI-suggested questions sit in ONE document, so opening them is one
+  /// read and each change one write. Nobody but the staff can see them.
+  DocumentReference<Map<String, dynamic>> get _aiDoc => _db.doc('drafts/aiQuiz');
+
+  Future<List<Map<String, dynamic>>> aiList() async {
+    try {
+      final d = (await _aiDoc.get()).data() ?? {};
+      return [for (final e in (d['items'] as List? ?? const [])) Map<String, dynamic>.from(e as Map)];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<String?> aiKeep(List<Map<String, dynamic>> items) async {
+    try {
+      await _aiDoc.set({'items': items.take(800).toList()});
+      return null;
+    } catch (_) {
+      return 'تعذّر الحفظ';
+    }
+  }
+
+  /// Turns one suggestion into a question (published unless [draft]).
+  QuizQ aiToQ(Map<String, dynamic> m, {bool draft = false}) {
+    final name = '${m['cat'] ?? ''}';
+    final cat = cats.where((c) => c.name == name).firstOrNull ?? (cats.isEmpty ? null : cats.first);
+    return QuizQ.fromMap('', {
+      'cat': cat?.id ?? '',
+      'type': 'choice',
+      'text': m['text'],
+      'choices': m['choices'],
+      'correct': m['correct'],
+      'explain': m['explain'],
+      'src': m['src'],
+      'level': m['level'],
+      'draft': draft,
+    });
+  }
+
+  /// Asks the AI for [count] new questions, [batch] at a time, and adds them
+  /// to the suggestions. [onStep] gets how many are ready so far.
+  Future<String?> aiGenerate(int count, {String cat = '', int level = 0, void Function(int)? onStep}) async {
+    final have = await aiList();
+    final names = cat.isEmpty ? [for (final c in cats) if (c.id.length > 3) c.name] : [cat];
+    if (names.isEmpty) return 'أضف تصنيفاً واحداً على الأقل أولاً';
+    final avoid = [...all.map((q) => q.text), ...have.map((m) => '${m['text']}')];
+    var made = 0, fails = 0;
+    while (made < count && fails < 3) {
+      final n = math.min(20, count - made);
+      final l = await Ai.quizQuestions(count: n, cats: names, level: level, avoid: avoid.reversed.toList());
+      if (l.isEmpty) {
+        fails++;
+        continue;
+      }
+      final seen = avoid.toSet();
+      final fresh = [
+        for (final m in l)
+          if (!seen.contains(m['text'])) {...m, 'k': '${DateTime.now().microsecondsSinceEpoch}${made + l.indexOf(m)}'}
+      ];
+      have.addAll(fresh);
+      avoid.addAll(fresh.map((m) => '${m['text']}'));
+      made += fresh.length;
+      final err = await aiKeep(have);
+      if (err != null) return err;
+      onStep?.call(made);
+    }
+    if (made == 0) return Ai.supported ? 'لم يرجع الذكاء الاصطناعي بأسئلة، حاول بعد قليل' : 'هذا يعمل من تطبيق الأندرويد';
+    return null;
+  }
+
+  /// «أرسل الأسئلة الآن»: the server looks every half hour and, when asked,
+  /// makes the readers' file again at once (otherwise every six hours).
+  Future<String?> publishNow() async {
+    try {
+      await _db.doc('answers/_quizNow').set({'at': FieldValue.serverTimestamp(), 'by': Cloud.instance.email});
+      await Cloud.instance.logAction('الأسئلة: أرسل الأسئلة الآن');
+      return null;
+    } catch (_) {
+      return 'تعذّر الإرسال';
     }
   }
 

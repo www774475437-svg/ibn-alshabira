@@ -2,6 +2,8 @@ name: Quiz and counts for the site (4 times a day)
 on:
   schedule:
     - cron: '23 1,7,13,19 * * *'
+    # Every half hour: only looks whether the sheikh pressed «أرسل الأسئلة الآن».
+    - cron: '*/30 * * * *'
   workflow_dispatch:
 concurrency:
   group: media-branch-stats
@@ -20,9 +22,14 @@ jobs:
           sparse-checkout: tool
       - name: Copy the quiz and the counts out of Firestore
         working-directory: media
+        env:
+          CHECK_ONLY: ${{ github.event.schedule == '*/30 * * * *' && '1' || '0' }}
         run: python3 -I ../code/tool/build_stats.py
       - name: Save
         run: |
+          [ -f media/quiz.json ] || exit 0
+          cd media && git status --porcelain | grep -q . || exit 0
+          cd ..
           mkdir out && cp media/quiz.json media/stats.json media/views.json media/usage.json media/stats-state.json out/
           for i in 1 2 3; do
             rm -rf m && git clone --depth 1 --branch media "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" m

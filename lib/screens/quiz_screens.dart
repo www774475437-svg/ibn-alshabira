@@ -93,6 +93,8 @@ class _QuizHomeScreenState extends State<QuizHomeScreen> {
                     const PopupMenuDivider(),
                     const PopupMenuItem(value: 'cats', child: Text('إدارة التصنيفات')),
                     const PopupMenuItem(value: 'bulk', child: Text('إضافة أسئلة كثيرة دفعة واحدة')),
+                    const PopupMenuItem(value: 'ai', child: Text('اقتراحات الذكاء الاصطناعي')),
+                    const PopupMenuItem(value: 'now', child: Text('أرسل الأسئلة الآن')),
                     const PopupMenuItem(value: 'sugs', child: Text('الأسئلة المقترحة')),
                     const PopupMenuItem(value: 'stats', child: Text('إحصاءات الأسئلة')),
                     const PopupMenuItem(value: 'thanks', child: Text('رسالة شكر للأوائل')),
@@ -184,6 +186,13 @@ class _QuizHomeScreenState extends State<QuizHomeScreen> {
         await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SuggestQuestionScreen()));
       case 'mysugs':
         await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MySuggestionsScreen()));
+      case 'ai':
+        await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AiSuggestionsScreen()));
+      case 'now':
+        final err = await Quiz.instance.publishNow();
+        if (context.mounted) {
+          _toast(context, err ?? 'تم. تصل الأسئلة إلى الناس خلال نصف ساعة إلى ساعة إن شاء الله', ok: err == null);
+        }
       case 'bulk':
         await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BulkImportScreen()));
       case 'cats':
@@ -2245,6 +2254,228 @@ class _BulkImportScreenState extends State<BulkImportScreen> {
           child: const Text('حفظ كمسودات'),
         ),
       ]),
+    );
+  }
+}
+
+
+/// Staff: questions the AI wrote, waiting for the sheikh. Kept in one
+/// document (one read to open). Edit, publish one by one, or publish all.
+class AiSuggestionsScreen extends StatefulWidget {
+  const AiSuggestionsScreen({super.key});
+
+  @override
+  State<AiSuggestionsScreen> createState() => _AiSuggestionsScreenState();
+}
+
+class _AiSuggestionsScreenState extends State<AiSuggestionsScreen> {
+  List<Map<String, dynamic>>? _items;
+  bool _busy = false;
+  int _made = 0, _want = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final l = await Quiz.instance.aiList();
+    if (mounted) setState(() => _items = l);
+  }
+
+  Future<void> _remove(Map<String, dynamic> m) async {
+    final l = [...?_items]..removeWhere((x) => x['k'] == m['k']);
+    setState(() => _items = l);
+    await Quiz.instance.aiKeep(l);
+  }
+
+  Future<void> _start() async {
+    final quiz = Quiz.instance;
+    var count = 100, level = 0;
+    var cat = '';
+    final custom = TextEditingController();
+    final go = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (c) => StatefulBuilder(
+        builder: (c, set) => Padding(
+          padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(c).viewInsets.bottom + 16),
+          child: SingleChildScrollView(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+              const Text('ابدأ الاقتراح', style: TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.bold, fontSize: 18)),
+              const SizedBox(height: 10),
+              const Text('كم سؤالاً؟', style: TextStyle(fontWeight: FontWeight.bold)),
+              Wrap(spacing: 6, children: [
+                for (final n in const [10, 20, 50, 100, 150])
+                  ChoiceChip(
+                      label: Text('$n'),
+                      selected: count == n && custom.text.isEmpty,
+                      onSelected: (_) => set(() {
+                            count = n;
+                            custom.clear();
+                          })),
+              ]),
+              TextField(
+                controller: custom,
+                keyboardType: TextInputType.number,
+                onChanged: (v) => set(() => count = int.tryParse(v) ?? count),
+                decoration: const InputDecoration(hintText: 'أو اكتب العدد بنفسك', isDense: true),
+              ),
+              const SizedBox(height: 10),
+              const Text('التصنيف:', style: TextStyle(fontWeight: FontWeight.bold)),
+              Wrap(spacing: 6, runSpacing: 4, children: [
+                ChoiceChip(label: const Text('كل التصنيفات'), selected: cat.isEmpty, onSelected: (_) => set(() => cat = '')),
+                for (final k in quiz.cats.where((k) => k.id.length > 3))
+                  ChoiceChip(label: Text(k.name), selected: cat == k.name, onSelected: (_) => set(() => cat = k.name)),
+              ]),
+              const SizedBox(height: 10),
+              const Text('الصعوبة:', style: TextStyle(fontWeight: FontWeight.bold)),
+              Wrap(spacing: 6, children: [
+                for (final l in const [0, 1, 2, 3])
+                  ChoiceChip(
+                      label: Text(l == 0 ? 'منوّعة' : Quiz.levelNames[l]!),
+                      selected: level == l,
+                      onSelected: (_) => set(() => level = l)),
+              ]),
+              const SizedBox(height: 10),
+              const Text('من كلام الشيخ ابن عثيمين رَحِمَهُ الله. تُحفظ هنا ولا يراها أحد حتى تنشرها، وقد يخطئ الذكاء الاصطناعي فراجعها.',
+                  style: TextStyle(color: Colors.grey, height: 1.7)),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
+                icon: const Icon(Icons.auto_awesome),
+                label: const Text('ابدأ'),
+                onPressed: () => Navigator.pop(c, true),
+              ),
+            ]),
+          ),
+        ),
+      ),
+    );
+    if (go != true || !mounted) return;
+    count = count.clamp(1, 300);
+    setState(() {
+      _busy = true;
+      _made = 0;
+      _want = count;
+    });
+    final err = await quiz.aiGenerate(count, cat: cat, level: level, onStep: (n) {
+      if (mounted) setState(() => _made = n);
+    });
+    await _load();
+    if (!mounted) return;
+    setState(() => _busy = false);
+    _toast(context, err ?? 'جاهزة: $_made سؤالاً', ok: err == null);
+  }
+
+  Future<void> _publish(Map<String, dynamic> m) async {
+    final err = await Quiz.instance.saveQ(Quiz.instance.aiToQ(m));
+    if (!mounted) return;
+    if (err == null) await _remove(m);
+    if (mounted) _toast(context, err ?? 'نُشر ✅', ok: err == null);
+  }
+
+  Future<void> _edit(Map<String, dynamic> m) async {
+    final saved = await Navigator.of(context)
+        .push<bool>(MaterialPageRoute(builder: (_) => QuestionEditor(q: Quiz.instance.aiToQ(m))));
+    if (saved == true) await _remove(m);
+  }
+
+  Future<void> _publishAll() async {
+    final l = [...?_items];
+    if (l.isEmpty) return;
+    final sure = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('نشر الكل'),
+        content: Text('تُنشر ${l.length} أسئلة للناس. هل راجعتها؟'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('رجوع')),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('نشر الكل')),
+        ],
+      ),
+    );
+    if (sure != true || !mounted) return;
+    setState(() => _busy = true);
+    final err = await Quiz.instance.saveMany([for (final m in l) Quiz.instance.aiToQ(m)]);
+    if (err == null) await Quiz.instance.aiKeep([]);
+    await _load();
+    if (!mounted) return;
+    setState(() => _busy = false);
+    _toast(context, err ?? 'نُشرت ${l.length} أسئلة ✅', ok: err == null);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = _items;
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('اقتراحات الذكاء الاصطناعي'),
+        actions: [
+          if ((l?.isNotEmpty ?? false) && !_busy) TextButton(onPressed: _publishAll, child: const Text('نشر الكل')),
+        ],
+      ),
+      body: l == null
+          ? const Center(child: CircularProgressIndicator())
+          : ListView(padding: const EdgeInsets.all(12), children: [
+              FilledButton.icon(
+                style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(54)),
+                icon: const Icon(Icons.auto_awesome),
+                label: Text(_busy ? 'يكتب… $_made من $_want' : 'ابدأ الاقتراح'),
+                onPressed: _busy ? null : _start,
+              ),
+              if (_busy)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: LinearProgressIndicator(value: _want == 0 ? null : _made / _want, color: kGold),
+                ),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                child: Text(l.isEmpty ? 'لا اقتراحات الآن. اضغط «ابدأ الاقتراح».' : '${l.length} سؤالاً تنتظر المراجعة',
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
+              ),
+              for (final m in l)
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                      Text('${m['cat'] ?? ''} · ${Quiz.levelNames[m['level']] ?? ''}',
+                          style: const TextStyle(color: kGold, fontSize: 12.5)),
+                      Text('${m['text']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, height: 1.6)),
+                      const SizedBox(height: 4),
+                      for (var i = 0; i < (m['choices'] as List).length; i++)
+                        Text('${i == m['correct'] ? '✓' : '•'} ${(m['choices'] as List)[i]}',
+                            style: TextStyle(
+                                height: 1.7,
+                                color: i == m['correct'] ? const Color(0xFF2E7D32) : null,
+                                fontWeight: i == m['correct'] ? FontWeight.bold : null)),
+                      if ('${m['explain'] ?? ''}'.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text('${m['explain']}', style: const TextStyle(color: Colors.grey, height: 1.6)),
+                        ),
+                      if ('${m['src'] ?? ''}'.isNotEmpty)
+                        Text('[المصدر: ${m['src']}]', style: const TextStyle(color: kGold, fontSize: 12.5)),
+                      const SizedBox(height: 6),
+                      Row(children: [
+                        Expanded(
+                          child: FilledButton(onPressed: _busy ? null : () => _publish(m), child: const Text('نشر')),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: OutlinedButton(onPressed: _busy ? null : () => _edit(m), child: const Text('تعديل')),
+                        ),
+                        IconButton(
+                          tooltip: 'حذف',
+                          icon: const Icon(Icons.delete_outline, color: Colors.red),
+                          onPressed: _busy ? null : () => _remove(m),
+                        ),
+                      ]),
+                    ]),
+                  ),
+                ),
+            ]),
     );
   }
 }

@@ -37,16 +37,16 @@ class Ai {
     } catch (_) {}
   }
 
-  static Future<dynamic> _json(String prompt) async {
+  static Future<dynamic> _json(String prompt, {double temperature = 0, int seconds = 45}) async {
     if (!supported) return null;
     await _prepare();
     for (final name in _models) {
       try {
         final model = FirebaseAI.googleAI(appCheck: FirebaseAppCheck.instance).generativeModel(
           model: name,
-          generationConfig: GenerationConfig(temperature: 0, responseMimeType: 'application/json'),
+          generationConfig: GenerationConfig(temperature: temperature, responseMimeType: 'application/json'),
         );
-        final res = await model.generateContent([Content.text(prompt)]).timeout(const Duration(seconds: 45));
+        final res = await model.generateContent([Content.text(prompt)]).timeout(Duration(seconds: seconds));
         final t = (res.text ?? '').trim();
         if (t.isEmpty) continue;
         // The answer is JSON; cut away anything around it just in case.
@@ -57,6 +57,48 @@ class Ai {
       } catch (_) {}
     }
     return null;
+  }
+
+  /// Quiz questions for the sheikh to review (never published by themselves),
+  /// from what Ibn Uthaymeen wrote. [cats]: the category names to choose from.
+  /// Returns maps: text, choices, correct, explain, src, cat, level.
+  static Future<List<Map<String, dynamic>>> quizQuestions({
+    required int count,
+    required List<String> cats,
+    int level = 0,
+    List<String> avoid = const [],
+  }) async {
+    final j = await _json('''
+أنت تساعد شيخاً سلفياً في إعداد أسئلة اختيار من متعدد لطلاب العلم، يراجعها الشيخ قبل نشرها.
+اكتب $count سؤالاً جديداً من مسائل العلم التي قرّرها الشيخ محمد بن صالح العثيمين رَحِمَهُ الله في كتبه وشروحه المشهورة
+(مثل: شرح الأصول الثلاثة، القواعد المثلى، شرح العقيدة الواسطية، الشرح الممتع، شرح رياض الصالحين، مجموع فتاوى ورسائل العثيمين، فتاوى نور على الدرب).
+الشروط:
+- لا تكتب إلا مسألة واضحة مشهورة عنه أنت متأكد منها، واترك ما تشك فيه. لا تنسب إليه قولاً لم يقله.
+- أربعة اختيارات، واحد صحيح فقط، والاختيارات الخاطئة معقولة غير سخيفة.
+- شرح قصير من سطرين إلى أربعة يبيّن الصواب ودليله إن وُجد، بلغة الشيخ وأسلوبه.
+- المصدر: اسم الكتاب فقط، ولا تكتب رقم صفحة أو جزء.
+- الباب واحد من هذه فقط: ${cats.join('، ')}
+- ${level == 0 ? 'نوّع الصعوبة' : 'الصعوبة كلها: ${level == 1 ? 'مبتدئ' : level == 2 ? 'متوسط' : 'متقدم'}'}، والصعوبة رقم: 1 مبتدئ، 2 متوسط، 3 متقدم.
+- لا تكرر سؤالاً من هذه الأسئلة الموجودة ولا معناه:
+${avoid.take(250).map((t) => '• $t').join('\n')}
+أعد JSON فقط: [{"text": "...", "choices": ["...","...","...","..."], "correct": 0, "explain": "...", "src": "...", "cat": "...", "level": 1}]''', temperature: 0.7, seconds: 150);
+    if (j is! List) return const [];
+    return [
+      for (final e in j)
+        if (e is Map &&
+            '${e['text'] ?? ''}'.trim().isNotEmpty &&
+            e['choices'] is List &&
+            (e['choices'] as List).length >= 2)
+          {
+            'text': '${e['text']}'.trim(),
+            'choices': [for (final c in e['choices'] as List) '$c'.trim()],
+            'correct': ((e['correct'] as num?)?.toInt() ?? 0).clamp(0, (e['choices'] as List).length - 1),
+            'explain': '${e['explain'] ?? ''}'.trim(),
+            'src': '${e['src'] ?? ''}'.trim(),
+            'cat': '${e['cat'] ?? ''}'.trim(),
+            'level': ((e['level'] as num?)?.toInt() ?? 1).clamp(1, 3),
+          }
+    ];
   }
 
   /// Splits a message into its questions. Does not answer anything.

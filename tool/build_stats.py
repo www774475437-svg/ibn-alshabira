@@ -143,8 +143,25 @@ def first_base():
     return base
 
 
+def asked_at():
+    """When the sheikh last pressed «أرسل الأسئلة الآن» (one read)."""
+    global READS
+    READS += 1
+    try:
+        return doc(_call(f'{BASE}/answers/_quizNow?key={KEY}'))[1].get('at', '')
+    except Exception:
+        return ''
+
+
 def main():
     now = dt.datetime.now(dt.timezone.utc)
+    asked = asked_at()
+    if os.environ.get('CHECK_ONLY') == '1':
+        seen = load('stats-state.json', {}).get('askedSeen', '')
+        if not asked or asked <= seen:
+            print('nothing asked')
+            return
+        print('the sheikh asked: making the files now')
     today = now.strftime('%Y-%m-%d')
     yesterday = (now - dt.timedelta(days=1)).strftime('%Y-%m-%d')
 
@@ -168,6 +185,7 @@ def main():
     now_totals = json.loads(json.dumps(base))
     add_day(now_totals, docs)
     state['usage'][today] = usage_of(today, docs)
+    state['askedSeen'] = asked
     readers = dict(base['readers'])
     readers[today] = len(docs)
     keep = sorted(state['usage'])[-8:]
