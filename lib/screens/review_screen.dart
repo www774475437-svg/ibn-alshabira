@@ -321,7 +321,12 @@ class _AiSortButtonState extends State<AiSortButton> {
     );
     if (sure != true || !mounted) return;
     final err = await Cloud.instance.aiSort(onStep: (d, t) {
-      if (mounted) setState(() => (_done, _total) = (d, t));
+      if (mounted) {
+        setState(() {
+          _done = d;
+          _total = t;
+        });
+      }
     });
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err ?? 'تم ترتيب $_done منشوراً')));
