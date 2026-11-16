@@ -374,8 +374,15 @@ class Repository extends ChangeNotifier {
     _lastEdits = edits;
     final all = [..._bundled, ...published];
     final known = {for (final c in chapters) c.id};
+    // Chapters chosen by «رتّب بالذكاء الاصطناعي» (one document). A chapter
+    // the staff chose or a verified post always wins over it.
+    final ai = (edits['_ai']?['m'] as Map?) ?? const {};
     for (final f in all) {
       final e = edits[f.id];
+      final byAi = ai[f.id];
+      if (byAi != null && e?['verified'] != true && '${e?['chapter'] ?? ''}'.isEmpty && known.contains('$byAi')) {
+        f.chapter = '$byAi';
+      }
       if (e != null) {
         final t = '${e['title'] ?? ''}';
         if (t.isNotEmpty) f.title = t;

@@ -106,6 +106,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
                   _verifiedTab, () => setState(() => _verifiedTab = true)),
             ]),
           ),
+          const Padding(padding: EdgeInsets.fromLTRB(12, 10, 12, 0), child: AiSortButton()),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
             child: DropdownButtonFormField<String>(
@@ -284,4 +285,61 @@ class HiddenScreen extends StatelessWidget {
       ),
     );
   }
+}
+
+
+/// «رتّب بالذكاء الاصطناعي»: puts the posts that are not verified into
+/// their chapters. Verified posts are never moved; nothing is deleted.
+class AiSortButton extends StatefulWidget {
+  const AiSortButton({super.key});
+
+  @override
+  State<AiSortButton> createState() => _AiSortButtonState();
+}
+
+class _AiSortButtonState extends State<AiSortButton> {
+  int _done = 0, _total = 0;
+
+  Future<void> _go() async {
+    final sure = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('رتّب بالذكاء الاصطناعي'),
+        content: const Text(
+            'ينقل كل منشور غير متحقق منه إلى بابه الصحيح.\n\n'
+            '• ما تحققتم منه لا يُلمس.\n'
+            '• لا يُحذف أي منشور.\n'
+            '• ما لا يتأكد منه يذهب إلى «متفرقات».\n'
+            '• تبقى المنقولة «غير متحقق منها» لتراجعوها.\n\n'
+            'قد يأخذ وقتاً، فاترك التطبيق مفتوحاً. وتستطيع إيقافه ثم إكماله لاحقاً.',
+            style: TextStyle(height: 1.7)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('إلغاء')),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('ابدأ')),
+        ],
+      ),
+    );
+    if (sure != true || !mounted) return;
+    final err = await Cloud.instance.aiSort(onStep: (d, t) {
+      if (mounted) setState(() => (_done, _total) = (d, t));
+    });
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err ?? 'تم ترتيب $_done منشوراً')));
+  }
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: Cloud.instance,
+        builder: (context, _) {
+          final busy = Cloud.instance.aiSorting;
+          return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            OutlinedButton.icon(
+              icon: Icon(busy ? Icons.stop_circle_outlined : Icons.auto_awesome, color: kGold),
+              label: Text(busy ? 'يرتّب… $_done من $_total — اضغط للإيقاف' : 'رتّب بالذكاء الاصطناعي'),
+              onPressed: busy ? Cloud.instance.stopAiSort : _go,
+            ),
+            if (busy) LinearProgressIndicator(value: _total == 0 ? null : _done / _total, color: kGold),
+          ]);
+        },
+      );
 }

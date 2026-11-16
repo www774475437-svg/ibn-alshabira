@@ -72,6 +72,8 @@ class QuizQ {
   List<int> corrects;
   /// Where the answer comes from (book and page).
   String src;
+  /// The answers chapter whose «اختبر نفسك» holds this question ('' = none).
+  String series;
 
   QuizQ({
     required this.id,
@@ -98,6 +100,7 @@ class QuizQ {
     this.showSuggester = false,
     List<int>? corrects,
     this.src = '',
+    this.series = '',
   })  : choices = choices ?? ['', ''],
         corrects = corrects ?? [];
 
@@ -133,6 +136,7 @@ class QuizQ {
         showSuggester: m['showSuggester'] == true,
         corrects: [for (final c in (m['corrects'] as List? ?? const [])) (c as num).toInt()],
         src: '${m['src'] ?? ''}',
+        series: '${m['series'] ?? ''}',
       );
 
   Map<String, dynamic> toMap() => {
@@ -158,6 +162,7 @@ class QuizQ {
         'showSuggester': showSuggester,
         'corrects': corrects,
         'src': src,
+        'series': series,
       };
 
   QuizQ copy({String? id, String? cat}) => QuizQ.fromMap(id ?? this.id, toMap()..['cat'] = cat ?? this.cat)
@@ -388,6 +393,8 @@ class Quiz extends ChangeNotifier {
 
   int answeredIn(String cat) => live.where((q) => q.cat == cat && marks.containsKey(q.id)).length;
   int liveIn(String cat) => live.where((q) => q.cat == cat).length;
+  /// «اختبر نفسك» in an answers chapter: the questions the sheikh added to it.
+  List<QuizQ> inSeries(String chapter) => live.where((q) => q.series == chapter).toList();
   bool hasNewIn(String cat) => live.any((q) => q.cat == cat && q.isNew && !marks.containsKey(q.id));
 
   int get right => marks.values.where((m) => m.ok).length;

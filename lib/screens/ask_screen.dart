@@ -161,7 +161,6 @@ class _AskScreenState extends State<AskScreen> {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        _Similar(text: _text.text),
                         Row(
                           children: [
                             const Text('الباب:', style: TextStyle(color: Colors.grey)),
@@ -207,6 +206,9 @@ class _AskScreenState extends State<AskScreen> {
                             ),
                           ],
                         ),
+                        // Small, below the box: the sheikh's earlier answers that
+                        // look like this question. Sending stays possible.
+                        _Similar(text: _text.text),
                       ],
                     ),
                   ),
@@ -226,13 +228,16 @@ class _Similar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (text.trim().length < 8) return const SizedBox.shrink();
-    final items = Repository.instance.similarToText(text);
+    if (text.trim().length < 10) return const SizedBox.shrink();
+    final items = Repository.instance.similarToText(text, limit: 2);
     if (items.isEmpty) return const SizedBox.shrink();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('قد تجد جواب سؤالك هنا:', style: TextStyle(color: kGoldChip, fontWeight: FontWeight.bold)),
+        const Padding(
+          padding: EdgeInsets.only(top: 6),
+          child: Text('ربما تجد جوابك هنا:', style: TextStyle(color: kGoldChip, fontSize: 12.5, fontWeight: FontWeight.bold)),
+        ),
         for (final f in items)
           InkWell(
             onTap: () => openFatwa(context, f),
@@ -242,13 +247,12 @@ class _Similar extends StatelessWidget {
                 children: [
                   const Icon(Icons.article_outlined, size: 18, color: kGold),
                   const SizedBox(width: 6),
-                  Expanded(child: Text(f.title, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                  Expanded(child: Text(f.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13))),
                   const Icon(Icons.chevron_left, size: 18),
                 ],
               ),
             ),
           ),
-        const Divider(height: 10),
       ],
     );
   }

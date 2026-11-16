@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:convert';
 import 'dart:async';
 
@@ -10,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/models.dart';
 import '../data/repository.dart';
+import 'ai.dart';
 import 'day_log.dart';
 import 'notifications.dart';
 import 'site_files.dart';
@@ -613,6 +615,10 @@ class Cloud extends ChangeNotifier {
           if (isLater(e.value)) (e.key, '${e.value['title'] ?? ''}', (e.value['publishAt'] as Timestamp).toDate()),
       ]..sort((a, b) => a.$3.compareTo(b.$3));
       remoteIds = {for (final e in visible) e.key};
+      summaries = {
+        for (final e in edits.entries)
+          if ('${e.value['summary'] ?? ''}'.trim().isNotEmpty) e.key: '${e.value['summary']}'.trim(),
+      };
       Repository.instance.applyRemote(
         [
           for (final e in visible)
@@ -696,6 +702,83 @@ class Cloud extends ChangeNotifier {
       return null;
     } catch (_) {
       return 'تعذّر الحفظ';
+    }
+  }
+
+  /// One-line summaries the staff approved: answer id -> line.
+  Map<String, String> summaries = {};
+
+  /// Staff: approve (or remove, with an empty line) an answer's summary.
+  Future<String?> setSummary(String id, String line, [String title = '']) async {
+    try {
+      await _db.doc('titleEdits/$id').set({'summary': line.trim(), 'by': email}, SetOptions(merge: true));
+      _log(line.trim().isEmpty ? 'حذف ملخص جواب' : 'اعتماد ملخص جواب', title);
+      await loadRemoteAnswers();
+      return null;
+    } catch (_) {
+      return 'تعذّر الحفظ';
+    }
+  }
+
+  // ------------------------------------------- «رتّب بالذكاء الاصطناعي»
+  static String _cut(String t, int n) => t.length <= n ? t : t.substring(0, n);
+  bool aiSorting = false;
+  bool _stopSort = false;
+  void stopAiSort() => _stopSort = true;
+
+  /// Puts the channel posts that are not verified into their right chapters.
+  /// Verified posts and posts the staff placed are never touched; nothing is
+  /// deleted; unsure ones go to «متفرقات». All choices are kept in ONE
+  /// document (titleEdits/_ai), written once per batch of posts.
+  /// [onStep]: (done, total). Can be stopped and started again later.
+  Future<String?> aiSort({void Function(int, int)? onStep}) async {
+    if (aiSorting) return null;
+    aiSorting = true;
+    _stopSort = false;
+    notifyListeners();
+    try {
+      final repo = Repository.instance;
+      final done = Map<String, dynamic>.from(((await _db.doc('titleEdits/_ai').get()).data()?['m'] as Map?) ?? {});
+      final todo = [
+        for (final f in repo.fatwas)
+          if (f.id.startsWith('tg-') &&
+              !repo.verifiedIds.contains(f.id) &&
+              !repo.sortedIds.contains(f.id) &&
+              !done.containsKey(f.id))
+            f
+      ];
+      final chapters = [for (final c in repo.chapters) (c.id, c.name)];
+      final total = todo.length;
+      var n = 0, fails = 0;
+      onStep?.call(0, total);
+      for (var i = 0; i < todo.length && !_stopSort; i += 30) {
+        final part = todo.sublist(i, math.min(i + 30, todo.length));
+        final res = await Ai.sortPosts([
+          for (final f in part)
+            (f.id, '${f.title}\n${_cut('${f.question} ${f.answer}'.trim().replaceAll(RegExp(r'\s+'), ' '), 350)}'),
+        ], chapters);
+        if (res.isEmpty) {
+          if (++fails >= 3) break;
+          i -= 30; // try this batch again
+          continue;
+        }
+        fails = 0;
+        await _db.doc('titleEdits/_ai').set({'m': res}, SetOptions(merge: true));
+        n += part.length;
+        onStep?.call(n, total);
+      }
+      if (n > 0) {
+        _log('ترتيب المنشورات بالذكاء الاصطناعي', '$n منشوراً');
+        await loadRemoteAnswers();
+      }
+      if (total == 0) return 'كل المنشورات مرتّبة';
+      if (n == 0) return Ai.supported ? 'لم يرجع الذكاء الاصطناعي بجواب، حاول بعد قليل' : 'هذا يعمل من تطبيق الأندرويد';
+      return null;
+    } catch (e) {
+      return 'تعذّر: $e';
+    } finally {
+      aiSorting = false;
+      notifyListeners();
     }
   }
 

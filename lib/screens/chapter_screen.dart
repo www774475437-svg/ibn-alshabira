@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
 import '../services/cloud.dart';
+import '../services/quiz.dart';
+import 'quiz_screens.dart';
 import '../widgets/common.dart';
 
 class ChapterScreen extends StatefulWidget {
@@ -18,6 +20,12 @@ class _ChapterScreenState extends State<ChapterScreen> {
   String _sort = 'new'; // new | old | alpha
   bool _unreadOnly = false;
   String _sub = '';
+
+  @override
+  void initState() {
+    super.initState();
+    Quiz.instance.load();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -40,7 +48,7 @@ class _ChapterScreenState extends State<ChapterScreen> {
         ],
       ),
       body: ListenableBuilder(
-        listenable: Listenable.merge([repo, Cloud.instance]),
+        listenable: Listenable.merge([repo, Cloud.instance, Quiz.instance]),
         builder: (context, _) {
           final all = repo.byChapter(widget.chapter.id);
           final read = repo.everRead;
@@ -58,8 +66,20 @@ class _ChapterScreenState extends State<ChapterScreen> {
           } else if (_sort == 'alpha') {
             items = [...items]..sort((a, b) => normalizeArabic(a.title).compareTo(normalizeArabic(b.title)));
           }
+          final tests = Quiz.instance.inSeries(widget.chapter.id);
           return Column(
             children: [
+              if (tests.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(44)),
+                    icon: const Icon(Icons.quiz_outlined),
+                    label: Text('اختبر نفسك (${tests.length} أسئلة)'),
+                    onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                        builder: (_) => SeriesTestScreen(chapter: widget.chapter.id, name: widget.chapter.name))),
+                  ),
+                ),
               if (subs.isNotEmpty)
                 SizedBox(
                   height: 54,

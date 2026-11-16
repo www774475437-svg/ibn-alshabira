@@ -101,6 +101,39 @@ ${avoid.take(250).map((t) => '• $t').join('\n')}
     ];
   }
 
+  /// Puts channel posts in their chapters. [posts]: (id, text). [chapters]:
+  /// (id, name). Returns id -> chapter id; posts it is not sure of get
+  /// «mutafarriq». Nothing is deleted or rewritten.
+  static Future<Map<String, String>> sortPosts(List<(String, String)> posts, List<(String, String)> chapters) async {
+    final ids = {for (final c in chapters) c.$1};
+    final j = await _json('''
+أنت ترتّب منشورات شيخ في أبواب تطبيق. اقرأ كل منشور واختر بابه الصحيح من هذه الأبواب فقط:
+${chapters.map((c) => '${c.$1}: ${c.$2}').join('\n')}
+- اختر الباب بحسب موضوع المنشور الحقيقي، لا بحسب كلمة عابرة فيه.
+- إن لم تكن متأكداً، أو كان المنشور في غير المسائل الشرعية (خبر، تهنئة، كلام عن بلد أو شخص)، فاختر mutafarriq.
+أعد JSON فقط: {"رقم المنشور": "رقم الباب"}
+المنشورات:
+${posts.map((p) => '[${p.$1}] ${p.$2}').join('\n\n')}''', seconds: 120);
+    if (j is! Map) return const {};
+    return {
+      for (final e in j.entries)
+        if (ids.contains('${e.value}')) '${e.key}': '${e.value}',
+    };
+  }
+
+  /// One line that sums up a long answer, from the sheikh's own words only.
+  static Future<String?> summaryLine(String question, String answer) async {
+    final j = await _json('''
+اكتب خلاصة جواب الشيخ في سطر واحد قصير (لا يزيد على عشرين كلمة)، من كلامه هو فقط، دون زيادة حكم أو دليل من عندك.
+إن لم يكن في الجواب حكم واضح يُلخَّص، فأعد {"line": ""}.
+أعد JSON فقط: {"line": "..."}
+السؤال: $question
+الجواب: ${answer.length > 6000 ? answer.substring(0, 6000) : answer}''');
+    if (j is! Map) return null;
+    final l = '${j['line'] ?? ''}'.trim();
+    return l.isEmpty ? null : l;
+  }
+
   /// Splits a message into its questions. Does not answer anything.
   /// When the message cannot be understood at all, a short question back.
   static String? lastClarify;

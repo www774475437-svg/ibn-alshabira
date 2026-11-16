@@ -7,6 +7,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../data/repository.dart';
 import '../services/cloud.dart';
 import 'challenge_screens.dart';
 import '../services/quiz.dart';
@@ -1364,13 +1365,14 @@ class _Board extends StatelessWidget {
 
 class QuizCertificateScreen extends StatelessWidget {
   final QuizCat cat;
-  const QuizCertificateScreen({super.key, required this.cat});
+  final List<QuizQ>? only; // a chapter's «اختبر نفسك» questions
+  const QuizCertificateScreen({super.key, required this.cat, this.only});
 
   @override
   Widget build(BuildContext context) {
     final key = GlobalKey();
     final quiz = Quiz.instance;
-    final list = quiz.live.where((q) => q.cat == cat.id).toList();
+    final list = only ?? quiz.live.where((q) => q.cat == cat.id).toList();
     final right = list.where((q) => quiz.marks[q.id]?.ok == true).length;
     final now = DateTime.now();
     return Scaffold(
@@ -1763,6 +1765,20 @@ class _QuestionEditorState extends State<QuestionEditor> {
                 decoration: dec('الشرح بالتفصيل (يظهر بعد الجواب، صحيحاً أو خطأً)')),
             const SizedBox(height: 10),
             TextField(controller: _src, onChanged: (_) => _dirty = true, decoration: dec('المصدر: الكتاب والصفحة (اختياري)')),
+            const SizedBox(height: 10),
+            DropdownButtonFormField<String>(
+              value: Repository.instance.chapters.any((c) => c.id == _q.series) ? _q.series : '',
+              isExpanded: true,
+              decoration: dec('أضفه إلى سلسلة «اختبر نفسك» في باب'),
+              items: [
+                const DropdownMenuItem(value: '', child: Text('لا')),
+                for (final c in Repository.instance.chapters) DropdownMenuItem(value: c.id, child: Text(c.name)),
+              ],
+              onChanged: (v) => setState(() {
+                _q.series = v ?? '';
+                _dirty = true;
+              }),
+            ),
             const SizedBox(height: 10),
             TextField(controller: _hint, onChanged: (_) => _dirty = true, decoration: dec('تلميح (اختياري)')),
             SwitchListTile(
@@ -2478,4 +2494,49 @@ class _AiSuggestionsScreenState extends State<AiSuggestionsScreen> {
             ]),
     );
   }
+}
+
+
+/// «اختبر نفسك»: the questions the sheikh added to an answers chapter.
+class SeriesTestScreen extends StatelessWidget {
+  final String chapter;
+  final String name;
+  const SeriesTestScreen({super.key, required this.chapter, required this.name});
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: Quiz.instance,
+        builder: (context, _) {
+          final quiz = Quiz.instance;
+          final list = quiz.inSeries(chapter);
+          final done = list.where((q) => quiz.marks.containsKey(q.id)).toList();
+          final right = done.where((q) => quiz.marks[q.id]!.ok).length;
+          return Scaffold(
+            appBar: AppBar(title: Text('اختبر نفسك: $name')),
+            body: list.isEmpty
+                ? const EmptyState(icon: Icons.quiz_outlined, text: 'لا أسئلة في هذا الباب بعد.')
+                : ListView(children: [
+                    Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Text(
+                          done.length == list.length
+                              ? 'أنهيت الاختبار: أصبت $right من ${list.length}'
+                              : 'أجبت ${done.length} من ${list.length}',
+                          style: const TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.bold, fontSize: 16)),
+                    ),
+                    if (done.length == list.length && right * 10 >= list.length * 7)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        child: FilledButton.icon(
+                          icon: const Icon(Icons.workspace_premium),
+                          label: const Text('شهادتي'),
+                          onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                              builder: (_) => QuizCertificateScreen(cat: QuizCat(id: 'series-$chapter', name: name), only: list))),
+                        ),
+                      ),
+                    for (final q in list) _QTile(q: q),
+                  ]),
+          );
+        },
+      );
 }

@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 import '../config.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
+import '../services/ai.dart';
 import '../services/cloud.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
@@ -39,6 +40,10 @@ class _FatwaScreenState extends State<FatwaScreen> {
   double _startScale = 1.0;
   double _scale = Repository.instance.readingScale;
 
+  /// The answer page's own colour: '' follows the app, or white/paper/night.
+  static String pageMode = '';
+  static bool _modeLoaded = false;
+
   // Search inside the answer.
   bool _finding = false;
   String _find = '';
@@ -54,6 +59,68 @@ class _FatwaScreenState extends State<FatwaScreen> {
     _pager = PageController(initialPage: _index);
     repo.markRead(current.id);
     Cloud.instance.addView(current.id);
+    if (!_modeLoaded) {
+      _modeLoaded = true;
+      SharedPreferences.getInstance().then((p) {
+        if (mounted) setState(() => pageMode = p.getString('answerPage') ?? '');
+      });
+    }
+  }
+
+  /// «الخط واللون»: font size and the page colour, for the answer page only.
+  void _comfort() {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, set) {
+          void scaleBy(double d) {
+            final v = (_scale + d).clamp(0.8, 2.2);
+            setState(() => _scale = v);
+            set(() {});
+            repo.saveReadingScale(v);
+          }
+
+          void mode(String m) {
+            setState(() => pageMode = m);
+            set(() {});
+            SharedPreferences.getInstance().then((p) => p.setString('answerPage', m));
+          }
+
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              const Text('الخط واللون', style: TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.bold, fontSize: 17)),
+              const SizedBox(height: 12),
+              Row(children: [
+                IconButton.filledTonal(onPressed: () => scaleBy(-0.1), icon: const Icon(Icons.text_decrease)),
+                Expanded(
+                  child: Text('${(_scale * 100).round()}٪',
+                      textAlign: TextAlign.center, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                ),
+                IconButton.filledTonal(onPressed: () => scaleBy(0.1), icon: const Icon(Icons.text_increase)),
+              ]),
+              const SizedBox(height: 14),
+              Wrap(spacing: 8, alignment: WrapAlignment.center, children: [
+                for (final m in const [('', 'مثل التطبيق'), ('white', 'أبيض'), ('paper', 'ورقي'), ('night', 'ليلي')])
+                  ChoiceChip(label: Text(m.$2), selected: pageMode == m.$1, onSelected: (_) => mode(m.$1)),
+              ]),
+              const SizedBox(height: 8),
+              const Text('يتغيّر في صفحة الجواب فقط.', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
+            ]),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _paged(Widget child) {
+    if (pageMode.isEmpty) return child;
+    final t = buildTheme(
+      pageMode == 'night' ? Brightness.dark : Brightness.light,
+      repo.fontFamily,
+      pageMode == 'paper' ? 'paper' : 'teal',
+    );
+    return Theme(data: t, child: ColoredBox(color: t.scaffoldBackgroundColor, child: child));
   }
 
   @override
@@ -354,14 +421,15 @@ class _FatwaScreenState extends State<FatwaScreen> {
                 repo.markRead(_pages[i].id);
                 Cloud.instance.addView(_pages[i].id);
               },
-              itemBuilder: (context, i) => _AnswerBody(
+              itemBuilder: (context, i) => _paged(_AnswerBody(
                 key: ValueKey(_pages[i].id),
                 fatwa: _pages[i],
                 scale: _scale,
                 find: _finding ? _find : '',
                 onCopy: _copyOptions,
                 onReport: _reportError,
-              ),
+                onComfort: _comfort,
+              )),
             ),
           ),
           bottomNavigationBar: _pages.length > 1
@@ -468,7 +536,9 @@ class _AnswerBody extends StatefulWidget {
       required this.scale,
       this.find = '',
       required this.onCopy,
-      required this.onReport});
+      required this.onReport,
+      required this.onComfort});
+  final VoidCallback onComfort;
 
   @override
   State<_AnswerBody> createState() => _AnswerBodyState();
@@ -592,6 +662,11 @@ class _AnswerBodyState extends State<_AnswerBody> {
             chip(isArticle ? Icons.article_outlined : Icons.question_answer_outlined, isArticle ? 'مقال' : 'جواب'),
             if (Cloud.instance.isAdmin && repo.verifiedIds.contains(fatwa.id)) chip(Icons.verified, 'تم التحقق'),
             chip(Icons.schedule, '$minutes د قراءة'),
+            InkWell(
+              borderRadius: BorderRadius.circular(20),
+              onTap: widget.onComfort,
+              child: chip(Icons.format_size, 'الخط واللون'),
+            ),
             if (fatwa.date.isNotEmpty)
               chip(Icons.event_outlined, Hijri.parse(fatwa.date) == null ? fatwa.date : '${Hijri.parse(fatwa.date)} · ${fatwa.date}'),
           ],
@@ -600,7 +675,8 @@ class _AnswerBodyState extends State<_AnswerBody> {
         SelectableText(fatwa.title,
             style: TextStyle(
                 fontFamily: 'Tajawal', fontSize: 21 * scale, fontWeight: FontWeight.bold, height: 1.6)),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
+        _SummaryLine(fatwa: fatwa, scale: scale),
         if (fatwa.question.isNotEmpty) ...[
           _Block(label: 'السؤال', icon: Icons.help_outline, text: fatwa.question, highlight: true, scale: scale, find: find),
           const SizedBox(height: 18),
@@ -1114,4 +1190,114 @@ class _Block extends StatelessWidget {
       ),
     );
   }
+}
+
+
+/// «الخلاصة»: one line atop a long answer. The AI suggests it to the staff
+/// only; it is shown to readers after the sheikh or an admin approves it ✓.
+class _SummaryLine extends StatefulWidget {
+  final Fatwa fatwa;
+  final double scale;
+  const _SummaryLine({required this.fatwa, required this.scale});
+
+  @override
+  State<_SummaryLine> createState() => _SummaryLineState();
+}
+
+class _SummaryLineState extends State<_SummaryLine> {
+  bool _busy = false;
+
+  Future<void> _review(String start) async {
+    final c = TextEditingController(text: start);
+    final ok = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('خلاصة الجواب'),
+        content: TextField(
+          controller: c,
+          maxLines: 4,
+          maxLength: 220,
+          decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'سطر واحد من كلام الشيخ'),
+        ),
+        actions: [
+          if (Cloud.instance.summaries.containsKey(widget.fatwa.id))
+            TextButton(onPressed: () => Navigator.pop(ctx, ''), child: const Text('حذف', style: TextStyle(color: Colors.red))),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+          FilledButton.icon(
+            icon: const Icon(Icons.check),
+            label: const Text('اعتماد'),
+            onPressed: () => Navigator.pop(ctx, c.text.trim()),
+          ),
+        ],
+      ),
+    );
+    if (ok == null || !mounted) return;
+    final err = await Cloud.instance.setSummary(widget.fatwa.id, ok, widget.fatwa.title);
+    if (mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(err ?? (ok.isEmpty ? 'حُذفت الخلاصة' : 'اعتُمدت الخلاصة ✅'))));
+    }
+  }
+
+  Future<void> _suggest() async {
+    setState(() => _busy = true);
+    final line = await Ai.summaryLine(widget.fatwa.question, widget.fatwa.answer);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (line == null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(Ai.supported ? 'لم يجد الذكاء الاصطناعي خلاصة واضحة' : 'هذا يعمل من تطبيق الأندرويد')));
+      return;
+    }
+    await _review(line);
+  }
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: Cloud.instance,
+        builder: (context, _) {
+          final line = Cloud.instance.summaries[widget.fatwa.id];
+          final staff = Cloud.instance.isAdmin;
+          if (line == null) {
+            if (!staff || widget.fatwa.answer.length < 1200) return const SizedBox(height: 4);
+            return Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: TextButton.icon(
+                  icon: _busy
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.auto_awesome, size: 18),
+                  label: const Text('اقترح خلاصة (يراها المشرفون فقط حتى تعتمدها)'),
+                  onPressed: _busy ? null : _suggest,
+                ),
+              ),
+            );
+          }
+          return Container(
+            margin: const EdgeInsets.only(bottom: 14),
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+            decoration: BoxDecoration(
+              color: kGold.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: kGold.withValues(alpha: 0.5)),
+            ),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Icon(Icons.lightbulb_outline, color: kGoldChip, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text.rich(
+                  TextSpan(children: [
+                    const TextSpan(text: 'الخلاصة: ', style: TextStyle(fontWeight: FontWeight.bold, color: kGoldChip)),
+                    TextSpan(text: line),
+                  ]),
+                  style: TextStyle(fontSize: 15.5 * widget.scale, height: 1.7),
+                ),
+              ),
+              if (staff)
+                InkWell(onTap: () => _review(line), child: const Icon(Icons.edit_outlined, size: 18, color: Colors.grey)),
+            ]),
+          );
+        },
+      );
 }
