@@ -316,6 +316,7 @@ class AdminScreen extends StatelessWidget {
           (const Tab(icon: Icon(Icons.flag), text: 'البلاغات'), const _ReportsTab()),
           (const Tab(icon: Icon(Icons.search_off), text: 'بحث بلا نتيجة'), const MissesTab()),
           if (cloud.canManageStaff) (const Tab(icon: Icon(Icons.group), text: 'المشرفون'), const _AdminsTab()),
+          if (cloud.isDeveloper) (const Tab(icon: Icon(Icons.insights), text: 'الاستخدام'), const UsageTab()),
           if (cloud.isDeveloper) (const Tab(icon: Icon(Icons.history), text: 'السجل'), const LogTab()),
         ];
         return DefaultTabController(
@@ -1012,4 +1013,113 @@ Future<void> _askDelete(BuildContext context) async {
   if (ok != true) return;
   final err = await Cloud.instance.requestDeletion();
   if (context.mounted) _toast(context, err ?? 'سُجّل طلب الحذف، وخرجت من حسابك');
+}
+
+
+/// Developer: how many people used the app, in each hour, and for how long.
+/// Read only when this tab is opened (one small document per day).
+class UsageTab extends StatefulWidget {
+  const UsageTab({super.key});
+
+  @override
+  State<UsageTab> createState() => _UsageTabState();
+}
+
+class _UsageTabState extends State<UsageTab> {
+  late Future<List<UsageDay>> _f = Cloud.instance.usage();
+  int _sel = 0;
+
+  static String _dur(int m) => m < 60 ? '$m د' : '${m ~/ 60} س ${m % 60} د';
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<List<UsageDay>>(
+        future: _f,
+        builder: (context, snap) {
+          if (snap.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
+          final l = snap.data ?? const <UsageDay>[];
+          if (l.isEmpty) return const EmptyState(icon: Icons.insights, text: 'لا بيانات بعد.');
+          final d = l[_sel.clamp(0, l.length - 1)];
+          final offset = DateTime.now().timeZoneOffset.inHours;
+          // Hours in the phone's own time.
+          final local = List<int>.filled(24, 0);
+          for (var h = 0; h < 24; h++) {
+            local[(h + offset) % 24] += d.hours[h];
+          }
+          final top = local.fold<int>(1, (a, b) => b > a ? b : a);
+          final nowH = DateTime.now().hour;
+          final ppl = d.minutes.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+          final total = ppl.fold<int>(0, (s, e) => s + e.value);
+          const days = ['الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت', 'الأحد'];
+          return RefreshIndicator(
+            onRefresh: () async => setState(() => _f = Cloud.instance.usage()),
+            child: ListView(padding: const EdgeInsets.all(14), children: [
+              SizedBox(
+                height: 40,
+                child: ListView(scrollDirection: Axis.horizontal, children: [
+                  for (var i = 0; i < l.length; i++)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 6),
+                      child: ChoiceChip(
+                        label: Text(i == 0 ? 'اليوم' : i == 1 ? 'أمس' : days[l[i].day.weekday - 1]),
+                        selected: _sel == i,
+                        onSelected: (_) => setState(() => _sel = i),
+                      ),
+                    ),
+                ]),
+              ),
+              const SizedBox(height: 10),
+              Row(children: [
+                for (final s in [
+                  ('${d.people}', 'شخصاً'),
+                  if (_sel == 0) ('${local[nowH]}', 'في هذه الساعة'),
+                  ('${d.web}', 'من الموقع'),
+                  (_dur(ppl.isEmpty ? 0 : total ~/ ppl.length), 'متوسط البقاء'),
+                ])
+                  Expanded(
+                    child: Card(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        child: Column(children: [
+                          Text(s.$1,
+                              style: const TextStyle(fontFamily: 'Tajawal', fontSize: 20, fontWeight: FontWeight.bold, color: kGold)),
+                          Text(s.$2, style: const TextStyle(fontSize: 12)),
+                        ]),
+                      ),
+                    ),
+                  ),
+              ]),
+              const SizedBox(height: 10),
+              const Text('في كل ساعة (بتوقيت جوالك):', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 6),
+              for (var h = 0; h < 24; h++)
+                if (local[h] > 0 || (_sel == 0 && h == nowH))
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Row(children: [
+                      SizedBox(width: 62, child: Text('${h == 0 ? 12 : h > 12 ? h - 12 : h} ${h < 12 ? 'ص' : 'م'}')),
+                      Expanded(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: LinearProgressIndicator(
+                              value: local[h] / top, minHeight: 14, color: kGold, backgroundColor: kGold.withValues(alpha: .12)),
+                        ),
+                      ),
+                      SizedBox(width: 44, child: Text('${local[h]}', textAlign: TextAlign.center)),
+                    ]),
+                  ),
+              const Divider(height: 28),
+              Text('كم بقي كل شخص (${ppl.length})', style: const TextStyle(fontWeight: FontWeight.bold)),
+              const Text('الرقم هو رقمه في «اسأل الشيخ» إن كان مسجّلاً، و«زائر» إن لم يسجّل. تقريبي، ويُحدَّث كل ساعة.',
+                  style: TextStyle(color: Colors.grey, fontSize: 12.5, height: 1.6)),
+              for (final e in ppl.take(300))
+                ListTile(
+                  dense: true,
+                  leading: Icon(e.key.startsWith('g') ? Icons.person_outline : Icons.verified_user, color: kGold),
+                  title: Text(e.key.startsWith('g') ? 'زائر ${e.key.substring(1)}' : 'رقم ${e.key}'),
+                  trailing: Text(_dur(e.value), style: const TextStyle(fontWeight: FontWeight.bold)),
+                ),
+            ]),
+          );
+        },
+      );
 }

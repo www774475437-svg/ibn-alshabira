@@ -682,6 +682,95 @@ class Cloud extends ChangeNotifier {
     return '${monday.year}-${monday.month.toString().padLeft(2, '0')}-${monday.day.toString().padLeft(2, '0')}';
   }
 
+  // --------------------------------------------------------------- Usage
+  /// How many people use the app, and for how long. Each device has a random
+  /// number made by the app itself (not the phone number, not the account),
+  /// counts its own minutes on screen, and sends them inside one small write
+  /// at most once an hour. Kept beside the weekly search counts.
+  static String _dayKey(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+  Timer? _clock;
+
+  /// The reader's number: the same number «اسأل الشيخ» shows when he is
+  /// signed in, otherwise a random number for the device, marked «g».
+  Future<String> deviceNumber() async {
+    final u = user;
+    if (u != null) return '${askerNo(u.uid)}';
+    final p = await SharedPreferences.getInstance();
+    var id = p.getString('usageId');
+    if (id == null) {
+      id = 'g${10000 + DateTime.now().microsecondsSinceEpoch % 90000}';
+      await p.setString('usageId', id);
+    }
+    return id;
+  }
+
+  /// Starts counting minutes while the app is on screen.
+  void startUsageClock() {
+    _clock ??= Timer.periodic(const Duration(minutes: 1), (_) async {
+      final st = WidgetsBinding.instance.lifecycleState;
+      if (st != null && st != AppLifecycleState.resumed) return;
+      final p = await SharedPreferences.getInstance();
+      final k = 'usageMin_${_dayKey(DateTime.now().toUtc())}';
+      await p.setInt(k, (p.getInt(k) ?? 0) + 1);
+    });
+    pingUsage();
+  }
+
+  Future<void> pingUsage() async {
+    if (!ready) return;
+    try {
+      final now = DateTime.now().toUtc();
+      final day = _dayKey(now);
+      final hour = '$day-${now.hour}';
+      final p = await SharedPreferences.getInstance();
+      if (p.getString('usageHour') == hour) return;
+      final id = await deviceNumber();
+      final last = p.getString('usageDay');
+      final newDay = last != day;
+      // Yesterday's last minutes, sent once when a new day starts.
+      if (newDay && last != null) {
+        final old = p.getInt('usageMin_$last') ?? 0;
+        if (old > 0) {
+          await _db.doc('searches/usage-$last').set({
+            'u': {id: old}
+          }, SetOptions(merge: true));
+        }
+        for (final k in p.getKeys().where((k) => k.startsWith('usageMin_') && k != 'usageMin_$day').toList()) {
+          await p.remove(k);
+        }
+      }
+      await _db.doc('searches/usage-$day').set({
+        'h${now.hour}': FieldValue.increment(1),
+        if (newDay) 'd': FieldValue.increment(1),
+        if (newDay && kIsWeb) 'dw': FieldValue.increment(1),
+        'u': {id: p.getInt('usageMin_$day') ?? 0},
+      }, SetOptions(merge: true));
+      await p.setString('usageHour', hour);
+      if (newDay) await p.setString('usageDay', day);
+    } catch (_) {}
+  }
+
+  /// Developer: the last [days] days, newest first.
+  Future<List<UsageDay>> usage({int days = 7}) async {
+    final out = <UsageDay>[];
+    final now = DateTime.now().toUtc();
+    for (var i = 0; i < days; i++) {
+      final d = DateTime.utc(now.year, now.month, now.day).subtract(Duration(days: i));
+      try {
+        final m = (await _db.doc('searches/usage-${_dayKey(d)}').get()).data() ?? {};
+        int n(String k) => (m[k] as num?)?.toInt() ?? 0;
+        final u = <String, int>{
+          for (final e in ((m['u'] ?? {}) as Map).entries) '${e.key}': (e.value as num?)?.toInt() ?? 0,
+        };
+        out.add(UsageDay(d, n('d'), n('dw'), [for (var h = 0; h < 24; h++) n('h$h')], u));
+      } catch (_) {
+        out.add(UsageDay(d, 0, 0, List.filled(24, 0), const {}));
+      }
+    }
+    return out;
+  }
+
   /// Counts an answer opened from the search results this week. Only the
   /// sheikh's own answers can appear, never what people typed.
   Future<void> countSearchOpen(String answerId) async {
@@ -1408,4 +1497,13 @@ int askerNo(String uid) {
     h = (h * 31 + c) % 9000;
   }
   return 1000 + h;
+}
+
+
+class UsageDay {
+  final DateTime day; // UTC
+  final int people, web;
+  final List<int> hours; // people in each UTC hour
+  final Map<String, int> minutes; // device number -> minutes that day
+  const UsageDay(this.day, this.people, this.web, this.hours, this.minutes);
 }

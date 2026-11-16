@@ -33,6 +33,8 @@ Future<void> main() async {
   loadFreshPosts().whenComplete(() => LiveFeed.refresh());
   Timer.periodic(const Duration(minutes: 10), (_) => LiveFeed.refresh());
   Future<void>.delayed(const Duration(seconds: 8), () => Challenges.instance.load());
+  Future<void>.delayed(const Duration(seconds: 5), () => Cloud.instance.startUsageClock());
+  Timer.periodic(const Duration(minutes: 10), (_) => Cloud.instance.pingUsage());
   if (quick) Future.delayed(const Duration(milliseconds: 400), Repository.instance.loadRest);
   // Set up the daily notification after the first frame; never blocks startup.
   DailyNotifications.init().then(
