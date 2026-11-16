@@ -7,7 +7,7 @@ the answers they viewed, their quiz answers, their votes, the hours they were
 on, and their minutes. This script adds them up.
 
 Run inside the media branch folder:  python3 -I ../code/tool/build_stats.py
-Writes: quiz.json, stats.json, views.json, usage.json, and keeps state.json.
+Writes: quiz.json, stats.json, views.json, usage.json, and keeps stats-state.json.
 """
 import datetime as dt
 import json
@@ -148,7 +148,7 @@ def main():
     today = now.strftime('%Y-%m-%d')
     yesterday = (now - dt.timedelta(days=1)).strftime('%Y-%m-%d')
 
-    state = load('state.json', None)
+    state = load('stats-state.json', None)
     if not state:
         state = {'baseDay': yesterday, 'base': first_base(), 'usage': {}}
     base = state['base']
@@ -191,7 +191,7 @@ def main():
     save('views.json', {'at': now.isoformat(), 'v': now_totals['views'],
                         'shares': now_totals.get('shares', 0), 'readers': readers})
     save('usage.json', {'at': now.isoformat(), 'days': state['usage']})
-    save('state.json', state)
+    save('stats-state.json', state)
     print(f'{len(qs)} questions, {len(docs)} devices today, about {READS} reads')
 
 
