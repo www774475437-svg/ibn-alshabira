@@ -701,7 +701,7 @@ class _ChallengeSettingsScreenState extends State<ChallengeSettingsScreen> {
             ),
             IconButton.filledTonal(onPressed: () => ch.setSettings(perDay: ch.perDay + 1), icon: const Icon(Icons.add)),
           ]),
-          const Text('يتغيّر عند الجميع فوراً. ولتخبر الناس، انشر إعلاناً في الرئيسية بزر «التحدّيات».',
+          const Text('يصل إلى الجميع خلال ست ساعات على الأكثر. ولتخبر الناس، انشر إعلاناً في الرئيسية بزر «التحدّيات».',
               style: TextStyle(color: Colors.grey, height: 1.7)),
           const Divider(height: 30),
           SwitchListTile(

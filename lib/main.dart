@@ -12,6 +12,7 @@ import 'screens/home_shell.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/splash_screen.dart';
 import 'services/cloud.dart';
+import 'services/day_log.dart';
 import 'services/fresh_posts.dart';
 import 'services/live_feed.dart';
 import 'services/challenge.dart';
@@ -32,9 +33,10 @@ Future<void> main() async {
   // Daily site data first, then the channel itself (new posts within minutes).
   loadFreshPosts().whenComplete(() => LiveFeed.refresh());
   Timer.periodic(const Duration(minutes: 10), (_) => LiveFeed.refresh());
-  Future<void>.delayed(const Duration(seconds: 8), () => Challenges.instance.load());
-  Future<void>.delayed(const Duration(seconds: 5), () => Cloud.instance.startUsageClock());
-  Timer.periodic(const Duration(minutes: 10), (_) => Cloud.instance.pingUsage());
+  Future<void>.delayed(const Duration(seconds: 8), () {
+    if (Cloud.instance.user != null) Challenges.instance.load();
+  });
+  DayLog.instance.start();
   if (quick) Future.delayed(const Duration(milliseconds: 400), Repository.instance.loadRest);
   // Set up the daily notification after the first frame; never blocks startup.
   DailyNotifications.init().then(

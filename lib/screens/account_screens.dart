@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart' show Timestamp;
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config.dart';
@@ -1036,8 +1037,8 @@ class _UsageTabState extends State<UsageTab> {
         future: _f,
         builder: (context, snap) {
           if (snap.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
-          final l = snap.data ?? const <UsageDay>[];
-          if (l.isEmpty) return const EmptyState(icon: Icons.insights, text: 'لا بيانات بعد.');
+          var l = snap.data ?? const <UsageDay>[];
+          if (l.isEmpty) l = [UsageDay(DateTime.now().toUtc(), 0, 0, List.filled(24, 0), const {})];
           final d = l[_sel.clamp(0, l.length - 1)];
           final offset = DateTime.now().timeZoneOffset.inHours;
           // Hours in the phone's own time.
@@ -1053,6 +1054,30 @@ class _UsageTabState extends State<UsageTab> {
           return RefreshIndicator(
             onRefresh: () async => setState(() => _f = Cloud.instance.usage()),
             child: ListView(padding: const EdgeInsets.all(14), children: [
+              Row(children: [
+                const Expanded(
+                  child: Text('تتحدّث أربع مرات في اليوم بلا تكلفة. «الآن» يعدّ اليوم مباشرة (قراءة لكل شخص دخل اليوم).',
+                      style: TextStyle(color: Colors.grey, fontSize: 12.5, height: 1.6)),
+                ),
+                TextButton.icon(
+                  icon: const Icon(Icons.bolt),
+                  label: const Text('الآن'),
+                  onPressed: () => setState(() {
+                    _sel = 0;
+                    _f = Cloud.instance.usage(live: true);
+                  }),
+                ),
+              ]),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.data_usage, color: kGold),
+                title: const Text('الاستهلاك في Firebase'),
+                subtitle: const Text('كم استُهلك اليوم من القراءات والكتابات المجانية'),
+                trailing: const Icon(Icons.open_in_new),
+                onTap: () => launchUrl(
+                    Uri.parse('https://console.firebase.google.com/project/ibn-alshabira/firestore/databases/-default-/usage'),
+                    mode: LaunchMode.externalApplication),
+              ),
               SizedBox(
                 height: 40,
                 child: ListView(scrollDirection: Axis.horizontal, children: [
@@ -1109,7 +1134,7 @@ class _UsageTabState extends State<UsageTab> {
                   ),
               const Divider(height: 28),
               Text('كم بقي كل شخص (${ppl.length})', style: const TextStyle(fontWeight: FontWeight.bold)),
-              const Text('الرقم هو رقمه في «اسأل الشيخ» إن كان مسجّلاً، و«زائر» إن لم يسجّل. تقريبي، ويُحدَّث كل ساعة.',
+              const Text('الرقم هو رقمه في «اسأل الشيخ» إن كان مسجّلاً، و«زائر» إن لم يسجّل. والمدة تقريبية.',
                   style: TextStyle(color: Colors.grey, fontSize: 12.5, height: 1.6)),
               for (final e in ppl.take(300))
                 ListTile(

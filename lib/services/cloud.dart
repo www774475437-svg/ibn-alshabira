@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -9,7 +10,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/models.dart';
 import '../data/repository.dart';
+import 'day_log.dart';
 import 'notifications.dart';
+import 'site_files.dart';
 
 /// Online features (app and website): Google sign-in, admins, views,
 /// «هل أفادك الجواب؟», error reports, published answers and title edits.
@@ -64,10 +67,9 @@ class Cloud extends ChangeNotifier {
         if (u != null) await _syncUserData();
         notifyListeners();
       });
-      await loadRemoteAnswers();
+      await loadRemoteAnswers(startup: true);
       loadConfig();
-      countVisit();
-      loadSeries();
+      loadSeries(startup: true);
     } catch (e) {
       debugPrint('Cloud init failed: $e');
       ready = false;
@@ -421,19 +423,16 @@ class Cloud extends ChangeNotifier {
       final seen = prefs.getStringList('viewedAnswers') ?? <String>[];
       if (seen.contains(id)) return;
       await prefs.setStringList('viewedAnswers', [...seen, id]);
-      await _db.doc('views/$id').set({'count': FieldValue.increment(1)}, SetOptions(merge: true));
+      DayLog.instance.view(id); // sent later, with everything else, in one write
     } catch (_) {}
   }
 
   Future<Map<String, int>> stats(String id) async {
     if (!ready) return {};
     try {
-      final d = (await _db.doc('views/$id').get()).data() ?? {};
-      return {
-        'count': (d['count'] ?? 0) as int,
-        'helpful': (d['helpful'] ?? 0) as int,
-        'notHelpful': (d['notHelpful'] ?? 0) as int,
-      };
+      // From the site file (four times a day): no Firestore reads.
+      final v = (await _viewsFile())[id] ?? const [0, 0, 0];
+      return {'count': v[0], 'helpful': v[1], 'notHelpful': v[2]};
     } catch (_) {
       return {};
     }
@@ -442,23 +441,29 @@ class Cloud extends ChangeNotifier {
   Future<bool> vote(String id, bool helpful) async {
     if (!ready) return false;
     try {
-      await _db.doc('views/$id').set(
-          {helpful ? 'helpful' : 'notHelpful': FieldValue.increment(1)}, SetOptions(merge: true));
+      DayLog.instance.vote(id, helpful);
       return true;
     } catch (_) {
       return false;
     }
   }
 
+  /// The counts file the server makes four times a day: id -> [views, helpful, notHelpful].
+  Future<Map<String, List<int>>> _viewsFile() async {
+    final m = await SiteFiles.get('views.json');
+    return {
+      for (final e in ((m?['v'] ?? {}) as Map).entries)
+        '${e.key}': [for (final x in e.value as List) (x as num).toInt()],
+    };
+  }
+
   /// Most-read answers: [(id, count)].
   Future<List<(String, int)>> mostRead({int limit = 40}) async {
     if (!ready) return [];
     try {
-      final q = await _db.collection('views').orderBy('count', descending: true).limit(limit).get();
-      return [
-        for (final d in q.docs)
-          if (!d.id.startsWith('_')) (d.id, (d.data()['count'] ?? 0) as int),
-      ];
+      final l = [for (final e in (await _viewsFile()).entries) (e.key, e.value[0])]
+        ..sort((a, b) => b.$2.compareTo(a.$2));
+      return l.take(limit).toList();
     } catch (_) {
       return [];
     }
@@ -521,10 +526,80 @@ class Cloud extends ChangeNotifier {
   }
 
   // ----------------------------------- Published answers and title edits
-  Future<void> loadRemoteAnswers() async {
+  /// The sheikh's in-app answers, title edits and series are kept on the
+  /// phone. On opening, the app reads ONE small document (`answers/_ver`) and
+  /// downloads them again only if the staff changed something since.
+  Future<void> bumpVersion() => _bump();
+
+  Future<void> _bump() async {
+    try {
+      await _db.doc('answers/_ver').set({'at': FieldValue.serverTimestamp()});
+    } catch (_) {}
+  }
+
+  String? _verNow;
+
+  /// Whether the cached copy is still right (reads one document per session).
+  Future<bool> _cacheGood(String what) async {
+    try {
+      _verNow ??= '${(await _db.doc('answers/_ver').get()).data()?['at']}';
+      final p = await SharedPreferences.getInstance();
+      return p.getString('${what}Ver') == _verNow && p.getString('${what}Cache') != null;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _keep(String what, Object data) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setString('${what}Cache', jsonEncode(_plain(data)));
+    if (_verNow != null) await p.setString('${what}Ver', _verNow!);
+  }
+
+  Future<dynamic> _cached(String what) async {
+    final p = await SharedPreferences.getInstance();
+    return _fromPlain(jsonDecode(p.getString('${what}Cache')!));
+  }
+
+  static Object? _plain(Object? v) => v is Timestamp
+      ? {'\$ts': v.millisecondsSinceEpoch}
+      : v is Map
+          ? {for (final e in v.entries) '${e.key}': _plain(e.value)}
+          : v is List
+              ? [for (final x in v) _plain(x)]
+              : v;
+
+  static Object? _fromPlain(Object? v) => v is Map
+      ? (v.length == 1 && v.containsKey('\$ts')
+          ? Timestamp.fromMillisecondsSinceEpoch((v['\$ts'] as num).toInt())
+          : <String, dynamic>{for (final e in v.entries) '${e.key}': _fromPlain(e.value)})
+      : v is List
+          ? [for (final x in v) _fromPlain(x)]
+          : v;
+
+  // ----------------------------------- Published answers and title edits
+  /// [startup]: may use the copy on the phone. After a staff change it is
+  /// always fetched again (and the others are told by `answers/_ver`).
+  Future<void> loadRemoteAnswers({bool startup = false}) async {
     if (!ready) return;
     try {
-      final answers = await _db.collection('answers').get();
+      Map<String, Map<String, dynamic>> docs, edits;
+      if (startup && await _cacheGood('answers')) {
+        final c = await _cached('answers') as Map<String, dynamic>;
+        docs = {for (final e in (c['a'] as Map).entries) '${e.key}': Map<String, dynamic>.from(e.value as Map)};
+        edits = {for (final e in (c['e'] as Map).entries) '${e.key}': Map<String, dynamic>.from(e.value as Map)};
+      } else {
+        if (!startup) {
+          await _bump();
+          _verNow = null;
+          await _cacheGood('answers');
+        }
+        final answers = await _db.collection('answers').get();
+        final ed = await _db.collection('titleEdits').get();
+        docs = {for (final d in answers.docs) if (!d.id.startsWith('_')) d.id: d.data()};
+        edits = {for (final d in ed.docs) d.id: d.data()};
+        await _keep('answers', {'a': docs, 'e': edits});
+      }
       final now = DateTime.now();
       // Answers scheduled for later stay hidden until their time comes.
       bool isLater(Map<String, dynamic> m) {
@@ -532,24 +607,22 @@ class Cloud extends ChangeNotifier {
         return t is Timestamp && t.toDate().isAfter(now);
       }
 
-      final visible = [for (final d in answers.docs) if (!isLater(d.data())) d];
+      final visible = [for (final e in docs.entries) if (!isLater(e.value)) e];
       scheduled = [
-        for (final d in answers.docs)
-          if (isLater(d.data()))
-            (d.id, '${d.data()['title'] ?? ''}', (d.data()['publishAt'] as Timestamp).toDate()),
+        for (final e in docs.entries)
+          if (isLater(e.value)) (e.key, '${e.value['title'] ?? ''}', (e.value['publishAt'] as Timestamp).toDate()),
       ]..sort((a, b) => a.$3.compareTo(b.$3));
-      remoteIds = {for (final d in visible) d.id};
-      final edits = await _db.collection('titleEdits').get();
+      remoteIds = {for (final e in visible) e.key};
       Repository.instance.applyRemote(
         [
-          for (final d in visible)
+          for (final e in visible)
             Fatwa.fromJson({
-              for (final e in d.data().entries)
-                if (e.key != 'publishAt') e.key: e.value,
-              'id': d.id,
+              for (final x in e.value.entries)
+                if (x.key != 'publishAt') x.key: x.value,
+              'id': e.key,
             }),
         ],
-        {for (final d in edits.docs) d.id: d.data()},
+        edits,
       );
     } catch (e) {
       debugPrint('remote answers failed: $e');
@@ -630,6 +703,7 @@ class Cloud extends ChangeNotifier {
   Future<String?> setChapter(String id, String chapter, [String title = '']) async {
     try {
       await _db.doc('titleEdits/$id').set({'chapter': chapter, 'verified': true, 'by': email}, SetOptions(merge: true));
+      _bump();
       _log('نقل إلى باب', title);
       Repository.instance.verifiedIds.add(id);
       final f = Repository.instance.findById(id);
@@ -645,6 +719,7 @@ class Cloud extends ChangeNotifier {
   Future<String?> setVerified(String id, bool v, [String title = '']) async {
     try {
       await _db.doc('titleEdits/$id').set({'verified': v, 'by': email}, SetOptions(merge: true));
+      _bump();
       _log(v ? 'تحقق من جواب' : 'إلغاء التحقق', title);
       if (v) {
         Repository.instance.verifiedIds.add(id);
@@ -683,90 +758,43 @@ class Cloud extends ChangeNotifier {
   }
 
   // --------------------------------------------------------------- Usage
-  /// How many people use the app, and for how long. Each device has a random
-  /// number made by the app itself (not the phone number, not the account),
-  /// counts its own minutes on screen, and sends them inside one small write
-  /// at most once an hour. Kept beside the weekly search counts.
-  static String _dayKey(DateTime d) =>
-      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-  Timer? _clock;
-
-  /// The reader's number: the same number «اسأل الشيخ» shows when he is
-  /// signed in, otherwise a random number for the device, marked «g».
-  Future<String> deviceNumber() async {
-    final u = user;
-    if (u != null) return '${askerNo(u.uid)}';
-    final p = await SharedPreferences.getInstance();
-    var id = p.getString('usageId');
-    if (id == null) {
-      id = 'g${10000 + DateTime.now().microsecondsSinceEpoch % 90000}';
-      await p.setString('usageId', id);
-    }
-    return id;
-  }
-
-  /// Starts counting minutes while the app is on screen.
-  void startUsageClock() {
-    _clock ??= Timer.periodic(const Duration(minutes: 1), (_) async {
-      final st = WidgetsBinding.instance.lifecycleState;
-      if (st != null && st != AppLifecycleState.resumed) return;
-      final p = await SharedPreferences.getInstance();
-      final k = 'usageMin_${_dayKey(DateTime.now().toUtc())}';
-      await p.setInt(k, (p.getInt(k) ?? 0) + 1);
-    });
-    pingUsage();
-  }
-
-  Future<void> pingUsage() async {
-    if (!ready) return;
-    try {
-      final now = DateTime.now().toUtc();
-      final day = _dayKey(now);
-      final hour = '$day-${now.hour}';
-      final p = await SharedPreferences.getInstance();
-      if (p.getString('usageHour') == hour) return;
-      final id = await deviceNumber();
-      final last = p.getString('usageDay');
-      final newDay = last != day;
-      // Yesterday's last minutes, sent once when a new day starts.
-      if (newDay && last != null) {
-        final old = p.getInt('usageMin_$last') ?? 0;
-        if (old > 0) {
-          await _db.doc('searches/usage-$last').set({
-            'u': {id: old}
-          }, SetOptions(merge: true));
-        }
-        for (final k in p.getKeys().where((k) => k.startsWith('usageMin_') && k != 'usageMin_$day').toList()) {
-          await p.remove(k);
-        }
-      }
-      await _db.doc('searches/usage-$day').set({
-        'h${now.hour}': FieldValue.increment(1),
-        if (newDay) 'd': FieldValue.increment(1),
-        if (newDay && kIsWeb) 'dw': FieldValue.increment(1),
-        'u': {id: p.getInt('usageMin_$day') ?? 0},
-      }, SetOptions(merge: true));
-      await p.setString('usageHour', hour);
-      if (newDay) await p.setString('usageDay', day);
-    } catch (_) {}
-  }
-
-  /// Developer: the last [days] days, newest first.
-  Future<List<UsageDay>> usage({int days = 7}) async {
+  /// Developer: people per day and hour, and minutes per reader number, from
+  /// the file the server makes four times a day (no Firestore reads). With
+  /// [live], today is counted straight from the phones' day documents
+  /// (one read per phone that came today).
+  Future<List<UsageDay>> usage({bool live = false}) async {
+    final m = await SiteFiles.get('usage.json', fresh: true);
     final out = <UsageDay>[];
-    final now = DateTime.now().toUtc();
-    for (var i = 0; i < days; i++) {
-      final d = DateTime.utc(now.year, now.month, now.day).subtract(Duration(days: i));
+    for (final e in ((m?['days'] ?? {}) as Map).entries) {
+      final d = Map<String, dynamic>.from(e.value as Map);
+      out.add(UsageDay(
+        DateTime.parse('${e.key}T00:00:00Z'),
+        (d['people'] as num?)?.toInt() ?? 0,
+        (d['web'] as num?)?.toInt() ?? 0,
+        [for (final x in (d['hours'] as List? ?? List.filled(24, 0))) (x as num).toInt()],
+        {for (final x in ((d['minutes'] ?? {}) as Map).entries) '${x.key}': (x.value as num).toInt()},
+      ));
+    }
+    out.sort((a, b) => b.day.compareTo(a.day));
+    if (live) {
       try {
-        final m = (await _db.doc('searches/usage-${_dayKey(d)}').get()).data() ?? {};
-        int n(String k) => (m[k] as num?)?.toInt() ?? 0;
-        final u = <String, int>{
-          for (final e in ((m['u'] ?? {}) as Map).entries) '${e.key}': (e.value as num?)?.toInt() ?? 0,
-        };
-        out.add(UsageDay(d, n('d'), n('dw'), [for (var h = 0; h < 24; h++) n('h$h')], u));
-      } catch (_) {
-        out.add(UsageDay(d, 0, 0, List.filled(24, 0), const {}));
-      }
+        final t = DayLog.today;
+        final q = await _db.collection('searches').where('day', isEqualTo: t).get();
+        final hours = List<int>.filled(24, 0);
+        final mins = <String, int>{};
+        var web = 0;
+        for (final d in q.docs) {
+          final x = d.data();
+          for (final h in ((x['hr'] ?? {}) as Map).keys) {
+            final i = int.tryParse('$h') ?? -1;
+            if (i >= 0 && i < 24) hours[i]++;
+          }
+          if (x['web'] == true) web++;
+          if (x['u'] != null) mins['${x['u']}'] = (x['min'] as num?)?.toInt() ?? 0;
+        }
+        out.removeWhere((u) => DayLog.dayKey(u.day) == t);
+        out.insert(0, UsageDay(DateTime.parse('${t}T00:00:00Z'), q.docs.length, web, hours, mins));
+      } catch (_) {}
     }
     return out;
   }
@@ -801,17 +829,7 @@ class Cloud extends ChangeNotifier {
 
   /// Counts this device once a day, so the staff see how many *readers*
   /// came (not how many pages were opened).
-  Future<void> countVisit() async {
-    if (!ready) return;
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final now = DateTime.now().toUtc();
-      final day = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-      if (prefs.getString('visitDay') == day) return;
-      await _db.doc('views/_day_$day').set({'count': FieldValue.increment(1)}, SetOptions(merge: true));
-      await prefs.setString('visitDay', day);
-    } catch (_) {}
-  }
+  Future<void> countVisit() async {} // each phone's day document counts it now
 
   /// A reader's suggestion for the developer (arrives with the reports).
   Future<String?> suggest(String text) async {
@@ -845,27 +863,23 @@ class Cloud extends ChangeNotifier {
   Future<Map<String, int>> overview() async {
     if (!ready) return {};
     try {
-      final views = await _db.collection('views').get();
-      var total = 0, helpful = 0, notHelpful = 0, shares = 0, answersViewed = 0;
+      final m = await SiteFiles.get('views.json', fresh: true);
+      var total = 0, helpful = 0, notHelpful = 0, answersViewed = 0;
+      final shares = (m?['shares'] as num?)?.toInt() ?? 0;
       var readersToday = 0, readersWeek = 0;
-      for (final d in views.docs) {
-        if (d.id.startsWith('_')) {
-          if (d.id == '_appShare') shares = (d.data()['count'] ?? 0) as int;
-          if (d.id.startsWith('_day_')) {
-            final day = DateTime.tryParse('${d.id.substring(5)}T00:00:00Z');
-            final c = (d.data()['count'] ?? 0) as int;
-            if (day != null) {
-              final age = DateTime.now().toUtc().difference(day).inDays;
-              if (age == 0) readersToday = c;
-              if (age >= 0 && age < 7) readersWeek += c;
-            }
-          }
-          continue;
-        }
+      for (final e in ((m?['readers'] ?? {}) as Map).entries) {
+        final day = DateTime.tryParse('${e.key}T00:00:00Z');
+        final c = (e.value as num).toInt();
+        if (day == null) continue;
+        final age = DateTime.now().toUtc().difference(day).inDays;
+        if (age == 0) readersToday = c;
+        if (age >= 0 && age < 7) readersWeek += c;
+      }
+      for (final v in (await _viewsFile()).values) {
         answersViewed++;
-        total += (d.data()['count'] ?? 0) as int;
-        helpful += (d.data()['helpful'] ?? 0) as int;
-        notHelpful += (d.data()['notHelpful'] ?? 0) as int;
+        total += v[0];
+        helpful += v[1];
+        notHelpful += v[2];
       }
       final reports = await _db.collection('reports').count().get();
       final published = await _db.collection('answers').count().get();
@@ -993,12 +1007,7 @@ class Cloud extends ChangeNotifier {
   Future<List<(String, int, int)>> votes() async {
     if (!ready) return [];
     try {
-      final q = await _db.collection('views').get();
-      return [
-        for (final d in q.docs)
-          if (!d.id.startsWith('_'))
-            (d.id, (d.data()['helpful'] ?? 0) as int, (d.data()['notHelpful'] ?? 0) as int),
-      ];
+      return [for (final e in (await _viewsFile()).entries) (e.key, e.value[1], e.value[2])];
     } catch (_) {
       return [];
     }
@@ -1016,11 +1025,18 @@ class Cloud extends ChangeNotifier {
   List<String> pinned = [];
 
   /// Loads every settings document at once.
-  Future<void> loadConfig() async {
+  Future<void> loadConfig({bool fresh = false}) async {
     if (!ready) return;
     try {
-      final q = await _db.collection('config').get();
-      final c = {for (final d in q.docs) d.id: d.data()};
+      // Kept on the phone too; fetched again only after a staff change.
+      Map<String, dynamic> c;
+      if (!fresh && await _cacheGood('config')) {
+        c = await _cached('config') as Map<String, dynamic>;
+      } else {
+        final q = await _db.collection('config').get();
+        c = {for (final d in q.docs) d.id: d.data()};
+        await _keep('config', c);
+      }
       final an = c['announcement'];
       announcement = an != null && an['active'] == true ? '${an['text'] ?? ''}' : '';
       annColor = '${an?['color'] ?? 'gold'}';
@@ -1147,7 +1163,7 @@ class Cloud extends ChangeNotifier {
   Future<void> countAppShare() async {
     if (!ready) return;
     try {
-      await _db.doc('views/_appShare').set({'count': FieldValue.increment(1)}, SetOptions(merge: true));
+      DayLog.instance.share();
     } catch (_) {}
   }
 
@@ -1192,7 +1208,8 @@ class Cloud extends ChangeNotifier {
     try {
       await _db.doc('config/$id').set(data);
       _log(logText);
-      await loadConfig();
+      await _bump();
+      await loadConfig(fresh: true);
       return null;
     } catch (_) {
       return 'تعذّر الحفظ';
@@ -1219,6 +1236,7 @@ class Cloud extends ChangeNotifier {
         'button': button.trim(),
       });
       _log(t.isEmpty ? 'إزالة الإعلان' : 'نشر إعلان', t);
+      await _bump();
       announcement = t;
       annColor = color;
       annPlace = place;
@@ -1234,15 +1252,27 @@ class Cloud extends ChangeNotifier {
   // --------------------------------------------------------------- Series
   List<Series> series = [];
 
-  Future<void> loadSeries() async {
+  Future<void> loadSeries({bool startup = false}) async {
     if (!ready) return;
     try {
-      final q = await _db.collection('series').get();
+      Map<String, dynamic> m;
+      if (startup && await _cacheGood('series')) {
+        m = await _cached('series') as Map<String, dynamic>;
+      } else {
+        if (!startup) {
+          await _bump();
+          _verNow = null;
+          await _cacheGood('series');
+        }
+        final q = await _db.collection('series').get();
+        m = {for (final d in q.docs) d.id: d.data()};
+        await _keep('series', m);
+      }
       series = [
-        for (final d in q.docs)
-          Series(d.id, '${d.data()['title'] ?? ''}',
-              ((d.data()['ids'] ?? []) as List).map((e) => '$e').toList(),
-              track: d.data()['track'] == true),
+        for (final e in m.entries)
+          Series(e.key, '${(e.value as Map)['title'] ?? ''}',
+              (((e.value as Map)['ids'] ?? []) as List).map((x) => '$x').toList(),
+              track: (e.value as Map)['track'] == true),
       ];
       notifyListeners();
     } catch (_) {}

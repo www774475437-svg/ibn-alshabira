@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'cloud.dart';
+import 'day_log.dart';
+import 'site_files.dart';
 
 /// One category of questions (a button in «الأسئلة»), named by the sheikh.
 class QuizCat {
@@ -103,7 +105,7 @@ class QuizQ {
   /// The right choice indexes.
   Set<int> get rightSet => multi ? corrects.toSet() : {correct};
 
-  static DateTime? _date(Object? v) => v is Timestamp ? v.toDate() : null;
+  static DateTime? _date(Object? v) => v is Timestamp ? v.toDate() : v is String ? DateTime.tryParse(v)?.toLocal() : null;
 
   factory QuizQ.fromMap(String id, Map<String, dynamic> m) => QuizQ(
         id: id,
@@ -226,6 +228,45 @@ class Quiz extends ChangeNotifier {
     if (loading || (loaded && !force)) return;
     loading = true;
     await _loadLocal();
+    // Readers take the quiz from the site file (made four times a day), which
+    // costs no Firestore reads. The staff work on Firestore itself, live.
+    if (!Cloud.instance.isAdmin) {
+      await _loadFromSite();
+    } else {
+      await _loadFromCloud();
+    }
+    if (cats.isEmpty) {
+      // Nothing yet: show the starting buttons all the same.
+      cats = [
+        for (var i = 0; i < defaultCats.length; i++)
+          QuizCat(id: 'd$i', name: defaultCats[i].$1, icon: defaultCats[i].$2, color: defaultCats[i].$3, order: i)
+      ];
+    }
+    loaded = true;
+    fromCloud = Cloud.instance.isAdmin;
+    loading = false;
+    notifyListeners();
+  }
+
+  /// True when the questions came from Firestore (staff), not the site file.
+  bool fromCloud = false;
+
+  Future<void> _loadFromSite() async {
+    final m = await SiteFiles.get('quiz.json', fresh: loaded);
+    if (m != null) {
+      cats = [for (final c in (m['cats'] as List? ?? const [])) QuizCat.fromMap('${c['id']}', Map<String, dynamic>.from(c as Map))]
+        ..sort((a, b) => a.order.compareTo(b.order));
+      all = [for (final q in (m['qs'] as List? ?? const [])) QuizQ.fromMap('${q['id']}', Map<String, dynamic>.from(q as Map))]
+        ..sort((a, b) => a.order.compareTo(b.order));
+      thanks = '${m['thanks'] ?? ''}';
+    }
+    try {
+      await _syncAccount();
+    } catch (_) {}
+    unawaited(_loadStats());
+  }
+
+  Future<void> _loadFromCloud() async {
     try {
       final cq = await _db.collection('quizCats').get();
       cats = [for (final d in cq.docs) QuizCat.fromMap(d.id, d.data())]..sort((a, b) => a.order.compareTo(b.order));
@@ -239,16 +280,6 @@ class Quiz extends ChangeNotifier {
     } catch (e) {
       debugPrint('quiz load: $e');
     }
-    if (cats.isEmpty) {
-      // Nothing in the cloud yet: show the starting buttons all the same.
-      cats = [
-        for (var i = 0; i < defaultCats.length; i++)
-          QuizCat(id: 'd$i', name: defaultCats[i].$1, icon: defaultCats[i].$2, color: defaultCats[i].$3, order: i)
-      ];
-    }
-    loaded = true;
-    loading = false;
-    notifyListeners();
   }
 
   Future<void> _seedCats() async {
@@ -264,10 +295,13 @@ class Quiz extends ChangeNotifier {
 
   Future<void> _loadStats() async {
     try {
-      final s = await _db.collection('quizStats').get();
-      for (final d in s.docs) {
-        stats[d.id] = ((d.data()['n'] as num?)?.toInt() ?? 0, (d.data()['ok'] as num?)?.toInt() ?? 0);
-        choiceStats[d.id] = [for (var i = 0; i < 8; i++) (d.data()['c$i'] as num?)?.toInt() ?? 0];
+      // From the site file (four times a day), for everyone: no Firestore reads.
+      final m = await SiteFiles.get('stats.json');
+      for (final e in ((m?['q'] ?? {}) as Map).entries) {
+        final l = [for (final x in e.value as List) (x as num).toInt()];
+        if (l.length < 10) continue;
+        stats['${e.key}'] = (l[0], l[1]);
+        choiceStats['${e.key}'] = l.sublist(2, 10);
       }
       notifyListeners();
     } catch (_) {}
@@ -310,27 +344,34 @@ class Quiz extends ChangeNotifier {
   Future<void> _syncAccount() async {
     final u = Cloud.instance.user;
     if (u == null) return;
-    final col = _db.collection('quizUsers').doc(u.uid).collection('a');
-    final remote = await col.get();
-    for (final d in remote.docs) {
-      marks.putIfAbsent(d.id, () => QuizMark.fromJson(d.data()));
-    }
-    final have = {for (final d in remote.docs) d.id};
-    for (final e in marks.entries) {
-      if (!have.contains(e.key)) {
-        try {
-          await col.doc(e.key).set(e.value.toJson());
-        } catch (_) {}
-      }
+    final p = await SharedPreferences.getInstance();
+    // Older versions kept one document per answer; read them once only.
+    if (p.getBool('quizMoved_${u.uid}') != true) {
+      try {
+        final remote = await _db.collection('quizUsers').doc(u.uid).collection('a').get();
+        for (final d in remote.docs) {
+          marks.putIfAbsent(d.id, () => QuizMark.fromJson(d.data()));
+        }
+        await p.setBool('quizMoved_${u.uid}', true);
+        _profileDirty = true;
+      } catch (_) {}
     }
     final prof = await _db.doc('quizUsers/${u.uid}').get();
     if (prof.exists) {
       final m = prof.data()!;
+      // Answers made on another phone (one map in the same document).
+      for (final e in ((m['m'] ?? {}) as Map).entries) {
+        final v = e.value;
+        if (v is List && v.length >= 3) {
+          marks.putIfAbsent('${e.key}',
+              () => QuizMark(v[1] == true, (v[0] as num).toInt(), DateTime.fromMillisecondsSinceEpoch((v[2] as num).toInt())));
+        }
+      }
       if (nick.isEmpty) nick = '${m['nick'] ?? ''}';
       showName = m['showName'] != false;
     }
     await _saveLocal();
-    await _pushProfile();
+    _profileDirty = true;
   }
 
   // ------------------------------------------------------------ views
@@ -455,30 +496,20 @@ class Quiz extends ChangeNotifier {
     }
     await _saveLocal();
     notifyListeners();
-    try {
-      await _db.doc('quizStats/${q.id}').set({
-        'n': FieldValue.increment(1),
-        if (ok) 'ok': FieldValue.increment(1),
-        if (choice >= 0 && choice < 8) 'c$choice': FieldValue.increment(1),
-      }, SetOptions(merge: true));
-    } catch (_) {}
-    final u = Cloud.instance.user;
-    if (u != null) {
-      try {
-        await _db.doc('quizUsers/${u.uid}/a/${q.id}').set(marks[q.id]!.toJson());
-        // For the staff: who answered, and what (name only, never the email).
-        await _db.doc('quizAns/${q.id}_${u.uid}').set({
-          'qid': q.id,
-          'uid': u.uid,
-          'name': nick.trim().isEmpty ? 'طالب علم' : nick.trim(),
-          'choice': choice,
-          'ok': ok,
-          'at': FieldValue.serverTimestamp(),
-        });
-        await _pushProfile();
-      } catch (_) {}
-    }
+    // Sent later with everything else, in one write (see DayLog).
+    DayLog.instance.answer(q.id, choice, ok);
+    _profileDirty = true;
     return true;
+  }
+
+  bool _profileDirty = false;
+
+  /// Sends the reader's quiz record (score, name, and his answers as one map)
+  /// in one write, only when something changed. Called by DayLog.
+  Future<void> flushProfile() async {
+    if (!_profileDirty) return;
+    _profileDirty = false;
+    await _pushProfile();
   }
 
   Future<void> _pushProfile() async {
@@ -503,6 +534,7 @@ class Quiz extends ChangeNotifier {
         'month': month,
         'monthScore': m,
         'streak': streak,
+        'm': {for (final e in marks.entries) e.key: [e.value.choice, e.value.ok, e.value.at.millisecondsSinceEpoch]},
       }, SetOptions(merge: true));
     } catch (_) {}
   }
@@ -600,8 +632,18 @@ class Quiz extends ChangeNotifier {
 
   /// For the staff: who answered a question (names only).
   Future<List<Map<String, dynamic>>> answersOf(String qid) async {
-    final q = await _db.collection('quizAns').where('qid', isEqualTo: qid).limit(300).get();
-    return [for (final d in q.docs) d.data()];
+    // Each phone's day document holds its answers; only those with this
+    // question come back (names only).
+    final q = await _db.collection('searches').orderBy('a.$qid').limit(300).get();
+    return [
+      for (final d in q.docs)
+        if (d.data()['a']?[qid] is List)
+          {
+            'name': d.data()['name'] ?? 'زائر',
+            'choice': (d.data()['a'][qid] as List)[0],
+            'ok': (d.data()['a'][qid] as List)[1] == true,
+          }
+    ];
   }
 
   /// Many questions at once from pasted text. Each question is a block:

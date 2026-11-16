@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'cloud.dart';
 import 'quiz.dart';
+import 'site_files.dart';
 
 /// One player inside a challenge.
 class ChPlayer {
@@ -86,9 +87,11 @@ class Challenges extends ChangeNotifier {
 
   Future<void> load() async {
     try {
-      final cfg = await _db.doc('config/quiz').get();
-      perDay = (cfg.data()?['chPerDay'] as num?)?.toInt() ?? 2;
-      readPoints = cfg.data()?['readPoints'] == true;
+      // Staff see the setting live; readers take it from the site file.
+      final Map<String, dynamic>? cfg =
+          Cloud.instance.isAdmin ? (await _db.doc('config/quiz').get()).data() : await SiteFiles.get('quiz.json');
+      perDay = (cfg?['chPerDay'] as num?)?.toInt() ?? 2;
+      readPoints = cfg?['readPoints'] == true;
     } catch (_) {}
     final u = Cloud.instance.user;
     if (u != null) {

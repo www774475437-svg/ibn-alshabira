@@ -62,7 +62,7 @@ class _QuizHomeScreenState extends State<QuizHomeScreen> {
     super.initState();
     final quiz = Quiz.instance;
     // Staff opening it first time: make the starting buttons real ones.
-    quiz.load(force: quiz.loaded && quiz.isStaff && quiz.cats.any((c) => c.id.length <= 3));
+    quiz.load(force: quiz.loaded && quiz.isStaff && (!quiz.fromCloud || quiz.cats.any((c) => c.id.length <= 3)));
   }
 
   @override
