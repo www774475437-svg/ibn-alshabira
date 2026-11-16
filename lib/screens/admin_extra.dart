@@ -7,6 +7,7 @@ import '../data/repository.dart';
 import '../services/cloud.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../widgets/announcement.dart';
 
 void _toast(BuildContext context, String t) =>
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t)));
@@ -614,9 +615,14 @@ class AnnouncementTab extends StatefulWidget {
 class _AnnouncementTabState extends State<AnnouncementTab> {
   late final _text = TextEditingController(text: Cloud.instance.announcement);
   late final _schedule = TextEditingController(text: Cloud.instance.schedule);
+  late final _button = TextEditingController(text: Cloud.instance.annButton);
+  late String _color = Cloud.instance.annColor;
+  late String _place = Cloud.instance.annPlace;
+  late String _action = Cloud.instance.annAction;
 
   Future<void> _save(String text) async {
-    final err = await Cloud.instance.setAnnouncement(text);
+    final err = await Cloud.instance
+        .setAnnouncement(text, color: _color, place: _place, action: _action, button: _button.text);
     if (!mounted) return;
     _toast(context, err ?? (text.trim().isEmpty ? 'أُزيل الإعلان' : 'نُشر الإعلان ✅'));
   }
@@ -626,10 +632,48 @@ class _AnnouncementTabState extends State<AnnouncementTab> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        const Text('يظهر هذا الإعلان في أعلى الصفحة الرئيسية لكل مستخدمي التطبيق.',
+        const Text('يظهر هذا الإعلان في الصفحة الرئيسية لكل مستخدمي التطبيق والموقع.',
             style: TextStyle(height: 1.7)),
         const SizedBox(height: 12),
-        TextField(controller: _text, maxLines: 4, maxLength: 300, decoration: _deco('نص الإعلان')),
+        TextField(
+            controller: _text,
+            maxLines: 4,
+            maxLength: 300,
+            onChanged: (_) => setState(() {}),
+            decoration: _deco('نص الإعلان')),
+        const Text('اللون:', style: TextStyle(fontWeight: FontWeight.bold)),
+        Wrap(spacing: 6, runSpacing: 4, children: [
+          for (final c in annColors.entries)
+            ChoiceChip(
+              avatar: CircleAvatar(backgroundColor: c.value.$1, radius: 8),
+              label: Text(c.value.$2),
+              selected: _color == c.key,
+              onSelected: (_) => setState(() => _color = c.key),
+            ),
+        ]),
+        const SizedBox(height: 8),
+        const Text('المكان في الرئيسية:', style: TextStyle(fontWeight: FontWeight.bold)),
+        Wrap(spacing: 6, children: [
+          for (final p in const [('top', 'أعلى'), ('middle', 'وسط'), ('bottom', 'أسفل')])
+            ChoiceChip(label: Text(p.$2), selected: _place == p.$1, onSelected: (_) => setState(() => _place = p.$1)),
+        ]),
+        const SizedBox(height: 8),
+        const Text('زر تحت الإعلان (اختياري):', style: TextStyle(fontWeight: FontWeight.bold)),
+        Wrap(spacing: 6, children: [
+          for (final a in const [('', 'بلا زر'), ('challenges', 'يفتح التحدّيات'), ('quiz', 'يفتح الأسئلة')])
+            ChoiceChip(label: Text(a.$2), selected: _action == a.$1, onSelected: (_) => setState(() => _action = a.$1)),
+        ]),
+        if (_action.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          TextField(controller: _button, maxLength: 30, onChanged: (_) => setState(() {}), decoration: _deco('كلمة الزر، مثل: ابدأ التحدّي')),
+        ],
+        const SizedBox(height: 8),
+        AnnouncementCard(
+            text: _text.text.isEmpty ? 'هكذا يظهر الإعلان' : _text.text,
+            color: _color,
+            action: _action,
+            button: _button.text,
+            preview: true),
         const SizedBox(height: 8),
         FilledButton.icon(
           icon: const Icon(Icons.campaign),

@@ -231,8 +231,68 @@ class Recordings {
         list.sort((a, b) => b.id.compareTo(a.id));
       }
     } catch (_) {}
+    // The newest recordings, read straight from the channel, so a new one
+    // shows within minutes instead of waiting for the list to be rebuilt.
+    if (!kIsWeb) {
+      try {
+        list.insertAll(0, await _newest(list.isEmpty ? 0 : list.map((r) => r.id).reduce((a, b) => a > b ? a : b)));
+      } catch (_) {}
+    }
     if (list.isNotEmpty) _cache = list;
     return list;
+  }
+
+  static Future<List<Recording>> _newest(int known) async {
+    final res = await http
+        .get(Uri.parse('https://t.me/s/$recordingsChannel'),
+            headers: {'User-Agent': 'Mozilla/5.0 (Android 13) ibn-alshabira-app'})
+        .timeout(const Duration(seconds: 15));
+    if (res.statusCode != 200) return const [];
+    final body = utf8.decode(res.bodyBytes);
+    final blocks = RegExp(r'<div class="tgme_widget_message_wrap[\s\S]*?(?=<div class="tgme_widget_message_wrap|$)')
+        .allMatches(body)
+        .map((m) => m.group(0)!)
+        .toList();
+    final postRe = RegExp('data-post="$recordingsChannel/(\\d+)"');
+    final textRe = RegExp(r'<div class="tgme_widget_message_text[^"]*"[^>]*>([\s\S]*?)</div>');
+    String text(String b) {
+      final m = textRe.firstMatch(b);
+      if (m == null) return '';
+      return m
+          .group(1)!
+          .replaceAll(RegExp(r'<br\s*/?>'), '\n')
+          .replaceAll(RegExp(r'<[^>]+>'), '')
+          .replaceAll('&quot;', '"')
+          .replaceAll('&amp;', '&')
+          .replaceAll('&nbsp;', ' ')
+          .trim();
+    }
+
+    String firstLine(String t) {
+      for (final l in t.split('\n')) {
+        final s = l.replaceAll(RegExp(r'^[^\p{L}\p{N}(«]+|[^\p{L}\p{N})»؟?!.]+$', unicode: true), '').trim();
+        if (s.length >= 4 && !s.startsWith('http')) return s.length > 110 ? '${s.substring(0, 110)}…' : s;
+      }
+      return '';
+    }
+
+    final out = <Recording>[];
+    for (var i = 0; i < blocks.length; i++) {
+      final b = blocks[i];
+      final id = int.tryParse(postRe.firstMatch(b)?.group(1) ?? '') ?? 0;
+      if (id <= known || !b.contains('tgme_widget_message_voice')) continue;
+      var title = firstLine(text(b));
+      // A voice note without words: its description is usually the next post.
+      for (var j = i + 1; title.isEmpty && j < blocks.length && j <= i + 2; j++) {
+        if (!blocks[j].contains('tgme_widget_message_voice')) title = firstLine(text(blocks[j]));
+      }
+      final dur = RegExp(r'tgme_widget_message_voice_duration[^>]*>([^<]+)<').firstMatch(b)?.group(1) ?? '';
+      final date = RegExp(r'<time[^>]*datetime="([^"]+)"').firstMatch(b)?.group(1) ?? '';
+      out.add(Recording(id, 'v', title.isEmpty ? 'تسجيل صوتي جديد' : title, '',
+          date.length >= 10 ? date.substring(0, 10) : '', dur.trim()));
+    }
+    out.sort((a, b) => b.id.compareTo(a.id));
+    return out;
   }
 
   /// Asks Telegram for the playable link of a voice note.

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'widgets/common.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -12,6 +13,8 @@ import 'screens/onboarding_screen.dart';
 import 'screens/splash_screen.dart';
 import 'services/cloud.dart';
 import 'services/fresh_posts.dart';
+import 'services/live_feed.dart';
+import 'services/challenge.dart';
 import 'services/notifications.dart';
 import 'theme.dart';
 
@@ -26,7 +29,10 @@ Future<void> main() async {
   Repository.onSavedListsChanged = () => Cloud.instance.pushUserData();
   runApp(const IbnAlshabiraApp());
   Cloud.instance.init();
-  loadFreshPosts();
+  // Daily site data first, then the channel itself (new posts within minutes).
+  loadFreshPosts().whenComplete(() => LiveFeed.refresh());
+  Timer.periodic(const Duration(minutes: 10), (_) => LiveFeed.refresh());
+  Future<void>.delayed(const Duration(seconds: 8), () => Challenges.instance.load());
   if (quick) Future.delayed(const Duration(milliseconds: 400), Repository.instance.loadRest);
   // Set up the daily notification after the first frame; never blocks startup.
   DailyNotifications.init().then(

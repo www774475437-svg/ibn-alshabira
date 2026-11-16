@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../services/challenge.dart';
 import 'models.dart';
 
 final _tashkeel = RegExp(r'[ؐ-ًؚ-ٰٟۖ-ۭـ]');
@@ -234,9 +235,23 @@ class Repository extends ChangeNotifier {
 
   /// Posts published after this build was made, fetched from the site.
   void addFresh(List<Fatwa> items) {
+    // Posts read straight from the channel are replaced by the site's copy,
+    // which is already sorted into its chapter.
+    final better = {for (final f in items) if (_liveIds.contains(f.id)) f.id: f};
+    if (better.isNotEmpty) {
+      for (final f in better.values) {
+        _index(f);
+      }
+      _bundled = [for (final f in _bundled) better[f.id] ?? f];
+      fatwas = [for (final f in fatwas) better[f.id] ?? f];
+      _liveIds.removeAll(better.keys);
+    }
     final have = {for (final f in _bundled) f.id};
     final fresh = items.where((f) => !have.contains(f.id)).toList();
-    if (fresh.isEmpty) return;
+    if (fresh.isEmpty) {
+      if (better.isNotEmpty) notifyListeners();
+      return;
+    }
     for (final f in fresh) {
       _index(f);
     }
@@ -314,6 +329,46 @@ class Repository extends ChangeNotifier {
   }
 
   /// Merges answers published from inside the app and edited titles.
+  /// New posts that arrived after this build (from the site's daily data or
+  /// read from the channel directly). Nothing already known is replaced.
+  final Set<String> _liveIds = {};
+
+  void addLive(List<Fatwa> items, List<ChannelPost> posts) {
+    final have = {for (final f in _bundled) f.id};
+    final fresh = [for (final f in items) if (have.add(f.id)) f];
+    _liveIds.addAll(fresh.map((f) => f.id));
+    final haveP = {for (final p in _channelBase) p.id, for (final f in _bundled) if (f.id.startsWith('tg-')) int.tryParse(f.id.substring(3)) ?? -1};
+    final freshP = [for (final p in posts) if (haveP.add(p.id)) p];
+    if (fresh.isEmpty && freshP.isEmpty) return;
+    for (final f in fresh) {
+      _index(f);
+    }
+    _bundled = [..._bundled, ...fresh];
+    _channelBase = [...freshP, ..._channelBase];
+    _buildChannel();
+    if (_lastEdits != null) {
+      applyRemote(_lastPublished ?? const [], _lastEdits!);
+    } else {
+      fatwas = [...fatwas, ...fresh];
+      notifyListeners();
+    }
+  }
+
+  /// The highest channel post number this copy knows.
+  int get lastChannelId {
+    var m = 0;
+    for (final p in _channelBase) {
+      if (p.id > m) m = p.id;
+    }
+    for (final f in _bundled) {
+      if (f.id.startsWith('tg-')) {
+        final n = int.tryParse(f.id.substring(3)) ?? 0;
+        if (n > m) m = n;
+      }
+    }
+    return m;
+  }
+
   void applyRemote(List<Fatwa> published, Map<String, Map<String, dynamic>> edits) {
     _lastPublished = published;
     _lastEdits = edits;
@@ -691,6 +746,7 @@ class Repository extends ChangeNotifier {
     final set = readLog.putIfAbsent(key, () => <String>{});
     if (set.add(id)) {
       _prefs.setString('readLog', jsonEncode(readLog.map((k, v) => MapEntry(k, v.toList()))));
+      Challenges.instance.onRead(); // reading points, when the sheikh turns them on
     }
   }
 

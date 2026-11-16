@@ -1,5 +1,6 @@
 import 'benefit_card.dart';
 import 'quiz_screens.dart';
+import '../widgets/announcement.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -9,6 +10,7 @@ import 'package:flutter/material.dart';
 import '../config.dart';
 import '../services/update_check.dart';
 import '../services/fresh_posts.dart';
+import '../services/live_feed.dart';
 
 import '../data/hijri.dart';
 import '../data/models.dart';
@@ -103,6 +105,7 @@ class _HomeTabState extends State<HomeTab> {
       RefreshIndicator(
         onRefresh: () async {
           await loadFreshPosts();
+          await LiveFeed.refresh(force: true);
           await Future<void>.delayed(const Duration(milliseconds: 400));
         },
         child: CustomScrollView(
@@ -110,6 +113,7 @@ class _HomeTabState extends State<HomeTab> {
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           SliverToBoxAdapter(child: _Header(onOpenSearch: onOpenSearch, onOpenMore: widget.onOpenMore)),
+          const SliverToBoxAdapter(child: HomeAnnouncement(place: 'top')),
           // The search in the trusted scholars' books, with the AI.
           SliverToBoxAdapter(
             child: Padding(
@@ -340,6 +344,8 @@ class _HomeTabState extends State<HomeTab> {
             ),
           ],
 
+          const SliverToBoxAdapter(child: HomeAnnouncement(place: 'bottom')),
+
           // ------------------------------------------------ تصفّح المكتبة
           const SliverToBoxAdapter(child: _GroupTitle('تصفّح المكتبة', Icons.explore_outlined)),
           if (!repo.fullyLoaded)
@@ -567,28 +573,7 @@ class _CloudSections extends StatelessWidget {
       builder: (context, _) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (cloud.announcement.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-              child: Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: brandColor(context),
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Icon(Icons.campaign, color: kGold),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(cloud.announcement,
-                          style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.7)),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+          const HomeAnnouncement(place: 'middle'),
           if (cloud.pinned.isNotEmpty) ...[
             const _SectionTitle('أجوبة مختارة'),
             for (final id in cloud.pinned.take(6))

@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../services/cloud.dart';
+import 'challenge_screens.dart';
 import '../services/quiz.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
@@ -87,9 +88,11 @@ class _QuizHomeScreenState extends State<QuizHomeScreen> {
                   CheckedPopupMenuItem(value: 'timer', checked: quiz.timer, child: const Text('عدّاد الوقت (30 ثانية)')),
                   CheckedPopupMenuItem(value: 'kids', checked: quiz.kidsMode, child: const Text('وضع الأطفال')),
                   const PopupMenuItem(value: 'suggest', child: Text('اقترح سؤالاً')),
+                  const PopupMenuItem(value: 'mysugs', child: Text('أسئلتي المقترحة')),
                   if (staff) ...[
                     const PopupMenuDivider(),
                     const PopupMenuItem(value: 'cats', child: Text('إدارة التصنيفات')),
+                    const PopupMenuItem(value: 'bulk', child: Text('إضافة أسئلة كثيرة دفعة واحدة')),
                     const PopupMenuItem(value: 'sugs', child: Text('الأسئلة المقترحة')),
                     const PopupMenuItem(value: 'stats', child: Text('إحصاءات الأسئلة')),
                     const PopupMenuItem(value: 'thanks', child: Text('رسالة شكر للأوائل')),
@@ -115,6 +118,7 @@ class _QuizHomeScreenState extends State<QuizHomeScreen> {
                     padding: const EdgeInsets.only(bottom: 90),
                     children: [
                       _ScoreHeader(quiz: quiz),
+                      const Padding(padding: EdgeInsets.fromLTRB(12, 10, 12, 0), child: ChallengeButton()),
                       if (quiz.thanks.isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
@@ -178,6 +182,10 @@ class _QuizHomeScreenState extends State<QuizHomeScreen> {
         await quiz.setKids(!quiz.kidsMode);
       case 'suggest':
         await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SuggestQuestionScreen()));
+      case 'mysugs':
+        await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MySuggestionsScreen()));
+      case 'bulk':
+        await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BulkImportScreen()));
       case 'cats':
         await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const QuizCatsManager()));
       case 'sugs':
@@ -509,6 +517,15 @@ class _QuestionScreenState extends State<QuestionScreen> {
   int _left = 30;
   final _cardKey = GlobalKey();
   bool _previewDone = false;
+  final Set<int> _multi = {}; // picks, when the question has several right choices
+  late final List<int> _display; // the order the choices are shown in
+
+  /// Several picks are kept in one number: 1000 + a bit for each pick.
+  static Set<int> _picksOf(int? c) {
+    if (c == null || c < 1000) return c == null || c < 0 ? {} : {c};
+    final m = c - 1000;
+    return {for (var i = 0; i < 16; i++) if (m & (1 << i) != 0) i};
+  }
 
   QuizQ get q => widget.q;
   QuizMark? get _mark => Quiz.instance.marks[q.id];
@@ -518,6 +535,10 @@ class _QuestionScreenState extends State<QuestionScreen> {
   void initState() {
     super.initState();
     _orderNow = List.generate(q.choices.length, (i) => i)..shuffle(math.Random(q.id.hashCode));
+    // Each reader sees the choices in his own order, so answers are not copied.
+    final seed = '${q.id}${Cloud.instance.user?.uid ?? ''}'.hashCode;
+    _display = List.generate(q.type == QuizType.trueFalse ? 2 : q.choices.length, (i) => i);
+    if (q.type == QuizType.choice) _display.shuffle(math.Random(seed));
     if (_orderNow.length > 1 && _isRightOrder()) _orderNow = _orderNow.reversed.toList();
     if (Quiz.instance.timer && !_done && !widget.preview) {
       _t = Timer.periodic(const Duration(seconds: 1), (t) {
@@ -549,7 +570,12 @@ class _QuestionScreenState extends State<QuestionScreen> {
   Future<void> _submit(int choice, {bool timeout = false}) async {
     if (_done) return;
     _t?.cancel();
-    final ok = !timeout && (q.type == QuizType.order ? _isRightOrder() : choice == q.correct);
+    final ok = !timeout &&
+        (q.type == QuizType.order
+            ? _isRightOrder()
+            : q.multi
+                ? (_picksOf(choice).length == q.rightSet.length && _picksOf(choice).containsAll(q.rightSet))
+                : choice == q.correct);
     HapticFeedback.mediumImpact();
     if (widget.preview) {
       setState(() {
@@ -584,12 +610,22 @@ class _QuestionScreenState extends State<QuestionScreen> {
           PopupMenuButton<String>(
             onSelected: (v) async {
               if (v == 'report') await _report(context);
+              if (v == 'share') {
+                await Share.share('سؤال من قسم الأسئلة في تطبيق «ابن الشابرة»:\n\n${q.text}\n\n'
+                    '${q.type == QuizType.trueFalse ? 'صح أم خطأ؟' : [for (var i = 0; i < q.choices.length; i++) '${'أبجدهوزحطي'[i % 10]}) ${q.choices[i]}'].join('\n')}'
+                    '\n\nأجب في التطبيق: https://ibnalshabira.com');
+              }
+              if (v == 'who' && context.mounted) {
+                await Navigator.of(context).push(MaterialPageRoute(builder: (_) => QuizAnswersScreen(q: q)));
+              }
               if (v == 'edit' && context.mounted) {
                 await Navigator.of(context).push(MaterialPageRoute(builder: (_) => QuestionEditor(q: q)));
               }
             },
             itemBuilder: (_) => [
+              const PopupMenuItem(value: 'share', child: Text('شارك السؤال')),
               const PopupMenuItem(value: 'report', child: Text('الإبلاغ عن خطأ في السؤال')),
+              if (quiz.isStaff) const PopupMenuItem(value: 'who', child: Text('من أجاب عنه؟')),
               if (quiz.isStaff) const PopupMenuItem(value: 'edit', child: Text('تعديل السؤال')),
             ],
           ),
@@ -678,10 +714,15 @@ class _QuestionScreenState extends State<QuestionScreen> {
                     ),
                   if (q.explain.isNotEmpty) ...[
                     const Divider(height: 22),
-                    const Text('الشرح', style: TextStyle(fontWeight: FontWeight.bold, color: kGoldChip)),
+                    const Text('الشرح', style: TextStyle(fontWeight: FontWeight.bold, color: kGold)),
                     const SizedBox(height: 4),
                     SelectableText(q.explain, style: const TextStyle(fontSize: 16, height: 1.9)),
                   ],
+                  if (q.src.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text('[المصدر: ${q.src}]', style: const TextStyle(color: kGold, fontSize: 13.5)),
+                    ),
                   if (q.suggestedBy.isNotEmpty && q.showSuggester)
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
@@ -735,24 +776,65 @@ class _QuestionScreenState extends State<QuestionScreen> {
 
   List<Widget> _choiceUi(int? chosen) {
     final opts = _options;
+    final picks = _picksOf(chosen);
+    final stats = Quiz.instance.choiceStats[q.id];
+    final total = stats == null ? 0 : stats.fold<int>(0, (a, b) => a + b);
+    var n = 0;
     return [
-      for (var i = 0; i < opts.length; i++)
-        if (opts[i].trim().isNotEmpty)
+      if (q.multi && !_done)
+        const Padding(
+          padding: EdgeInsets.only(bottom: 8),
+          child: Text('في هذا السؤال أكثر من جواب صحيح: اختر كل الصحيح ثم اضغط «تأكيد».',
+              style: TextStyle(color: Colors.grey)),
+        ),
+      for (final i in _display)
+        if (i < opts.length && opts[i].trim().isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: _ChoiceTile(
               text: opts[i],
-              letter: q.type == QuizType.trueFalse ? null : 'أبجدهوزحطي'[i % 10],
+              letter: q.type == QuizType.trueFalse ? null : 'أبجدهوزحطي'[(n++) % 10],
               state: !_done
-                  ? 0
-                  : i == q.correct
+                  ? (_multi.contains(i) ? 3 : 0)
+                  : q.rightSet.contains(i)
                       ? 1
-                      : i == chosen
+                      : picks.contains(i)
                           ? 2
                           : 0,
-              onTap: _done ? null : () => _confirm(i, opts[i]),
+              pct: _done && total > 0 && !q.multi && i < 8 ? (stats![i] * 100 / total).round() : null,
+              onTap: _done
+                  ? null
+                  : q.multi
+                      ? () => setState(() => _multi.contains(i) ? _multi.remove(i) : _multi.add(i))
+                      : () => _confirm(i, opts[i]),
             ),
           ),
+      if (q.multi && !_done)
+        FilledButton(
+          onPressed: _multi.isEmpty
+              ? null
+              : () async {
+                  final sure = await showDialog<bool>(
+                    context: context,
+                    builder: (c) => AlertDialog(
+                      title: const Text('تأكيد الجواب'),
+                      content: Text('اخترت ${_multi.length} اختيارات.\n\nلا يمكن تغيير الجواب بعد التأكيد.'),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('رجوع')),
+                        FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('تأكيد')),
+                      ],
+                    ),
+                  );
+                  if (sure == true) {
+                    var m = 0;
+                    for (final i in _multi) {
+                      m |= 1 << i;
+                    }
+                    await _submit(1000 + m);
+                  }
+                },
+          child: const Text('تأكيد'),
+        ),
     ];
   }
 
@@ -853,9 +935,10 @@ class _QuestionScreenState extends State<QuestionScreen> {
 class _ChoiceTile extends StatelessWidget {
   final String text;
   final String? letter;
-  final int state; // 0 normal, 1 right, 2 wrong pick
+  final int state; // 0 normal, 1 right, 2 wrong pick, 3 picked (not yet confirmed)
   final VoidCallback? onTap;
-  const _ChoiceTile({required this.text, this.letter, required this.state, this.onTap});
+  final int? pct; // how many people picked it, after answering
+  const _ChoiceTile({required this.text, this.letter, required this.state, this.onTap, this.pct});
 
   @override
   Widget build(BuildContext context) {
@@ -863,7 +946,9 @@ class _ChoiceTile extends StatelessWidget {
         ? const Color(0xFF2E7D32)
         : state == 2
             ? const Color(0xFFC62828)
-            : Theme.of(context).colorScheme.outline.withValues(alpha: .5);
+            : state == 3
+                ? kGold
+                : Theme.of(context).colorScheme.outline.withValues(alpha: .5);
     return Material(
       color: state == 0 ? Theme.of(context).colorScheme.surface : color.withValues(alpha: .10),
       shape: RoundedRectangleBorder(
@@ -879,10 +964,16 @@ class _ChoiceTile extends StatelessWidget {
                 radius: 15,
                 backgroundColor: state == 0 ? kGold.withValues(alpha: .2) : color,
                 child: Text(letter!,
-                    style: TextStyle(color: state == 0 ? kGoldChip : Colors.white, fontWeight: FontWeight.bold)),
+                    style: TextStyle(color: state == 0 ? kGold : Colors.white, fontWeight: FontWeight.bold)),
               ),
             if (letter != null) const SizedBox(width: 10),
             Expanded(child: Text(text, style: const TextStyle(fontSize: 16, height: 1.6))),
+            if (pct != null)
+              Padding(
+                padding: const EdgeInsetsDirectional.only(start: 6),
+                child: Text('$pct٪', style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+              ),
+            if (state == 3) const Icon(Icons.check_box, color: kGold),
             if (state == 1) const Icon(Icons.check_circle, color: Color(0xFF2E7D32)),
             if (state == 2) const Icon(Icons.cancel, color: Color(0xFFC62828)),
           ]),
@@ -918,7 +1009,7 @@ class QuizOfDayCard extends StatelessWidget {
                 const Icon(Icons.help_outline, color: kGold),
                 const SizedBox(width: 6),
                 const Text('سؤال اليوم',
-                    style: TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.bold, fontSize: 16, color: kGoldChip)),
+                    style: TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.bold, fontSize: 16, color: kGold)),
                 const Spacer(),
                 if (m != null)
                   Icon(m.ok ? Icons.check_circle : Icons.cancel,
@@ -986,6 +1077,7 @@ class _QuizHomeStripState extends State<QuizHomeStrip> {
                 ),
               ]),
             ),
+            const Padding(padding: EdgeInsets.fromLTRB(12, 10, 12, 0), child: ChallengeButton()),
           ]);
         },
       );
@@ -1139,6 +1231,20 @@ class _QuizProfileScreenState extends State<QuizProfileScreen> {
               Wrap(spacing: 8, runSpacing: 8, children: [
                 for (final b in quiz.badges) Chip(avatar: Icon(b.$2, color: kGold, size: 18), label: Text(b.$1)),
               ]),
+            const SizedBox(height: 14),
+            Builder(builder: (context) {
+              final m = quiz.monthSummary;
+              return Card(
+                margin: EdgeInsets.zero,
+                child: ListTile(
+                  leading: const Icon(Icons.calendar_month, color: kGold),
+                  title: const Text('ملخّص هذا الشهر', style: TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: Text(m.$1 == 0
+                      ? 'لم تجب هذا الشهر بعد.'
+                      : 'أجبت عن ${m.$1}، وأصبت ${m.$2}${m.$3.isEmpty ? '' : '، وأقوى أبوابك: ${m.$3}'}'),
+                ),
+              );
+            }),
             const Divider(height: 30),
             _NickEditor(),
           ]),
@@ -1274,7 +1380,7 @@ class QuizCertificateScreen extends StatelessWidget {
               Image.asset(logoAssets[appLogo.value], width: 70, height: 70),
               const SizedBox(height: 10),
               const Text('شهادة إتمام',
-                  style: TextStyle(fontFamily: 'Amiri', fontSize: 30, fontWeight: FontWeight.bold, color: kGoldChip)),
+                  style: TextStyle(fontFamily: 'Amiri', fontSize: 30, fontWeight: FontWeight.bold, color: kGold)),
               const SizedBox(height: 10),
               Text(quiz.nick.isEmpty ? 'طالب العلم' : quiz.nick,
                   style: const TextStyle(fontFamily: 'Tajawal', fontSize: 22, fontWeight: FontWeight.bold, color: kInk)),
@@ -1399,6 +1505,8 @@ class _QuestionEditorState extends State<QuestionEditor> {
   late final _hint = TextEditingController(text: _q.hint);
   late final _linkTitle = TextEditingController(text: _q.linkTitle);
   late final _linkUrl = TextEditingController(text: _q.linkUrl);
+  late final _src = TextEditingController(text: _q.src);
+  late bool _many = _q.corrects.length > 1;
   late final List<TextEditingController> _choices = [
     for (final c in (_q.choices.isEmpty ? ['', ''] : _q.choices)) TextEditingController(text: c)
   ];
@@ -1413,6 +1521,7 @@ class _QuestionEditorState extends State<QuestionEditor> {
     ..hint = _hint.text.trim()
     ..linkTitle = _linkTitle.text.trim()
     ..linkUrl = _linkUrl.text.trim()
+    ..src = _src.text.trim()
     ..choices = _q.type == QuizType.trueFalse ? ['صح', 'خطأ'] : [for (final c in _choices) c.text.trim()];
 
   Future<void> _save({bool asDraft = false}) async {
@@ -1426,7 +1535,19 @@ class _QuestionEditorState extends State<QuestionEditor> {
       _toast(context, 'اختر التصنيف', ok: false);
       return;
     }
-    q.choices = q.type == QuizType.trueFalse ? q.choices : [for (final c in q.choices) if (c.isNotEmpty) c];
+    // Keep the right marks on the same choices when empty ones are dropped.
+    if (q.type != QuizType.trueFalse) {
+      final keep = [for (var i = 0; i < q.choices.length; i++) if (q.choices[i].isNotEmpty) i];
+      final map = {for (var j = 0; j < keep.length; j++) keep[j]: j};
+      q.correct = map[q.correct] ?? 0;
+      q.corrects = _many && q.type == QuizType.choice ? [for (final c in q.corrects) if (map[c] != null) map[c]!] : [];
+      if (_many && q.corrects.length < 2) {
+        _toast(context, 'اختر جوابين صحيحين على الأقل، أو أطفئ «أكثر من جواب صحيح»', ok: false);
+        return;
+      }
+      if (_many && q.corrects.isNotEmpty) q.correct = q.corrects.first;
+      q.choices = [for (final i in keep) q.choices[i]];
+    }
     if (q.correct >= q.choices.length) q.correct = 0;
     setState(() => _busy = true);
     final err = await Quiz.instance.saveQ(q);
@@ -1567,14 +1688,35 @@ class _QuestionEditorState extends State<QuestionEditor> {
                 ChoiceChip(label: const Text('خطأ'), selected: _q.correct == 1, onSelected: (_) => setState(() => _q.correct = 1)),
               ])
             else ...[
-              Text(_q.type == QuizType.order ? 'العناصر بترتيبها الصحيح (تظهر للناس مخلوطة):' : 'الخيارات (اضغط الدائرة على الصحيح):',
+              Text(
+                  _q.type == QuizType.order
+                      ? 'العناصر بترتيبها الصحيح (تظهر للناس مخلوطة):'
+                      : _many
+                          ? 'الخيارات (ضع ✓ على كل جواب صحيح):'
+                          : 'الخيارات (اضغط الدائرة على الصحيح):',
                   style: const TextStyle(fontWeight: FontWeight.bold)),
+              if (_q.type == QuizType.choice)
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: const Text('أكثر من جواب صحيح'),
+                  value: _many,
+                  onChanged: (v) => setState(() {
+                    _many = v;
+                    _q.corrects = v ? [_q.correct] : [];
+                  }),
+                ),
               const SizedBox(height: 6),
               for (var i = 0; i < _choices.length; i++)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Row(children: [
-                    if (_q.type == QuizType.choice)
+                    if (_q.type == QuizType.choice && _many)
+                      Checkbox(
+                        value: _q.corrects.contains(i),
+                        onChanged: (v) => setState(() => v == true ? _q.corrects.add(i) : _q.corrects.remove(i)),
+                      )
+                    else if (_q.type == QuizType.choice)
                       Radio<int>(value: i, groupValue: _q.correct, onChanged: (v) => setState(() => _q.correct = v ?? 0))
                     else
                       SizedBox(width: 40, child: Center(child: Text('${i + 1}'))),
@@ -1582,7 +1724,9 @@ class _QuestionEditorState extends State<QuestionEditor> {
                       child: TextField(
                         controller: _choices[i],
                         onChanged: (_) => _dirty = true,
-                        decoration: dec(_q.type == QuizType.choice && i == _q.correct ? 'الخيار ${i + 1} (الصحيح)' : 'الخيار ${i + 1}'),
+                        decoration: dec(_q.type == QuizType.choice && (_many ? _q.corrects.contains(i) : i == _q.correct)
+                            ? 'الخيار ${i + 1} (الصحيح)'
+                            : 'الخيار ${i + 1}'),
                       ),
                     ),
                     if (_choices.length > 2)
@@ -1595,7 +1739,7 @@ class _QuestionEditorState extends State<QuestionEditor> {
                       ),
                   ]),
                 ),
-              if (_choices.length < 8)
+              if (_choices.length < 10)
                 TextButton.icon(
                   icon: const Icon(Icons.add),
                   label: const Text('إضافة خيار'),
@@ -1608,6 +1752,8 @@ class _QuestionEditorState extends State<QuestionEditor> {
                 maxLines: 6,
                 onChanged: (_) => _dirty = true,
                 decoration: dec('الشرح بالتفصيل (يظهر بعد الجواب، صحيحاً أو خطأً)')),
+            const SizedBox(height: 10),
+            TextField(controller: _src, onChanged: (_) => _dirty = true, decoration: dec('المصدر: الكتاب والصفحة (اختياري)')),
             const SizedBox(height: 10),
             TextField(controller: _hint, onChanged: (_) => _dirty = true, decoration: dec('تلميح (اختياري)')),
             SwitchListTile(
@@ -1831,7 +1977,9 @@ class QuizSuggestionsScreen extends StatelessWidget {
         body: StreamBuilder(
           stream: Quiz.instance.suggestions(),
           builder: (context, snap) {
-            final docs = snap.data?.docs ?? const [];
+            final docs = [
+              for (final d in snap.data?.docs ?? const []) if ('${d.data()['status'] ?? 'pending'}' == 'pending') d
+            ];
             if (snap.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
             if (docs.isEmpty) return const EmptyState(icon: Icons.inbox_outlined, text: 'لا اقتراحات الآن.');
             return ListView.separated(
@@ -1862,7 +2010,7 @@ class QuizSuggestionsScreen extends StatelessWidget {
                         );
                         final saved = await Navigator.of(context)
                             .push<bool>(MaterialPageRoute(builder: (_) => QuestionEditor(q: q)));
-                        if (saved == true) await Quiz.instance.dropSuggestion(d.id);
+                        if (saved == true) await Quiz.instance.acceptSuggestion(d.id);
                       },
                     ),
                     IconButton(
@@ -1910,6 +2058,192 @@ class QuizStatsScreen extends StatelessWidget {
             ),
           ),
         if (l.isEmpty) const EmptyState(icon: Icons.bar_chart, text: 'لا إجابات بعد.'),
+      ]),
+    );
+  }
+}
+
+
+/// The prominent «تحدَّ صديقاً» button.
+class ChallengeButton extends StatelessWidget {
+  const ChallengeButton({super.key});
+
+  @override
+  Widget build(BuildContext context) => Material(
+        borderRadius: BorderRadius.circular(18),
+        color: const Color(0xFF7A1F1F),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: () => openChallenges(context),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(borderRadius: BorderRadius.circular(18), border: Border.all(color: kGold)),
+            child: const Row(children: [
+              Icon(Icons.bolt, color: kGold, size: 30),
+              SizedBox(width: 10),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('التحدّيات',
+                      style: TextStyle(fontFamily: 'Tajawal', color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text('تحدَّ صديقاً أو مجموعة، والنتيجة مباشرة', style: TextStyle(color: Colors.white70, fontSize: 12.5)),
+                ]),
+              ),
+              Icon(Icons.chevron_left, color: kGold),
+            ]),
+          ),
+        ),
+      );
+}
+
+/// The reader's own suggestions and what became of them.
+class MySuggestionsScreen extends StatelessWidget {
+  const MySuggestionsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: const Text('أسئلتي المقترحة')),
+        body: FutureBuilder<List<Map<String, dynamic>>>(
+          future: Quiz.instance.mySuggestions(),
+          builder: (context, snap) {
+            if (snap.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
+            final l = snap.data ?? const [];
+            if (l.isEmpty) return const EmptyState(icon: Icons.lightbulb_outline, text: 'لم تقترح أسئلة بعد.');
+            return ListView.separated(
+              itemCount: l.length,
+              separatorBuilder: (_, __) => const Divider(height: 1),
+              itemBuilder: (context, i) {
+                final st = '${l[i]['status'] ?? 'pending'}';
+                final (label, color) = switch (st) {
+                  'accepted' => ('مقبول ✅', const Color(0xFF2E7D32)),
+                  'rejected' => ('لم يُقبل', const Color(0xFFC62828)),
+                  _ => ('قيد المراجعة', Colors.orange),
+                };
+                return ListTile(
+                  title: Text('${l[i]['text'] ?? ''}', maxLines: 2, overflow: TextOverflow.ellipsis),
+                  trailing: Text(label, style: TextStyle(color: color, fontWeight: FontWeight.bold)),
+                );
+              },
+            );
+          },
+        ),
+      );
+}
+
+/// Staff: who answered a question, and what they chose (names only).
+class QuizAnswersScreen extends StatelessWidget {
+  final QuizQ q;
+  const QuizAnswersScreen({super.key, required this.q});
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: const Text('من أجاب عن السؤال')),
+        body: FutureBuilder<List<Map<String, dynamic>>>(
+          future: Quiz.instance.answersOf(q.id),
+          builder: (context, snap) {
+            if (snap.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
+            final l = snap.data ?? const [];
+            if (l.isEmpty) return const EmptyState(icon: Icons.people_outline, text: 'لم يُجب أحد من المسجّلين بعد.');
+            final right = l.where((e) => e['ok'] == true).length;
+            final wrongPicks = <int, int>{};
+            for (final e in l) {
+              final c = (e['choice'] as num?)?.toInt() ?? -1;
+              if (e['ok'] != true && c >= 0 && c < q.choices.length) wrongPicks[c] = (wrongPicks[c] ?? 0) + 1;
+            }
+            final worst = wrongPicks.isEmpty ? null : wrongPicks.entries.reduce((a, b) => a.value >= b.value ? a : b);
+            return ListView(children: [
+              Padding(
+                padding: const EdgeInsets.all(14),
+                child: Text(
+                    'أجاب ${l.length} · أصاب $right · أخطأ ${l.length - right}'
+                    '${worst == null ? '' : '\nأكثر خيار خاطئ: «${q.choices[worst.key]}» (${worst.value})'}',
+                    style: const TextStyle(fontWeight: FontWeight.bold, height: 1.7)),
+              ),
+              for (final e in l)
+                ListTile(
+                  leading: Icon(e['ok'] == true ? Icons.check_circle : Icons.cancel,
+                      color: e['ok'] == true ? const Color(0xFF2E7D32) : const Color(0xFFC62828)),
+                  title: Text('${e['name'] ?? ''}'),
+                  subtitle: Builder(builder: (_) {
+                    final c = (e['choice'] as num?)?.toInt() ?? -1;
+                    if (c >= 1000) return const Text('اختار عدة اختيارات');
+                    if (q.type == QuizType.trueFalse && c >= 0) return Text(c == 0 ? 'صح' : 'خطأ');
+                    return Text(c >= 0 && c < q.choices.length ? q.choices[c] : 'انتهى الوقت');
+                  }),
+                ),
+            ]);
+          },
+        ),
+      );
+}
+
+/// Staff: many questions at once, pasted as text.
+class BulkImportScreen extends StatefulWidget {
+  const BulkImportScreen({super.key});
+
+  @override
+  State<BulkImportScreen> createState() => _BulkImportScreenState();
+}
+
+class _BulkImportScreenState extends State<BulkImportScreen> {
+  final _text = TextEditingController();
+  String _cat = '';
+  int _level = 1;
+  bool _busy = false;
+
+  static const _sample = 'س: كم أركان الإسلام؟\n- ثلاثة\n* خمسة\n- سبعة\nشرح: أركان الإسلام خمسة كما في حديث ابن عمر.\nمصدر: صحيح البخاري (8)';
+
+  @override
+  Widget build(BuildContext context) {
+    final cats = Quiz.instance.cats;
+    if (_cat.isEmpty && cats.isNotEmpty) _cat = cats.first.id;
+    final parsed = Quiz.parseBulk(_text.text, _cat, _level);
+    return Scaffold(
+      appBar: AppBar(title: const Text('إضافة أسئلة دفعة واحدة')),
+      body: ListView(padding: const EdgeInsets.all(14), children: [
+        const Text('اكتب كل سؤال بهذا الشكل، وبين كل سؤالين سطر فارغ. الصحيح يبدأ بنجمة *، والبقية بشرطة -.',
+            style: TextStyle(height: 1.7)),
+        Container(
+          margin: const EdgeInsets.symmetric(vertical: 8),
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(color: kGold.withValues(alpha: .1), borderRadius: BorderRadius.circular(10)),
+          child: const SelectableText(_sample, style: TextStyle(height: 1.8)),
+        ),
+        DropdownButtonFormField<String>(
+          value: cats.any((c) => c.id == _cat) ? _cat : null,
+          decoration: const InputDecoration(labelText: 'التصنيف', border: OutlineInputBorder(), isDense: true),
+          items: [for (final c in cats) DropdownMenuItem(value: c.id, child: Text(c.name))],
+          onChanged: (v) => setState(() => _cat = v ?? _cat),
+        ),
+        const SizedBox(height: 8),
+        Wrap(spacing: 6, children: [
+          for (final l in const [1, 2, 3])
+            ChoiceChip(label: Text(Quiz.levelNames[l]!), selected: _level == l, onSelected: (_) => setState(() => _level = l)),
+        ]),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _text,
+          minLines: 10,
+          maxLines: 30,
+          onChanged: (_) => setState(() {}),
+          decoration: const InputDecoration(hintText: 'الصق الأسئلة هنا', border: OutlineInputBorder()),
+        ),
+        const SizedBox(height: 8),
+        Text('فُهم منها ${parsed.length} سؤالاً — تُحفظ مسودات، فراجعها ثم انشرها.',
+            style: const TextStyle(fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        FilledButton(
+          onPressed: _busy || parsed.isEmpty
+              ? null
+              : () async {
+                  setState(() => _busy = true);
+                  final err = await Quiz.instance.saveMany(parsed);
+                  if (!context.mounted) return;
+                  setState(() => _busy = false);
+                  _toast(context, err ?? 'حُفظت ${parsed.length} أسئلة مسودات', ok: err == null);
+                  if (err == null) Navigator.pop(context);
+                },
+          child: const Text('حفظ كمسودات'),
+        ),
       ]),
     );
   }

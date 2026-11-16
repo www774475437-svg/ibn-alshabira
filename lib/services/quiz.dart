@@ -65,6 +65,10 @@ class QuizQ {
   DateTime? createdAt;
   String suggestedBy;
   bool showSuggester;
+  /// More than one right choice (indexes); empty = only [correct].
+  List<int> corrects;
+  /// Where the answer comes from (book and page).
+  String src;
 
   QuizQ({
     required this.id,
@@ -89,7 +93,15 @@ class QuizQ {
     this.createdAt,
     this.suggestedBy = '',
     this.showSuggester = false,
-  }) : choices = choices ?? ['', ''];
+    List<int>? corrects,
+    this.src = '',
+  })  : choices = choices ?? ['', ''],
+        corrects = corrects ?? [];
+
+  bool get multi => type == QuizType.choice && corrects.length > 1;
+
+  /// The right choice indexes.
+  Set<int> get rightSet => multi ? corrects.toSet() : {correct};
 
   static DateTime? _date(Object? v) => v is Timestamp ? v.toDate() : null;
 
@@ -116,6 +128,8 @@ class QuizQ {
         createdAt: _date(m['createdAt']),
         suggestedBy: '${m['suggestedBy'] ?? ''}',
         showSuggester: m['showSuggester'] == true,
+        corrects: [for (final c in (m['corrects'] as List? ?? const [])) (c as num).toInt()],
+        src: '${m['src'] ?? ''}',
       );
 
   Map<String, dynamic> toMap() => {
@@ -139,6 +153,8 @@ class QuizQ {
         'releaseAt': releaseAt == null ? null : Timestamp.fromDate(releaseAt!),
         'suggestedBy': suggestedBy,
         'showSuggester': showSuggester,
+        'corrects': corrects,
+        'src': src,
       };
 
   QuizQ copy({String? id, String? cat}) => QuizQ.fromMap(id ?? this.id, toMap()..['cat'] = cat ?? this.cat)
@@ -196,6 +212,7 @@ class Quiz extends ChangeNotifier {
   final Map<String, QuizMark> marks = {};
   final Set<String> saved = {};
   final Map<String, (int, int)> stats = {}; // qid -> (answered, right)
+  final Map<String, List<int>> choiceStats = {}; // qid -> how many picked each choice
   String nick = '';
   bool showName = true;
   bool timer = false;
@@ -250,6 +267,7 @@ class Quiz extends ChangeNotifier {
       final s = await _db.collection('quizStats').get();
       for (final d in s.docs) {
         stats[d.id] = ((d.data()['n'] as num?)?.toInt() ?? 0, (d.data()['ok'] as num?)?.toInt() ?? 0);
+        choiceStats[d.id] = [for (var i = 0; i < 8; i++) (d.data()['c$i'] as num?)?.toInt() ?? 0];
       }
       notifyListeners();
     } catch (_) {}
@@ -332,7 +350,15 @@ class Quiz extends ChangeNotifier {
 
   int get right => marks.values.where((m) => m.ok).length;
   int get wrong => marks.values.where((m) => !m.ok).length;
-  int get score => right * 10;
+  /// Points: a hard question is worth more.
+  int get score {
+    var p = 0;
+    final lv = {for (final q in all) q.id: q.level};
+    for (final e in marks.entries) {
+      if (e.value.ok) p += 10 * (lv[e.key] ?? 1);
+    }
+    return p;
+  }
 
   List<QuizQ> get wrongOnes => [for (final q in all) if (marks[q.id]?.ok == false) q];
   List<QuizQ> get savedOnes => [for (final q in all) if (saved.contains(q.id)) q];
@@ -422,16 +448,33 @@ class Quiz extends ChangeNotifier {
     }
     final s = stats[q.id] ?? (0, 0);
     stats[q.id] = (s.$1 + 1, s.$2 + (ok ? 1 : 0));
+    if (choice >= 0 && choice < 8) {
+      final cs = choiceStats[q.id] ?? List.filled(8, 0);
+      cs[choice]++;
+      choiceStats[q.id] = cs;
+    }
     await _saveLocal();
     notifyListeners();
     try {
-      await _db.doc('quizStats/${q.id}').set(
-          {'n': FieldValue.increment(1), if (ok) 'ok': FieldValue.increment(1)}, SetOptions(merge: true));
+      await _db.doc('quizStats/${q.id}').set({
+        'n': FieldValue.increment(1),
+        if (ok) 'ok': FieldValue.increment(1),
+        if (choice >= 0 && choice < 8) 'c$choice': FieldValue.increment(1),
+      }, SetOptions(merge: true));
     } catch (_) {}
     final u = Cloud.instance.user;
     if (u != null) {
       try {
         await _db.doc('quizUsers/${u.uid}/a/${q.id}').set(marks[q.id]!.toJson());
+        // For the staff: who answered, and what (name only, never the email).
+        await _db.doc('quizAns/${q.id}_${u.uid}').set({
+          'qid': q.id,
+          'uid': u.uid,
+          'name': nick.trim().isEmpty ? 'طالب علم' : nick.trim(),
+          'choice': choice,
+          'ok': ok,
+          'at': FieldValue.serverTimestamp(),
+        });
         await _pushProfile();
       } catch (_) {}
     }
@@ -528,6 +571,7 @@ class Quiz extends ChangeNotifier {
         'choices': choices,
         'correct': correct,
         'explain': explain.trim(),
+        'status': 'pending',
         'at': FieldValue.serverTimestamp(),
       });
       await p.setString('quizSugDay', today);
@@ -541,7 +585,114 @@ class Quiz extends ChangeNotifier {
   Stream<QuerySnapshot<Map<String, dynamic>>> suggestions() =>
       _db.collection('quizSuggest').orderBy('at', descending: true).limit(100).snapshots();
 
-  Future<void> dropSuggestion(String id) => _db.doc('quizSuggest/$id').delete();
+  Future<void> dropSuggestion(String id) => _db.doc('quizSuggest/$id').set({'status': 'rejected'}, SetOptions(merge: true));
+  Future<void> acceptSuggestion(String id) => _db.doc('quizSuggest/$id').set({'status': 'accepted'}, SetOptions(merge: true));
+
+  /// The reader's own suggestions with their state.
+  Future<List<Map<String, dynamic>>> mySuggestions() async {
+    final u = Cloud.instance.user;
+    if (u == null) return const [];
+    final q = await _db.collection('quizSuggest').where('uid', isEqualTo: u.uid).get();
+    final l = [for (final d in q.docs) d.data()];
+    l.sort((a, b) => '${b['at']}'.compareTo('${a['at']}'));
+    return l;
+  }
+
+  /// For the staff: who answered a question (names only).
+  Future<List<Map<String, dynamic>>> answersOf(String qid) async {
+    final q = await _db.collection('quizAns').where('qid', isEqualTo: qid).limit(300).get();
+    return [for (final d in q.docs) d.data()];
+  }
+
+  /// Many questions at once from pasted text. Each question is a block:
+  ///   س: نص السؤال
+  ///   - خيار
+  ///   * خيار صحيح
+  ///   شرح: …   (اختياري)   مصدر: …   (اختياري)
+  /// Blocks are separated by an empty line. They are saved as drafts.
+  static List<QuizQ> parseBulk(String text, String cat, int level) {
+    final out = <QuizQ>[];
+    for (final block in text.split(RegExp(r'\n\s*\n'))) {
+      final lines = block.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
+      if (lines.isEmpty) continue;
+      var qText = '', explain = '', src = '';
+      final choices = <String>[];
+      final right = <int>[];
+      for (final l in lines) {
+        if (RegExp(r'^(س|سؤال|السؤال)\s*[:：]').hasMatch(l)) {
+          qText = l.replaceFirst(RegExp(r'^(س|سؤال|السؤال)\s*[:：]\s*'), '');
+        } else if (l.startsWith('*') || l.startsWith('✓') || l.startsWith('✅')) {
+          right.add(choices.length);
+          choices.add(l.replaceFirst(RegExp(r'^[*✓✅]\s*'), ''));
+        } else if (l.startsWith('-') || l.startsWith('•')) {
+          choices.add(l.replaceFirst(RegExp(r'^[-•]\s*'), ''));
+        } else if (RegExp(r'^(شرح|الشرح)\s*[:：]').hasMatch(l)) {
+          explain = l.replaceFirst(RegExp(r'^(شرح|الشرح)\s*[:：]\s*'), '');
+        } else if (RegExp(r'^(مصدر|المصدر)\s*[:：]').hasMatch(l)) {
+          src = l.replaceFirst(RegExp(r'^(مصدر|المصدر)\s*[:：]\s*'), '');
+        } else if (qText.isEmpty) {
+          qText = l;
+        } else if (choices.isEmpty) {
+          qText = '$qText\n$l';
+        } else {
+          explain = explain.isEmpty ? l : '$explain\n$l';
+        }
+      }
+      if (qText.isEmpty || choices.length < 2 || right.isEmpty) continue;
+      out.add(QuizQ(
+        id: '',
+        cat: cat,
+        text: qText,
+        choices: choices,
+        correct: right.first,
+        corrects: right.length > 1 ? right : [],
+        explain: explain,
+        src: src,
+        level: level,
+        draft: true,
+      ));
+    }
+    return out;
+  }
+
+  Future<String?> saveMany(List<QuizQ> list) async {
+    try {
+      var order = all.length;
+      for (final q in list) {
+        await _db.collection('quizQs').add(q.toMap()
+          ..['createdAt'] = FieldValue.serverTimestamp()
+          ..['order'] = order++);
+      }
+      await Cloud.instance.logAction('الأسئلة: إضافة ${list.length} سؤالاً دفعة واحدة');
+      await load(force: true);
+      return null;
+    } catch (e) {
+      return 'تعذّر الحفظ: $e';
+    }
+  }
+
+  /// This month's summary: answered, right, and the strongest category.
+  (int, int, String) get monthSummary {
+    final now = DateTime.now();
+    final catOf = {for (final q in all) q.id: q.cat};
+    var n = 0, ok = 0;
+    final per = <String, int>{};
+    for (final e in marks.entries) {
+      if (e.value.at.year != now.year || e.value.at.month != now.month) continue;
+      n++;
+      if (e.value.ok) {
+        ok++;
+        final c = catOf[e.key];
+        if (c != null) per[c] = (per[c] ?? 0) + 1;
+      }
+    }
+    var best = '';
+    if (per.isNotEmpty) {
+      final top = per.entries.reduce((a, b) => a.value >= b.value ? a : b).key;
+      best = cats.where((c) => c.id == top).firstOrNull?.name ?? '';
+    }
+    return (n, ok, best);
+  }
 
   Future<bool> report(QuizQ q, String note) async {
     try {

@@ -67,12 +67,14 @@ service cloud.firestore {
     match /quizQs/{id}   { allow read: if true; allow write: if isAdmin(); }
     match /quizStats/{id} {
       allow read: if true;
-      allow create, update: if request.resource.data.keys().hasOnly(['n', 'ok']) && stepOk('n') && stepOk('ok');
+      allow create, update: if request.resource.data.keys().hasOnly(['n', 'ok', 'c0', 'c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7'])
+        && stepOk('n') && stepOk('ok') && stepOk('c0') && stepOk('c1') && stepOk('c2') && stepOk('c3')
+        && stepOk('c4') && stepOk('c5') && stepOk('c6') && stepOk('c7');
       allow delete: if isAdmin();
     }
     match /quizUsers/{uid} {
       allow read: if true;
-      allow write: if signedIn() && request.auth.uid == uid;
+      allow write: if signedIn() && (request.auth.uid == uid || isAdmin());
       // Each answer is written once and never changed.
       match /a/{qid} {
         allow read: if signedIn() && request.auth.uid == uid;
@@ -82,7 +84,25 @@ service cloud.firestore {
     match /quizSuggest/{id} {
       allow create: if signedIn() && request.resource.data.uid == request.auth.uid
         && request.resource.data.text is string && request.resource.data.text.size() < 2000;
+      allow read: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
+      allow update, delete: if isAdmin();
+    }
+    // Who answered which question: staff see names only.
+    match /quizAns/{id} {
+      allow create, update: if signedIn() && request.resource.data.uid == request.auth.uid;
       allow read, delete: if isAdmin();
+    }
+    // Challenges: names and scores only, no messages.
+    match /challenges/{code} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.host == request.auth.uid;
+      allow update: if signedIn()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['players', 'status']);
+      allow delete: if isAdmin();
+    }
+    match /creditRequests/{id} {
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid;
+      allow read, update, delete: if isAdmin();
     }
     match /benefits/{id} { allow read: if true; allow write: if isAdmin(); }
     match /users/{uid} {

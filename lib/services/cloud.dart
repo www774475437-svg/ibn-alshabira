@@ -917,6 +917,10 @@ class Cloud extends ChangeNotifier {
 
   // --------------------------------------------------------- Announcement
   String announcement = '';
+  String annColor = 'gold'; // gold | red | yellow | pink | green | blue
+  String annPlace = 'middle'; // top | middle | bottom
+  String annAction = ''; // '' | challenges | quiz
+  String annButton = '';
 
   bool askOpen = true;
   String aboutText = '';
@@ -930,6 +934,10 @@ class Cloud extends ChangeNotifier {
       final c = {for (final d in q.docs) d.id: d.data()};
       final an = c['announcement'];
       announcement = an != null && an['active'] == true ? '${an['text'] ?? ''}' : '';
+      annColor = '${an?['color'] ?? 'gold'}';
+      annPlace = '${an?['place'] ?? 'middle'}';
+      annAction = '${an?['action'] ?? ''}';
+      annButton = '${an?['button'] ?? ''}';
       askOpen = c['ask']?['open'] != false;
       final lim = c['ask']?['limit'];
       askLimit = lim is int && lim > 0 ? lim : 3;
@@ -1108,12 +1116,25 @@ class Cloud extends ChangeNotifier {
     return setConfig('pinned', {'ids': ids}, 'تعديل الأجوبة المثبّتة');
   }
 
-  Future<String?> setAnnouncement(String text) async {
+  Future<String?> setAnnouncement(String text,
+      {String color = 'gold', String place = 'middle', String action = '', String button = ''}) async {
     try {
       final t = text.trim();
-      await _db.doc('config/announcement').set({'text': t, 'active': t.isNotEmpty, 'by': email});
+      await _db.doc('config/announcement').set({
+        'text': t,
+        'active': t.isNotEmpty,
+        'by': email,
+        'color': color,
+        'place': place,
+        'action': action,
+        'button': button.trim(),
+      });
       _log(t.isEmpty ? 'إزالة الإعلان' : 'نشر إعلان', t);
       announcement = t;
+      annColor = color;
+      annPlace = place;
+      annAction = action;
+      annButton = button.trim();
       notifyListeners();
       return null;
     } catch (_) {
