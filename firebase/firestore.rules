@@ -97,7 +97,7 @@ service cloud.firestore {
       allow read: if signedIn();
       allow create: if signedIn() && request.resource.data.host == request.auth.uid;
       allow update: if signedIn()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['players', 'status']);
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['players', 'status', 'startAt', 'rematch', 'rematchBy']);
       allow delete: if isAdmin();
     }
     match /creditRequests/{id} {

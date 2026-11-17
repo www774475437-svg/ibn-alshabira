@@ -1696,9 +1696,9 @@ class Series {
 int askerNo(String uid) {
   var h = 7;
   for (final c in uid.codeUnits) {
-    h = (h * 31 + c) % 9000;
+    h = (h * 31 + c) % 90000;
   }
-  return 1000 + h;
+  return 10000 + h;
 }
 
 

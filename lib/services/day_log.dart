@@ -55,6 +55,8 @@ class DayLog with WidgetsBindingObserver {
     } catch (_) {
       _pending = {};
     }
+    final inv = p.getString('invitedBy');
+    if (inv != null && p.getBool('invitedSent') != true) _pending['ref'] = inv;
     _dirty = _pending.isNotEmpty;
     WidgetsBinding.instance.addObserver(this);
     _hour();
@@ -123,6 +125,17 @@ class DayLog with WidgetsBindingObserver {
     _put('hr', h, 1);
   }
 
+  /// Opened from a follower's invite link («#/i/12345»): counted once per phone.
+  Future<void> invitedBy(String no) async {
+    final p = await SharedPreferences.getInstance();
+    if (p.getString('invitedBy') != null || int.tryParse(no) == null) return;
+    await p.setString('invitedBy', no);
+    _roll();
+    _pending['ref'] = no;
+    _dirty = true;
+    _save();
+  }
+
   void view(String answerId) => _put('v', answerId, 1);
   void answer(String qid, int choice, bool ok) => _put('a', qid, [choice, ok]);
   void vote(String answerId, bool helpful) => _put('hv', answerId, helpful);
@@ -147,6 +160,7 @@ class DayLog with WidgetsBindingObserver {
     _save();
     final ok = await _write(_day, sent, _minutes);
     if (ok) {
+      if (sent.containsKey('ref')) _p?.setBool('invitedSent', true);
       _sentMin = _minutes;
       _p?.setInt('dayLogSentMin', _minutes);
     } else {
@@ -154,6 +168,8 @@ class DayLog with WidgetsBindingObserver {
       for (final e in sent.entries) {
         if (e.value is Map) {
           _pending[e.key] = {...(e.value as Map), ...((_pending[e.key] as Map?) ?? {})};
+        } else if (e.key == 'ref') {
+          _pending['ref'] = e.value;
         } else if (e.key == 'sh') {
           _pending['sh'] = ((_pending['sh'] as num?)?.toInt() ?? 0) + ((e.value as num?)?.toInt() ?? 0);
         }

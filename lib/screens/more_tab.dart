@@ -25,6 +25,7 @@ import 'review_screen.dart';
 import 'quiz_screens.dart';
 import 'prayer_screen.dart';
 import 'tools_screens.dart';
+import 'profile_screen.dart';
 import '../widgets/sky_card.dart';
 import '../services/cloud.dart';
 
@@ -42,6 +43,15 @@ class MoreTab extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 8),
           children: [
             _ReaderStats(count: repo.readThisMonth),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 6, 12, 2),
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(46), side: const BorderSide(color: kGold)),
+                icon: const Icon(Icons.dashboard_outlined, color: kGold),
+                label: const Text('لوحتي: نقاطي وأوسمتي وملفي', style: TextStyle(fontWeight: FontWeight.bold)),
+                onPressed: () => openDashboard(context),
+              ),
+            ),
             _BigCard(
               icon: Icons.auto_stories_outlined,
               title: 'المصحف',

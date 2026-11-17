@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'cloud.dart';
 import 'ai.dart';
 import 'day_log.dart';
+import 'progress.dart';
 import 'site_files.dart';
 
 /// One category of questions (a button in «الأسئلة»), named by the sheikh.
@@ -195,7 +196,8 @@ class LeaderRow {
   final String name;
   final int score;
   final bool me;
-  LeaderRow(this.name, this.score, this.me);
+  final int answered, no;
+  LeaderRow(this.name, this.score, this.me, {this.answered = 0, this.no = 0});
 }
 
 /// Everything about «الأسئلة»: questions, categories, the reader's answers
@@ -227,7 +229,7 @@ class Quiz extends ChangeNotifier {
   final Map<String, (int, int)> stats = {}; // qid -> (answered, right)
   final Map<String, List<int>> choiceStats = {}; // qid -> how many picked each choice
   String nick = '';
-  bool showName = true;
+  bool showName = false; // «أضف اسمي»: off until the reader chooses
   bool timer = false;
   bool kidsMode = false;
   int streak = 0;
@@ -356,7 +358,7 @@ class Quiz extends ChangeNotifier {
       ..clear()
       ..addAll(p.getStringList('quizSaved') ?? const []);
     nick = p.getString('quizNick') ?? '';
-    showName = p.getBool('quizShowName') ?? true;
+    showName = p.getBool('quizShowName') ?? false;
     timer = p.getBool('quizTimer') ?? false;
     kidsMode = p.getBool('quizKids') ?? false;
     streak = p.getInt('quizStreak') ?? 0;
@@ -545,8 +547,14 @@ class Quiz extends ChangeNotifier {
   /// Sends the reader's quiz record (score, name, and his answers as one map)
   /// in one write, only when something changed. Called by DayLog.
   Future<void> flushProfile() async {
-    if (!_profileDirty) return;
+    // Also once a day (points, badges, readings for the public profile).
+    final p = await SharedPreferences.getInstance();
+    final d = DateTime.now();
+    final today = '${d.year}-${d.month}-${d.day}';
+    if (!_profileDirty && p.getString('profileDay') == today) return;
+    if (Cloud.instance.user == null) return;
     _profileDirty = false;
+    await p.setString('profileDay', today);
     await _pushProfile();
   }
 
@@ -572,6 +580,8 @@ class Quiz extends ChangeNotifier {
         'month': month,
         'monthScore': m,
         'streak': streak,
+        'no': askerNo(u.uid),
+        ...Progress.public,
         'm': {for (final e in marks.entries) e.key: [e.value.choice, e.value.ok, e.value.at.millisecondsSinceEpoch]},
       }, SetOptions(merge: true));
     } catch (_) {}
@@ -604,23 +614,21 @@ class Quiz extends ChangeNotifier {
   }
 
   /// period: 'week', 'month' or 'all'.
+  /// The boards come from the site file the server makes four times a day
+  /// (no Firestore reads): 'all', 'month', or 'friday' (last Friday's winners).
+  /// A name shows only for those who chose «أضف اسمي»; others by number.
   Future<List<LeaderRow>> leaders(String period) async {
-    final field = period == 'week' ? 'weekScore' : period == 'month' ? 'monthScore' : 'score';
-    final key = period == 'week' ? weekKey() : period == 'month' ? monthKey() : '';
-    final me = Cloud.instance.user?.uid;
-    final q = await _db.collection('quizUsers').orderBy(field, descending: true).limit(150).get();
-    final out = <LeaderRow>[];
-    for (final d in q.docs) {
-      final m = d.data();
-      if (period == 'week' && m['week'] != key) continue;
-      if (period == 'month' && m['month'] != key) continue;
-      final s = (m[field] as num?)?.toInt() ?? 0;
-      if (s <= 0) continue;
-      final name = m['showName'] == false ? 'مشارك' : '${m['nick'] ?? 'طالب علم'}';
-      out.add(LeaderRow(name, s, d.id == me));
-      if (out.length >= 50) break;
+    if (period == 'friday') {
+      final w = await fridayWinners();
+      return [for (final n in w.$2) LeaderRow(n, 0, false)];
     }
-    return out;
+    final m = await SiteFiles.get('leaders.json');
+    final me = Cloud.instance.user == null ? -1 : askerNo(Cloud.instance.user!.uid);
+    return [
+      for (final r in (m?[period] as List? ?? const []))
+        LeaderRow('${(r as Map)['label']}', (r['score'] as num?)?.toInt() ?? 0, (r['no'] as num?)?.toInt() == me,
+            answered: (r['answered'] as num?)?.toInt() ?? 0, no: (r['no'] as num?)?.toInt() ?? 0),
+    ];
   }
 
   // ------------------------------------------------------------ suggestions

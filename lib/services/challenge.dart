@@ -11,38 +11,53 @@ import 'site_files.dart';
 /// One player inside a challenge.
 class ChPlayer {
   final String uid, name;
-  final int score, done;
+  final int score, right, wrong, ms;
   final bool finished;
-  ChPlayer(this.uid, this.name, this.score, this.done, this.finished);
+  ChPlayer(this.uid, this.name, this.score, this.right, this.wrong, this.ms, this.finished);
+  int get done => right + wrong;
 }
 
-/// A challenge between two people, or a group, on the same questions.
-/// Everyone answers at his own pace; the board updates live for all.
-/// There is no messaging between players: names and scores only.
+/// A challenge room: two people or a group, on the same questions.
+/// Lobby (up to two minutes) → everyone plays at once, 15 seconds a
+/// question, nothing sent until each one finishes → the ranking at the end.
+/// No messaging between players: names (or numbers) and results only.
 class Challenge {
   final String code, host, hostName, mode; // duel | group
   final List<String> qids;
   final int secs;
-  final String status; // open | done
+  final String status; // lobby | play | done
   final List<ChPlayer> players;
   final DateTime? at;
-  Challenge(this.code, this.host, this.hostName, this.mode, this.qids, this.secs, this.status, this.players, this.at);
+  final int lobbyUntil, startAt; // ms
+  final String rematch, rematchBy;
+  Challenge(this.code, this.host, this.hostName, this.mode, this.qids, this.secs, this.status, this.players, this.at,
+      this.lobbyUntil, this.startAt, this.rematch, this.rematchBy);
 
   int get max => mode == 'duel' ? 2 : 30;
   bool get allFinished => players.isNotEmpty && players.every((p) => p.finished);
+  int get now => DateTime.now().millisecondsSinceEpoch;
+  bool get inLobby => status == 'lobby' && now < lobbyUntil;
+  bool get playing => !over && (status == 'play' || (status == 'lobby' && now >= lobbyUntil));
+  int get playStart => startAt > 0 ? startAt : lobbyUntil;
+  /// The last moment anyone can still be answering.
+  int get deadline => playStart + qids.length * secs * 1000 + 45000;
 
-  /// Over when everyone finished, the host closed it, or a day has passed.
   bool get over =>
-      status == 'done' || (allFinished && players.length >= 2) || (at != null && DateTime.now().difference(at!).inHours >= 24);
+      status == 'done' ||
+      (allFinished && players.length >= 2) ||
+      (status != 'lobby' || now >= lobbyUntil) && now > deadline ||
+      (at != null && DateTime.now().difference(at!).inHours >= 24);
 
-  List<ChPlayer> get ranked => [...players]..sort((a, b) => b.score != a.score ? b.score.compareTo(a.score) : b.done.compareTo(a.done));
+  /// Higher score first; same score: who finished faster.
+  List<ChPlayer> get ranked => [...players]
+    ..sort((a, b) => b.score != a.score ? b.score.compareTo(a.score) : (a.ms == 0 ? 1 << 30 : a.ms).compareTo(b.ms == 0 ? 1 << 30 : b.ms));
 
   factory Challenge.from(String code, Map<String, dynamic> m) {
     final ps = <ChPlayer>[];
     for (final e in ((m['players'] ?? {}) as Map).entries) {
       final p = e.value as Map;
-      ps.add(ChPlayer('${e.key}', '${p['name'] ?? ''}', (p['score'] as num?)?.toInt() ?? 0,
-          (p['done'] as num?)?.toInt() ?? 0, p['finished'] == true));
+      int n(String k) => (p[k] as num?)?.toInt() ?? 0;
+      ps.add(ChPlayer('${e.key}', '${p['name'] ?? ''}', n('score'), n('right'), n('wrong'), n('ms'), p['finished'] == true));
     }
     return Challenge(
       code,
@@ -50,10 +65,14 @@ class Challenge {
       '${m['hostName'] ?? ''}',
       '${m['mode'] ?? 'duel'}',
       [for (final q in (m['qids'] as List? ?? const [])) '$q'],
-      (m['secs'] as num?)?.toInt() ?? 0,
-      '${m['status'] ?? 'open'}',
+      (m['secs'] as num?)?.toInt() ?? 15,
+      '${m['status'] ?? 'lobby'}',
       ps,
       m['at'] is Timestamp ? (m['at'] as Timestamp).toDate() : null,
+      (m['lobbyUntil'] as num?)?.toInt() ?? 0,
+      (m['startAt'] as num?)?.toInt() ?? 0,
+      '${m['rematch'] ?? ''}',
+      '${m['rematchBy'] ?? ''}',
     );
   }
 }
@@ -150,7 +169,7 @@ class Challenges extends ChangeNotifier {
     return [...fresh, ...seen].take(count).map((q) => q.id).toList();
   }
 
-  Future<(String?, String?)> create({required String mode, String cat = '', int level = 0, int count = 5, int secs = 30}) async {
+  Future<(String?, String?)> create({required String mode, String cat = '', int level = 0, int count = 5, int secs = 15}) async {
     final u = Cloud.instance.user;
     if (u == null) return (null, 'سجّل الدخول أولاً لتبدأ تحدّياً.');
     final qids = pick(cat: cat, level: level, count: count);
@@ -169,11 +188,14 @@ class Challenges extends ChangeNotifier {
             'hostName': _name,
             'mode': mode,
             'qids': qids,
-            'secs': secs,
-            'status': 'open',
+            'secs': 15,
+            'status': 'lobby',
+            'cat': cat,
+            'level': level,
+            'lobbyUntil': DateTime.now().millisecondsSinceEpoch + 120000,
             'at': FieldValue.serverTimestamp(),
             'players': {
-              u.uid: {'name': _name, 'score': 0, 'done': 0, 'finished': false}
+              u.uid: {'name': _name, 'score': 0, 'right': 0, 'wrong': 0, 'ms': 0, 'finished': false}
             },
           });
           return true;
@@ -198,10 +220,11 @@ class Challenges extends ChangeNotifier {
     final c = Challenge.from(snap.id, snap.data()!);
     if (c.players.any((p) => p.uid == u.uid)) return null; // already inside
     if (c.over) return 'انتهى هذا التحدّي.';
+    if (!c.inLobby) return 'بدأ هذا التحدّي، فلا يمكن الدخول الآن.';
     if (c.players.length >= c.max) return 'التحدّي ممتلئ.';
     if (!await _spend()) return 'انتهت تحدّياتك اليوم. اطلب من الشيخ تحدّيات إضافية.';
     await ref.update({
-      'players.${u.uid}': {'name': _name, 'score': 0, 'done': 0, 'finished': false}
+      'players.${u.uid}': {'name': _name, 'score': 0, 'right': 0, 'wrong': 0, 'ms': 0, 'finished': false}
     });
     await _remember(code.trim());
     return null;
@@ -212,18 +235,39 @@ class Challenges extends ChangeNotifier {
       .snapshots()
       .map((s) => s.exists ? Challenge.from(s.id, s.data()!) : null);
 
-  /// Records one answer of the reader in the challenge.
-  Future<void> answer(Challenge c, int index, bool ok, int secondsLeft) async {
+  /// The host starts before the two minutes are up.
+  Future<void> startNow(Challenge c) => _db
+      .doc('challenges/${c.code}')
+      .update({'status': 'play', 'startAt': DateTime.now().millisecondsSinceEpoch});
+
+  /// Sends the reader's result once, at the end (one write for the game).
+  Future<void> finish(Challenge c, {required int right, required int wrong, required int score, required int ms}) async {
     final u = Cloud.instance.user;
     if (u == null) return;
-    final me = c.players.firstWhere((p) => p.uid == u.uid, orElse: () => ChPlayer(u.uid, _name, 0, 0, false));
-    final gain = ok ? 10 + (c.secs > 0 ? math.max(0, secondsLeft) ~/ 3 : 0) : 0;
-    final done = index + 1;
-    await _db.doc('challenges/${c.code}').update({
-      'players.${u.uid}.score': me.score + gain,
-      'players.${u.uid}.done': done,
-      'players.${u.uid}.finished': done >= c.qids.length,
-    });
+    try {
+      await _db.doc('challenges/${c.code}').update({
+        'players.${u.uid}.score': score,
+        'players.${u.uid}.right': right,
+        'players.${u.uid}.wrong': wrong,
+        'players.${u.uid}.ms': ms,
+        'players.${u.uid}.finished': true,
+        if (c.status == 'lobby') 'status': 'play',
+      });
+    } catch (_) {}
+  }
+
+  /// «إعادة»: a new room with the same kind of questions; the others see a
+  /// button to join it (each one spends one of his challenges).
+  Future<(String?, String?)> rematch(Challenge c) async {
+    final m = (await _db.doc('challenges/${c.code}').get()).data() ?? {};
+    final r = await create(
+        mode: c.mode, cat: '${m['cat'] ?? ''}', level: (m['level'] as num?)?.toInt() ?? 0, count: c.qids.length);
+    if (r.$1 != null) {
+      try {
+        await _db.doc('challenges/${c.code}').update({'rematch': r.$1, 'rematchBy': _name});
+      } catch (_) {}
+    }
+    return r;
   }
 
   Future<void> close(Challenge c) => _db.doc('challenges/${c.code}').update({'status': 'done'});

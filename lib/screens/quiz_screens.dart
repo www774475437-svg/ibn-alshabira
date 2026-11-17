@@ -10,6 +10,7 @@ import 'package:share_plus/share_plus.dart';
 import '../data/repository.dart';
 import '../services/cloud.dart';
 import 'challenge_screens.dart';
+import 'profile_screen.dart';
 import '../services/quiz.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
@@ -1310,8 +1311,8 @@ class _NickEditorState extends State<_NickEditor> {
       ]),
       SwitchListTile(
         contentPadding: EdgeInsets.zero,
-        title: const Text('أظهر اسمي في المتصدرين'),
-        subtitle: const Text('إن أطفأته يظهر «مشارك» بدل اسمك'),
+        title: const Text('أضف اسمي'),
+        subtitle: const Text('يظهر اسمك للناس في المتصدّرين وملفك؛ وإن أطفأته يظهر رقمك فقط'),
         value: quiz.showName,
         onChanged: (v) => quiz.setProfile(showName: v),
       ),
@@ -1331,9 +1332,9 @@ class LeaderboardScreen extends StatelessWidget {
         child: Scaffold(
           appBar: AppBar(
             title: const Text('المتصدرون'),
-            bottom: const TabBar(tabs: [Tab(text: 'هذا الأسبوع'), Tab(text: 'هذا الشهر'), Tab(text: 'كل الأوقات')]),
+            bottom: const TabBar(tabs: [Tab(text: 'كل الأوقات'), Tab(text: 'هذا الشهر'), Tab(text: 'فائزو الجمعة')]),
           ),
-          body: const TabBarView(children: [_Board('week'), _Board('month'), _Board('all')]),
+          body: const TabBarView(children: [_Board('all'), _Board('month'), _Board('friday')]),
         ),
       );
 }
@@ -1364,7 +1365,11 @@ class _Board extends StatelessWidget {
                   child: Text('${i + 1}', style: TextStyle(color: medal != null ? Colors.white : null)),
                 ),
                 title: Text(l[i].me ? '${l[i].name} (أنت)' : l[i].name),
-                trailing: Text('${l[i].score}',
+                subtitle: l[i].answered > 0 ? Text('أجاب ${l[i].answered} سؤالاً') : null,
+                onTap: l[i].no > 0
+                    ? () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => PublicProfileScreen(no: l[i].no)))
+                    : null,
+                trailing: period == 'friday' ? const Icon(Icons.emoji_events, color: kGold) : Text('${l[i].score}',
                     style: const TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.bold, fontSize: 17)),
               );
             },

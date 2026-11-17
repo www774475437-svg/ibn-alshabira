@@ -110,6 +110,9 @@ def add_day(base, docs):
         for aid, good in (m.get('hv') or {}).items():
             v.setdefault(aid, [0, 0, 0])[1 if good else 2] += 1
         base['shares'] = base.get('shares', 0) + int(m.get('sh') or 0)
+        if m.get('ref'):
+            inv = base.setdefault('invites', {})
+            inv[str(m['ref'])] = inv.get(str(m['ref']), 0) + 1
 
 
 def usage_of(day, docs):
@@ -141,6 +144,24 @@ def first_base():
         elif not vid.startswith('_'):
             base['views'][vid] = [int(m.get('count', 0)), int(m.get('helpful', 0)), int(m.get('notHelpful', 0))]
     return base
+
+
+def top_users(field, n=60):
+    """The quiz records with the highest [field] (public read)."""
+    global READS
+    r = _call(f'{BASE}:runQuery?key={KEY}', {'structuredQuery': {
+        'from': [{'collectionId': 'quizUsers'}],
+        'orderBy': [{'field': {'fieldPath': field}, 'direction': 'DESCENDING'}],
+        'limit': n,
+    }})
+    out = [doc(x['document']) for x in r if 'document' in x]
+    READS += max(1, len(out))
+    return out
+
+
+def label(m):
+    name = (m.get('nick') or '').strip()
+    return name if m.get('showName') is True and name else f"رقم {m.get('no', '')}"
 
 
 def asked_at():
@@ -223,6 +244,18 @@ def main():
     save('views.json', {'at': now.isoformat(), 'v': now_totals['views'],
                         'shares': now_totals.get('shares', 0), 'readers': readers})
     save('usage.json', {'at': now.isoformat(), 'days': state['usage']})
+
+    # Leaderboards: top ten of all time and of this month (name only for
+    # those who chose «أضف اسمي»), and how many each follower invited.
+    month = f'{now.year}-{now.month}'
+    allt = [{'label': label(m), 'score': int(m.get('score', 0)), 'answered': int(m.get('score', 0)) + int(m.get('wrong', 0)),
+             'no': m.get('no', 0)} for _, m in top_users('score') if int(m.get('score', 0)) > 0][:10]
+    mon = [{'label': label(m), 'score': int(m.get('monthScore', 0)), 'answered': int(m.get('monthScore', 0)), 'no': m.get('no', 0)}
+           for _, m in top_users('monthScore') if m.get('month') == month and int(m.get('monthScore', 0)) > 0][:10]
+    invites = dict(base.get('invites', {}))
+    for k, v in now_totals.get('invites', {}).items():
+        invites[k] = max(invites.get(k, 0), v)
+    save('leaders.json', {'at': now.isoformat(), 'all': allt, 'month': mon, 'invites': invites})
     save('stats-state.json', state)
     print(f'{len(qs)} questions, {len(docs)} devices today, about {READS} reads')
 

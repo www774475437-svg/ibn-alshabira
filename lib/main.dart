@@ -17,9 +17,11 @@ import 'services/fresh_posts.dart';
 import 'services/live_feed.dart';
 import 'services/challenge.dart';
 import 'screens/content_screens.dart';
+import 'screens/challenge_screens.dart';
 import 'services/notifications.dart';
 import 'services/prayer.dart';
 import 'services/reminders.dart';
+import 'services/progress.dart';
 import 'theme.dart';
 
 Future<void> main() async {
@@ -44,6 +46,7 @@ Future<void> main() async {
   Future<void>.delayed(const Duration(seconds: 12), () async {
     await Reminders.schedule();
     await Reminders.scheduleLessons();
+    await Progress.load();
     await Prayer.instance.load();
     await Prayer.instance.pushWidget();
   });
@@ -63,6 +66,12 @@ Future<void> main() async {
 /// Routes: "/" home, "/fatwa/<id>" a single fatwa (shareable web link).
 Route<dynamic>? onGenerateRoute(RouteSettings settings) {
   final name = settings.name ?? '/';
+  if (name.startsWith('/i/')) {
+    DayLog.instance.invitedBy(name.substring(3));
+  }
+  if (name.startsWith('/c/')) {
+    return MaterialPageRoute(settings: settings, builder: (_) => ChallengeRoom(code: name.substring(3), autoJoin: true));
+  }
   if (name.startsWith('/s/')) {
     return MaterialPageRoute(settings: settings, builder: (_) => SeriesScreen(seriesId: name.substring(3)));
   }
@@ -111,6 +120,15 @@ class IbnAlshabiraApp extends StatelessWidget {
         onGenerateRoute: onGenerateRoute,
         // A shared link to one fatwa opens it directly, with home underneath.
         onGenerateInitialRoutes: (initial) {
+          if (initial.startsWith('/i/')) DayLog.instance.invitedBy(initial.substring(3));
+          if (initial.startsWith('/c/')) {
+            return [
+              MaterialPageRoute(settings: const RouteSettings(name: '/'), builder: (_) => const HomeShell()),
+              MaterialPageRoute(
+                  settings: RouteSettings(name: initial),
+                  builder: (_) => ChallengeRoom(code: initial.substring(3), autoJoin: true)),
+            ];
+          }
           if (initial.startsWith('/s/')) {
             return [
               MaterialPageRoute(settings: const RouteSettings(name: '/'), builder: (_) => const HomeShell()),

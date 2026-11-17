@@ -4,6 +4,7 @@ import '../widgets/announcement.dart';
 import '../widgets/sky_card.dart';
 import 'prayer_screen.dart';
 import 'tools_screens.dart';
+import 'profile_screen.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -301,6 +302,7 @@ class _HomeTabState extends State<HomeTab> {
           // «الأسئلة»: today's question and a button to the section, after the videos.
           const SliverToBoxAdapter(child: _GroupTitle('الأسئلة', Icons.quiz_outlined)),
           const SliverToBoxAdapter(child: QuizHomeStrip()),
+          const SliverToBoxAdapter(child: LeadersHomeCard()),
           if (repo.channel.isNotEmpty) ...[
             SliverToBoxAdapter(
               child: _SectionTitle('أحدث منشورات القناة',

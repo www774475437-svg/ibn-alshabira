@@ -30,13 +30,13 @@ jobs:
           [ -f media/quiz.json ] || exit 0
           cd media && git status --porcelain | grep -q . || exit 0
           cd ..
-          mkdir out && cp media/quiz.json media/stats.json media/views.json media/usage.json media/stats-state.json out/ && (cp media/friday.json out/ 2>/dev/null || true)
+          mkdir out && cp media/quiz.json media/stats.json media/views.json media/usage.json media/stats-state.json media/leaders.json out/ && (cp media/friday.json out/ 2>/dev/null || true)
           for i in 1 2 3; do
             rm -rf m && git clone --depth 1 --branch media "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" m
             cp out/* m/ && cd m
             git config user.name "stats-bot"
             git config user.email "stats-bot@users.noreply.github.com"
-            git add quiz.json stats.json views.json usage.json stats-state.json $( [ -f friday.json ] && echo friday.json )
+            git add quiz.json stats.json views.json usage.json stats-state.json leaders.json $( [ -f friday.json ] && echo friday.json )
             git diff --cached --quiet && exit 0
             git commit -q -m "Quiz and counts"
             git push origin HEAD:media && exit 0

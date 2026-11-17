@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../config.dart';
 import '../services/challenge.dart';
 import '../services/cloud.dart';
 import '../services/quiz.dart';
@@ -77,14 +78,7 @@ class _ChallengeHomeState extends State<ChallengeHome> {
                   ChoiceChip(label: Text('$n'), selected: count == n, onSelected: (_) => set(() => count = n)),
               ]),
               const SizedBox(height: 10),
-              const Text('الوقت لكل سؤال:', style: TextStyle(fontWeight: FontWeight.bold)),
-              Wrap(spacing: 6, children: [
-                for (final s in const [15, 30, 60, 0])
-                  ChoiceChip(
-                      label: Text(s == 0 ? 'بلا وقت' : '$s ثانية'),
-                      selected: secs == s,
-                      onSelected: (_) => set(() => secs = s)),
-              ]),
+              const Text('لكل سؤال 15 ثانية، ويبدأ الجميع معاً.', style: TextStyle(color: Colors.grey)),
               const SizedBox(height: 16),
               FilledButton.icon(
                 style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
@@ -310,16 +304,42 @@ class _ChallengeHomeState extends State<ChallengeHome> {
 }
 
 // ====================================================================== room
+/// The room: lobby (who joined) → playing → the ranking at the end.
 class ChallengeRoom extends StatefulWidget {
   final String code;
-  const ChallengeRoom({super.key, required this.code});
+  final bool autoJoin;
+  const ChallengeRoom({super.key, required this.code, this.autoJoin = false});
 
   @override
   State<ChallengeRoom> createState() => _ChallengeRoomState();
 }
 
 class _ChallengeRoomState extends State<ChallengeRoom> {
-  bool _counted = false;
+  bool _counted = false, _playing = false, _joinTried = false;
+  Timer? _tick;
+
+  @override
+  void initState() {
+    super.initState();
+    _tick = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    super.dispose();
+  }
+
+  String get _link => '${AppConfig.siteUrl}#/c/${widget.code}';
+
+  Future<void> _play(Challenge c) async {
+    if (_playing) return;
+    _playing = true;
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => ChallengePlay(c: c)));
+    _playing = false;
+  }
 
   @override
   Widget build(BuildContext context) => StreamBuilder<Challenge?>(
@@ -337,120 +357,196 @@ class _ChallengeRoomState extends State<ChallengeRoom> {
           }
           final uid = Cloud.instance.user?.uid;
           final me = c.players.where((p) => p.uid == uid).firstOrNull;
+          // Opened from a link: join once.
+          if (me == null && widget.autoJoin && !_joinTried && uid != null && c.inLobby) {
+            _joinTried = true;
+            Challenges.instance.join(c.code).then((err) {
+              if (err != null && mounted) _say(context, err, ok: false);
+            });
+          }
+          // The game starts for everyone together.
+          if (me != null && !me.finished && c.playing && !_playing) {
+            WidgetsBinding.instance.addPostFrameCallback((_) => _play(c));
+          }
           if (c.over && !_counted) {
             _counted = true;
             Challenges.instance.countResult(c);
           }
-          final ranked = c.ranked;
           return Scaffold(
             appBar: AppBar(title: Text(c.mode == 'duel' ? 'تحدٍّ فردي' : 'تحدٍّ جماعي')),
             body: ListView(padding: const EdgeInsets.all(14), children: [
-              Card(
-                margin: EdgeInsets.zero,
-                child: Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Column(children: [
-                    const Text('رمز التحدّي', style: TextStyle(color: Colors.grey)),
-                    SelectableText(c.code,
-                        style: const TextStyle(fontFamily: 'Tajawal', fontSize: 38, fontWeight: FontWeight.bold, letterSpacing: 6)),
-                    Text('${c.qids.length} أسئلة · ${c.secs == 0 ? 'بلا وقت' : '${c.secs} ثانية لكل سؤال'} · ${c.players.length}/${c.max}',
-                        style: const TextStyle(color: Colors.grey)),
-                    if (!c.over) ...[
-                      const SizedBox(height: 8),
-                      Row(children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            icon: const Icon(Icons.copy),
-                            label: const Text('نسخ الرمز'),
-                            onPressed: () {
-                              Clipboard.setData(ClipboardData(text: c.code));
-                              _say(context, 'تم النسخ');
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: FilledButton.icon(
-                            icon: const Icon(Icons.share),
-                            label: const Text('ادعُ صديقاً'),
-                            onPressed: () => Share.share(
-                                '${c.hostName} يتحدّاك في أسئلة تطبيق «ابن الشابرة» ⚡\n'
-                                'افتح التطبيق ← الأسئلة ← التحدّيات، واكتب الرمز: ${c.code}\n'
-                                'https://ibnalshabira.com'),
-                          ),
-                        ),
-                      ]),
-                    ],
-                  ]),
-                ),
-              ),
-              const SizedBox(height: 12),
-              if (me != null && !me.finished && !c.over)
-                FilledButton.icon(
-                  style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(56)),
-                  icon: const Icon(Icons.play_arrow_rounded),
-                  label: Text(me.done == 0 ? 'ابدأ الإجابة' : 'أكمل (${me.done} من ${c.qids.length})'),
-                  onPressed: () =>
-                      Navigator.of(context).push(MaterialPageRoute(builder: (_) => ChallengePlay(c: c, start: me.done))),
-                ),
-              if (c.over)
-                Card(
-                  color: const Color(0xFF2E7D32),
-                  child: ListTile(
-                    leading: const Icon(Icons.emoji_events, color: kGold, size: 36),
-                    title: Text(
-                        ranked.length > 1 && ranked[0].score == ranked[1].score ? 'تعادل!' : 'الفائز: ${ranked.first.name}',
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
-                    subtitle: const Text('انتهى التحدّي', style: TextStyle(color: Colors.white70)),
-                  ),
-                ),
-              const SizedBox(height: 8),
-              const Text('الترتيب مباشرة', style: TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.bold, fontSize: 16)),
-              for (var i = 0; i < ranked.length; i++)
-                ListTile(
-                  tileColor: ranked[i].uid == uid ? kGold.withValues(alpha: .12) : null,
-                  leading: CircleAvatar(
-                    backgroundColor: i == 0 ? kGold : Colors.grey.withValues(alpha: .25),
-                    child: Text('${i + 1}', style: TextStyle(color: i == 0 ? Colors.white : null)),
-                  ),
-                  title: Text(ranked[i].uid == uid ? '${ranked[i].name} (أنت)' : ranked[i].name),
-                  subtitle: Text(ranked[i].finished ? 'أنهى' : 'أجاب ${ranked[i].done} من ${c.qids.length}'),
-                  trailing: Text('${ranked[i].score}',
-                      style: const TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.bold, fontSize: 20)),
-                ),
-              if (c.players.length < 2 && !c.over)
-                const Padding(
-                  padding: EdgeInsets.all(12),
-                  child: Text('أرسل الرمز لصديقك ليدخل. تستطيع أن تبدأ الآن، ويجيب هو متى دخل خلال يوم.',
-                      textAlign: TextAlign.center, style: TextStyle(color: Colors.grey, height: 1.7)),
-                ),
-              if (c.host == uid && !c.over && c.players.length >= 2)
-                TextButton(
-                  onPressed: () => Challenges.instance.close(c),
-                  child: const Text('إنهاء التحدّي الآن'),
-                ),
+              if (c.inLobby) ..._lobby(c, me, uid) else if (!c.over) ..._waiting(c, me) else ..._results(c, uid),
             ]),
           );
         },
       );
+
+  List<Widget> _lobby(Challenge c, ChPlayer? me, String? uid) {
+    final left = ((c.lobbyUntil - c.now) / 1000).ceil().clamp(0, 120);
+    return [
+      Card(
+        margin: EdgeInsets.zero,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(children: [
+            const Text('رقم الغرفة', style: TextStyle(color: Colors.grey)),
+            SelectableText(c.code,
+                style: const TextStyle(fontFamily: 'Tajawal', fontSize: 38, fontWeight: FontWeight.bold, letterSpacing: 6)),
+            Text('${c.qids.length} أسئلة · 15 ثانية لكل سؤال · ${c.players.length}/${c.max}',
+                style: const TextStyle(color: Colors.grey)),
+            const SizedBox(height: 8),
+            Text('يبدأ بعد ${left ~/ 60}:${(left % 60).toString().padLeft(2, '0')}',
+                style: const TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.bold, fontSize: 18, color: kGold)),
+            const SizedBox(height: 8),
+            Row(children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.copy),
+                  label: const Text('نسخ الرابط'),
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: _link));
+                    _say(context, 'تم النسخ');
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: FilledButton.icon(
+                  icon: const Icon(Icons.share),
+                  label: const Text('ادعُ'),
+                  onPressed: () => Share.share('${c.hostName} يتحدّاك في أسئلة تطبيق «ابن الشابرة» ⚡\n'
+                      'ادخل الغرفة من هذا الرابط خلال دقيقتين:\n$_link\n(رقم الغرفة: ${c.code})'),
+                ),
+              ),
+            ]),
+          ]),
+        ),
+      ),
+      const SizedBox(height: 12),
+      Text('في الغرفة (${c.players.length})', style: const TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.bold, fontSize: 16)),
+      for (final p in c.players)
+        ListTile(
+          leading: Icon(p.uid == c.host ? Icons.star : Icons.person, color: kGold),
+          title: Text(p.uid == uid ? '${p.name} (أنت)' : p.name),
+        ),
+      if (me == null)
+        FilledButton(
+          onPressed: () async {
+            final err = await Challenges.instance.join(c.code);
+            if (err != null && mounted) _say(context, err, ok: false);
+          },
+          child: const Text('ادخل الغرفة'),
+        ),
+      if (c.host == uid && c.players.length >= 2)
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: FilledButton.icon(
+            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+            icon: const Icon(Icons.play_arrow_rounded),
+            label: const Text('ابدأ الآن'),
+            onPressed: () => Challenges.instance.startNow(c),
+          ),
+        ),
+    ];
+  }
+
+  List<Widget> _waiting(Challenge c, ChPlayer? me) {
+    final done = c.players.where((p) => p.finished).length;
+    return [
+      const SizedBox(height: 40),
+      const Icon(Icons.hourglass_top, size: 54, color: kGold),
+      const SizedBox(height: 10),
+      Text(me?.finished == true ? 'انتظر حتى ينتهي الآخرون' : 'التحدّي جارٍ',
+          textAlign: TextAlign.center, style: const TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.bold, fontSize: 20)),
+      const SizedBox(height: 6),
+      Text('أنهى $done من ${c.players.length}', textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey)),
+      if (me != null && !me.finished)
+        Padding(
+          padding: const EdgeInsets.only(top: 16),
+          child: FilledButton(onPressed: () => _play(c), child: const Text('أكمل الإجابة')),
+        ),
+    ];
+  }
+
+  List<Widget> _results(Challenge c, String? uid) {
+    final r = c.ranked;
+    final draw = r.length > 1 && r[0].score == r[1].score && r[0].ms == r[1].ms;
+    return [
+      Card(
+        color: const Color(0xFF2E7D32),
+        margin: EdgeInsets.zero,
+        child: ListTile(
+          leading: const Icon(Icons.emoji_events, color: kGold, size: 36),
+          title: Text(draw || r.isEmpty ? 'تعادل!' : 'الفائز: ${r.first.name}',
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+          subtitle: const Text('انتهى التحدّي', style: TextStyle(color: Colors.white70)),
+        ),
+      ),
+      const SizedBox(height: 8),
+      for (var i = 0; i < r.length; i++)
+        ListTile(
+          tileColor: r[i].uid == uid ? kGold.withValues(alpha: .12) : null,
+          leading: CircleAvatar(
+            backgroundColor: i == 0 ? kGold : Colors.grey.withValues(alpha: .25),
+            child: Text('${i + 1}', style: TextStyle(color: i == 0 ? Colors.white : null)),
+          ),
+          title: Text(r[i].uid == uid ? '${r[i].name} (أنت)' : r[i].name),
+          subtitle: Text(r[i].finished
+              ? 'صحيح ${r[i].right} · خطأ ${r[i].wrong} · ${(r[i].ms / 1000).toStringAsFixed(1)} ث'
+              : 'لم يُكمل'),
+          trailing: Text('${r[i].score}', style: const TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.bold, fontSize: 20)),
+        ),
+      const SizedBox(height: 10),
+      if (c.rematch.isNotEmpty)
+        FilledButton.icon(
+          icon: const Icon(Icons.replay),
+          label: Text('${c.rematchBy} يطلب إعادة — ادخل'),
+          onPressed: () async {
+            final err = await Challenges.instance.join(c.rematch);
+            if (!mounted) return;
+            if (err != null) {
+              _say(context, err, ok: false);
+              return;
+            }
+            Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => ChallengeRoom(code: c.rematch)));
+          },
+        )
+      else if (c.players.any((p) => p.uid == uid))
+        OutlinedButton.icon(
+          icon: const Icon(Icons.replay),
+          label: const Text('إعادة (تحدٍّ جديد بنفس الطريقة)'),
+          onPressed: () async {
+            final (code, err) = await Challenges.instance.rematch(c);
+            if (!mounted) return;
+            if (err != null) {
+              _say(context, err, ok: false);
+              return;
+            }
+            Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => ChallengeRoom(code: code!)));
+          },
+        ),
+    ];
+  }
 }
 
 // ====================================================================== play
+/// Plays the questions on the phone: 15 seconds each, nothing sent until
+/// the end, then one write with the result.
 class ChallengePlay extends StatefulWidget {
   final Challenge c;
-  final int start;
-  const ChallengePlay({super.key, required this.c, this.start = 0});
+  const ChallengePlay({super.key, required this.c});
 
   @override
   State<ChallengePlay> createState() => _ChallengePlayState();
 }
 
 class _ChallengePlayState extends State<ChallengePlay> {
-  late int _i = widget.start;
+  int _i = 0, _right = 0, _wrong = 0, _score = 0;
   int? _picked;
   Timer? _t;
-  int _left = 0;
-  bool _sending = false;
+  int _left = 15;
+  final _clock = Stopwatch()..start();
+  bool _done = false;
   Challenge get c => widget.c;
 
   QuizQ? get _q => _i < c.qids.length ? Quiz.instance.all.where((q) => q.id == c.qids[_i]).firstOrNull : null;
@@ -464,13 +560,13 @@ class _ChallengePlayState extends State<ChallengePlay> {
   @override
   void dispose() {
     _t?.cancel();
+    if (!_done) _send();
     super.dispose();
   }
 
   void _startTimer() {
     _t?.cancel();
-    _left = c.secs;
-    if (c.secs == 0) return;
+    _left = c.secs > 0 ? c.secs : 15;
     _t = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted) return;
       setState(() => _left--);
@@ -481,29 +577,37 @@ class _ChallengePlayState extends State<ChallengePlay> {
     });
   }
 
+  Future<void> _send() async {
+    _done = true;
+    final unanswered = c.qids.length - _right - _wrong;
+    await Challenges.instance.finish(c, right: _right, wrong: _wrong + unanswered, score: _score, ms: _clock.elapsedMilliseconds);
+  }
+
   Future<void> _pick(int i) async {
     final q = _q;
-    if (q == null || _picked != null || _sending) return;
+    if (_picked != null) return;
     _t?.cancel();
-    final ok = i >= 0 && q.rightSet.contains(i) && !q.multi;
-    setState(() {
-      _picked = i;
-      _sending = true;
-    });
-    HapticFeedback.mediumImpact();
-    await Challenges.instance.answer(c, _i, ok, _left);
+    final ok = q != null && i >= 0 && q.rightSet.contains(i) && !q.multi;
+    setState(() => _picked = i);
+    if (ok) {
+      _right++;
+      _score += 10 + _left ~/ 3;
+    } else {
+      _wrong++;
+    }
+    HapticFeedback.selectionClick();
     // The first time a reader meets a question counts in his record too.
-    if (!Quiz.instance.marks.containsKey(q.id)) await Quiz.instance.answer(q, ok: ok, choice: i);
-    await Future<void>.delayed(const Duration(milliseconds: 1300));
+    if (q != null && !Quiz.instance.marks.containsKey(q.id)) await Quiz.instance.answer(q, ok: ok, choice: i);
+    await Future<void>.delayed(const Duration(milliseconds: 600));
     if (!mounted) return;
     if (_i + 1 >= c.qids.length) {
-      Navigator.pop(context);
+      await _send();
+      if (mounted) Navigator.pop(context);
       return;
     }
     setState(() {
       _i++;
       _picked = null;
-      _sending = false;
     });
     _startTimer();
   }
@@ -511,73 +615,56 @@ class _ChallengePlayState extends State<ChallengePlay> {
   @override
   Widget build(BuildContext context) {
     final q = _q;
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('سؤال ${_i + 1} من ${c.qids.length}'),
-        actions: [
-          if (c.secs > 0)
+    return PopScope(
+      canPop: false,
+      child: Scaffold(
+        appBar: AppBar(
+          automaticallyImplyLeading: false,
+          title: Text('سؤال ${_i + 1} من ${c.qids.length}'),
+          actions: [
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Center(
                 child: Text('$_left ث',
-                    style: TextStyle(
-                        fontFamily: 'Tajawal',
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: _left <= 5 ? Colors.red : null)),
+                    style: TextStyle(fontFamily: 'Tajawal', fontSize: 20, fontWeight: FontWeight.bold, color: _left <= 5 ? Colors.red : null)),
               ),
             ),
-        ],
-      ),
-      body: q == null
-          ? Center(
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                const Text('هذا السؤال لم يعد متاحاً.'),
-                TextButton(onPressed: () => _pick(-1), child: const Text('التالي')),
-              ]),
-            )
-          : ListView(padding: const EdgeInsets.all(14), children: [
-              LinearProgressIndicator(value: (_i + 1) / c.qids.length, color: kGold),
-              const SizedBox(height: 14),
-              Text(q.text,
-                  style: const TextStyle(fontFamily: 'Tajawal', fontSize: 20, fontWeight: FontWeight.bold, height: 1.7)),
-              if (q.quote.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(q.quote,
-                      textAlign: TextAlign.center, style: const TextStyle(fontFamily: 'Amiri', fontSize: 18, height: 1.9)),
-                ),
-              const SizedBox(height: 14),
-              for (var i = 0; i < (q.type == QuizType.trueFalse ? 2 : q.choices.length); i++)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Material(
-                    color: _picked == null
-                        ? Theme.of(context).colorScheme.surface
-                        : q.rightSet.contains(i)
-                            ? const Color(0xFF2E7D32).withValues(alpha: .15)
-                            : i == _picked
-                                ? const Color(0xFFC62828).withValues(alpha: .15)
-                                : Theme.of(context).colorScheme.surface,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      side: BorderSide(
-                          color: _picked != null && q.rightSet.contains(i)
-                              ? const Color(0xFF2E7D32)
-                              : Colors.grey.withValues(alpha: .4)),
-                    ),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(14),
-                      onTap: _picked == null ? () => _pick(i) : null,
-                      child: Padding(
-                        padding: const EdgeInsets.all(14),
-                        child: Text(q.type == QuizType.trueFalse ? (i == 0 ? 'صح' : 'خطأ') : q.choices[i],
-                            style: const TextStyle(fontSize: 16, height: 1.6)),
+          ],
+        ),
+        body: q == null
+            ? Center(child: TextButton(onPressed: () => _pick(-1), child: const Text('التالي')))
+            : ListView(padding: const EdgeInsets.all(14), children: [
+                LinearProgressIndicator(value: _left / (c.secs > 0 ? c.secs : 15), color: _left <= 5 ? Colors.red : kGold),
+                const SizedBox(height: 14),
+                Text(q.text, style: const TextStyle(fontFamily: 'Tajawal', fontSize: 20, fontWeight: FontWeight.bold, height: 1.7)),
+                if (q.quote.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(q.quote,
+                        textAlign: TextAlign.center, style: const TextStyle(fontFamily: 'Amiri', fontSize: 18, height: 1.9)),
+                  ),
+                const SizedBox(height: 14),
+                // No right/wrong colours during the game: results at the end only.
+                for (var i = 0; i < (q.type == QuizType.trueFalse ? 2 : q.choices.length); i++)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Material(
+                      color: i == _picked ? kGold.withValues(alpha: .25) : Theme.of(context).colorScheme.surface,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14), side: BorderSide(color: Colors.grey.withValues(alpha: .4))),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(14),
+                        onTap: _picked == null ? () => _pick(i) : null,
+                        child: Padding(
+                          padding: const EdgeInsets.all(14),
+                          child: Text(q.type == QuizType.trueFalse ? (i == 0 ? 'صح' : 'خطأ') : q.choices[i],
+                              style: const TextStyle(fontSize: 16, height: 1.6)),
+                        ),
                       ),
                     ),
                   ),
-                ),
-            ]),
+              ]),
+      ),
     );
   }
 }

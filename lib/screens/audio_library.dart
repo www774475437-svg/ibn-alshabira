@@ -1,6 +1,8 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+
+import '../services/progress.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:just_audio/just_audio.dart';
@@ -484,6 +486,7 @@ class _PlayerState extends State<_Player> {
       final pos = prefs.getInt(_key) ?? 0;
       if (pos > 0) await _player.seek(Duration(seconds: pos));
       _player.play();
+      Progress.listened();
     } catch (_) {
       if (mounted) setState(() => _error = 'تعذّر تشغيل الملف، تأكد من الاتصال بالإنترنت');
     }
