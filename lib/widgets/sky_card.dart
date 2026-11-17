@@ -154,7 +154,7 @@ class _PrayerSkyCardState extends State<PrayerSkyCard> {
   void initState() {
     super.initState();
     Prayer.instance.load();
-    _t = Timer.periodic(const Duration(seconds: 1), (_) {
+    _t = Timer.periodic(const Duration(seconds: 15), (_) {
       if (mounted) setState(() {});
     });
   }
@@ -170,8 +170,14 @@ class _PrayerSkyCardState extends State<PrayerSkyCard> {
     return '$h:${d.minute.toString().padLeft(2, '0')}';
   }
 
-  static String left(Duration d) =>
-      '${d.inHours}:${(d.inMinutes % 60).toString().padLeft(2, '0')}:${(d.inSeconds % 60).toString().padLeft(2, '0')}';
+  /// «7 س 15 د», and in the last hour «15 دقيقة».
+  static String left(Duration d) {
+    final m = d.inMinutes + (d.inSeconds % 60 > 0 ? 1 : 0);
+    if (m <= 1) return 'دقيقة';
+    if (m < 60) return m <= 10 ? '$m دقائق' : '$m دقيقة';
+    final h = m ~/ 60, r = m % 60;
+    return r == 0 ? '$h س' : '$h س $r د';
+  }
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(

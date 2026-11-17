@@ -350,7 +350,7 @@ class _EmptySearch extends StatelessWidget {
               runSpacing: 8,
               children: [
                 for (final q in repo.recentSearches)
-                  InputChip(label: Text(q), onPressed: () => onPick(q)),
+                  InputChip(label: Text(q), onPressed: () => onPick(q), onDeleted: () => repo.removeRecentSearch(q)),
               ],
             ),
             const SizedBox(height: 24),

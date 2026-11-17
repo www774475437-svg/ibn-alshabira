@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../data/hijri.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
 
@@ -217,15 +218,21 @@ class FatwaTile extends StatelessWidget {
                   _Chip(text: fatwa.typeLabel, color: scheme.primary),
                   if (showChapter) ...[
                     const SizedBox(width: 6),
-                    _Chip(text: repo.chapterName(fatwa.chapter), color: kGoldChip),
+                    Flexible(child: _Chip(text: repo.chapterName(fatwa.chapter), color: kGoldChip)),
                   ],
                   if (isRecent(fatwa.date)) ...[
                     const SizedBox(width: 6),
                     const _Chip(text: 'جديد', color: Color(0xFFD9534F)),
                   ],
                   const Spacer(),
-                  if (repo.isFavorite(fatwa.id))
+                  Icon(Icons.schedule, size: 13, color: scheme.onSurface.withValues(alpha: 0.45)),
+                  const SizedBox(width: 3),
+                  Text(readTimeText(readMinutes(fatwa)),
+                      style: TextStyle(fontSize: 11.5, color: scheme.onSurface.withValues(alpha: 0.55))),
+                  if (repo.isFavorite(fatwa.id)) ...[
+                    const SizedBox(width: 6),
                     const Icon(Icons.bookmark, size: 18, color: kGoldChip),
+                  ],
                 ],
               ),
               const SizedBox(height: 8),
@@ -265,7 +272,7 @@ class _Chip extends StatelessWidget {
         color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Text(text, style: TextStyle(fontSize: 12, color: color)),
+      child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: color)),
     );
   }
 }
@@ -313,5 +320,107 @@ class AppLogo extends StatelessWidget {
         valueListenable: appLogo,
         builder: (_, i, __) => Image.asset(logoAssets[i.clamp(0, logoAssets.length - 1)],
             width: size, height: size, fit: BoxFit.cover, cacheWidth: (size * 3).round()),
+      );
+}
+
+
+// ------------------------------------------------------------ small helpers
+/// Reading time of an answer, in minutes (about 180 words a minute).
+int readMinutes(Fatwa f) => ('${f.question} ${f.answer}'.split(RegExp(r'\s+')).length / 180).ceil().clamp(1, 999);
+
+/// «دقيقة قراءة» · «دقيقتان» · «3 دقائق».
+String readTimeText(int m) => m == 1
+    ? 'دقيقة قراءة'
+    : m == 2
+        ? 'دقيقتان'
+        : m <= 10
+            ? '$m دقائق'
+            : '$m دقيقة';
+
+/// «اليوم» · «أمس» · «قبل 3 أيام», then the Hijri date.
+String friendlyDate(String iso) {
+  final d = DateTime.tryParse(iso);
+  if (d == null) return iso;
+  final now = DateTime.now();
+  final days = DateTime(now.year, now.month, now.day).difference(DateTime(d.year, d.month, d.day)).inDays;
+  if (days <= 0) return 'اليوم';
+  if (days == 1) return 'أمس';
+  if (days == 2) return 'قبل يومين';
+  if (days <= 10) return 'قبل $days أيام';
+  final h = Hijri.from(d);
+  return '${h.day} ${Hijri.months[(h.month - 1).clamp(0, 11)]} ${h.year} هـ';
+}
+
+/// A post's text for a small card: long links become «🔗 رابط».
+String withShortLinks(String text) =>
+    text.replaceAll(RegExp(r'(https?://|www\.|t\.me/)\S+'), '🔗 رابط').replaceAll(RegExp(r'\n{3,}'), '\n\n');
+
+/// Text without emoji and symbols, for short labels.
+String withoutSymbols(String text) => text
+    .replaceAll(RegExp(r'[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}\u{200D}]', unicode: true), '')
+    .replaceAll(RegExp(r'\s+'), ' ')
+    .trim();
+
+/// A grey shape that shines softly while something loads.
+class Skeleton extends StatefulWidget {
+  final double height;
+  final double? width;
+  final double radius;
+  const Skeleton({super.key, required this.height, this.width, this.radius = 12});
+
+  @override
+  State<Skeleton> createState() => _SkeletonState();
+}
+
+class _SkeletonState extends State<Skeleton> with SingleTickerProviderStateMixin {
+  late final AnimationController _a = AnimationController(vsync: this, duration: const Duration(milliseconds: 1300))
+    ..repeat();
+
+  @override
+  void dispose() {
+    _a.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final base = dark ? const Color(0xFF2A3236) : const Color(0xFFE6E9EA);
+    final shine = dark ? const Color(0xFF3A4448) : const Color(0xFFF6F7F7);
+    return AnimatedBuilder(
+      animation: _a,
+      builder: (context, _) => Container(
+        height: widget.height,
+        width: widget.width,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(widget.radius),
+          gradient: LinearGradient(
+            begin: Alignment(-1.5 + 3 * _a.value, 0),
+            end: Alignment(-0.5 + 3 * _a.value, 0),
+            colors: [base, shine, base],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A list card that is still loading.
+class SkeletonTile extends StatelessWidget {
+  const SkeletonTile({super.key});
+
+  @override
+  Widget build(BuildContext context) => const Card(
+        margin: EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+        child: Padding(
+          padding: EdgeInsets.all(14),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Skeleton(height: 16, width: 90, radius: 8),
+            SizedBox(height: 10),
+            Skeleton(height: 18),
+            SizedBox(height: 8),
+            Skeleton(height: 14, width: 220, radius: 8),
+          ]),
+        ),
       );
 }

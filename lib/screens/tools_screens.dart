@@ -191,6 +191,14 @@ const _sample = [
   {'day': 4, 'time': '19:30', 'title': 'درس مباشر على يوتيوب', 'place': 'يوتيوب', 'kind': 'live'},
 ];
 
+bool _isSample(Map m) => _sample.any((x) => x['title'] == m['title'] && x['day'] == m['day'] && x['time'] == m['time']);
+
+/// The sheikh's real lessons (the examples are never shown to readers).
+List<Map<String, dynamic>> realLessons() => [for (final m in Cloud.instance.timetable) if (!_isSample(m)) m];
+
+/// True when readers should see the timetable.
+bool lessonsVisible() => Cloud.instance.timetableOn && realLessons().isNotEmpty;
+
 class LessonsScreen extends StatefulWidget {
   const LessonsScreen({super.key});
 
@@ -275,8 +283,8 @@ class _LessonsScreenState extends State<LessonsScreen> {
         builder: (context, _) {
           final cloud = Cloud.instance;
           final staff = cloud.isAdmin;
-          final sample = cloud.timetable.isEmpty;
-          final items = sample ? (staff ? _sample : const <Map<String, dynamic>>[]) : cloud.timetable;
+          final sample = realLessons().isEmpty;
+          final items = staff ? (cloud.timetable.isEmpty ? _sample : cloud.timetable) : realLessons();
           final sorted = [...items]..sort((a, b) {
               final d = ((a['day'] as num?) ?? 0).compareTo((b['day'] as num?) ?? 0);
               return d != 0 ? d : '${a['time']}'.compareTo('${b['time']}');
@@ -286,7 +294,7 @@ class _LessonsScreenState extends State<LessonsScreen> {
             floatingActionButton: staff
                 ? FloatingActionButton.extended(onPressed: () => _edit(), icon: const Icon(Icons.add), label: const Text('درس'))
                 : null,
-            body: !cloud.timetableOn && !staff
+            body: !lessonsVisible() && !staff
                 ? const EmptyState(icon: Icons.event_note_outlined, text: 'يُضاف جدول الدروس قريباً بإذن الله.')
                 : ListView(padding: const EdgeInsets.all(12), children: [
                     if (staff)
@@ -297,6 +305,10 @@ class _LessonsScreenState extends State<LessonsScreen> {
                           subtitle: Text(sample ? 'هذه أمثلة فقط؛ عدّلها بدروسك ثم أظهر الجدول' : 'يراه الناس في الرئيسية والمزيد'),
                           value: cloud.timetableOn,
                           onChanged: (v) async {
+                            if (v && sample) {
+                              _say(context, 'أضف دروسك الحقيقية أولاً (الأمثلة لا تظهر للناس)', ok: false);
+                              return;
+                            }
                             final err = await cloud.setConfig(
                                 'timetable', {'on': v, 'items': sample ? _sample : cloud.timetable}, v ? 'إظهار جدول الدروس' : 'إخفاء جدول الدروس');
                             if (context.mounted) _say(context, err ?? 'تم', ok: err == null);
@@ -360,12 +372,12 @@ class LessonsHomeCard extends StatelessWidget {
         listenable: Cloud.instance,
         builder: (context, _) {
           final cloud = Cloud.instance;
-          if (!cloud.timetableOn || cloud.timetable.isEmpty) return const SizedBox.shrink();
+          if (!lessonsVisible()) return const SizedBox.shrink();
           final now = DateTime.now();
           // The next lesson from now.
           Map<String, dynamic>? next;
           var best = 99999;
-          for (final m in cloud.timetable) {
+          for (final m in realLessons()) {
             final wd = (m['day'] as num?)?.toInt() ?? 0;
             final p = '${m['time']}'.split(':');
             final mins = ((wd - now.weekday + 7) % 7) * 1440 +

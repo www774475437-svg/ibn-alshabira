@@ -432,6 +432,8 @@ class _FatwaScreenState extends State<FatwaScreen> {
                 onCopy: _copyOptions,
                 onReport: _reportError,
                 onComfort: _comfort,
+                next: i + 1 < _pages.length ? _pages[i + 1] : null,
+                onNext: () => _pager.nextPage(duration: const Duration(milliseconds: 350), curve: Curves.easeOut),
               )),
             ),
           ),
@@ -540,8 +542,14 @@ class _AnswerBody extends StatefulWidget {
       this.find = '',
       required this.onCopy,
       required this.onReport,
-      required this.onComfort});
+      required this.onComfort,
+      this.next,
+      this.onNext});
   final VoidCallback onComfort;
+
+  /// The next answer in the same chapter, shown at the end.
+  final Fatwa? next;
+  final VoidCallback? onNext;
 
   @override
   State<_AnswerBody> createState() => _AnswerBodyState();
@@ -823,6 +831,38 @@ class _AnswerBodyState extends State<_AnswerBody> {
               ),
           ],
         ),
+        if (widget.next != null && widget.onNext != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 14),
+            child: Material(
+              color: kGold.withValues(alpha: .12),
+              borderRadius: BorderRadius.circular(16),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(16),
+                onTap: widget.onNext,
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16), border: Border.all(color: kGold.withValues(alpha: .6))),
+                  child: Row(children: [
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        const Text('الجواب التالي في نفس الباب',
+                            style: TextStyle(color: kGoldChip, fontSize: 12.5, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 4),
+                        Text(widget.next!.title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.bold, height: 1.5)),
+                      ]),
+                    ),
+                    const SizedBox(width: 8),
+                    const Icon(Icons.arrow_back_rounded, color: kGoldChip),
+                  ]),
+                ),
+              ),
+            ),
+          ),
         ..._related(context, repo),
         const SizedBox(height: 12),
       ],

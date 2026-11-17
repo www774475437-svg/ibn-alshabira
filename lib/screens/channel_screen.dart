@@ -81,11 +81,11 @@ class _PostCard extends StatelessWidget {
                 children: [
                   const Icon(Icons.campaign_outlined, color: kGold, size: 18),
                   const SizedBox(width: 6),
-                  Text(post.date, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                  Text(friendlyDate(post.date), style: const TextStyle(color: Colors.grey, fontSize: 12)),
                 ],
               ),
               const SizedBox(height: 8),
-              Text(post.text, maxLines: 6, overflow: TextOverflow.ellipsis, style: const TextStyle(height: 1.8)),
+              Text(withShortLinks(post.text), maxLines: 6, overflow: TextOverflow.ellipsis, style: const TextStyle(height: 1.8)),
               const SizedBox(height: 4),
               const Text('اقرأ المزيد', style: TextStyle(color: kGoldChip, fontSize: 13)),
             ],
@@ -115,7 +115,7 @@ class ChannelPostScreen extends StatelessWidget {
     final cloud = Cloud.instance;
     return Scaffold(
       appBar: AppBar(
-        title: Text(post.date),
+        title: Text(friendlyDate(post.date)),
         actions: [
           IconButton(
             tooltip: 'نسخ',

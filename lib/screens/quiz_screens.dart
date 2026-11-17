@@ -1076,28 +1076,14 @@ class _QuizHomeStripState extends State<QuizHomeStrip> {
             if (q != null) QuizOfDayCard(q: q),
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
-              child: Row(children: [
-                Expanded(
-                  child: FilledButton.tonalIcon(
-                    style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(46)),
-                    icon: const Icon(Icons.quiz_outlined),
-                    label: const Text('الأسئلة'),
-                    onPressed: () => openQuiz(context),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                        minimumSize: const Size.fromHeight(46), side: const BorderSide(color: kGold)),
-                    icon: const Icon(Icons.leaderboard_outlined, color: kGold),
-                    label: const Text('المتصدرون'),
-                    onPressed: () =>
-                        Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LeaderboardScreen())),
-                  ),
-                ),
-              ]),
+              child: FilledButton.tonalIcon(
+                style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                icon: const Icon(Icons.quiz_outlined),
+                label: const Text('الأسئلة'),
+                onPressed: () => openQuiz(context),
+              ),
             ),
+            const LeadersHomeCard(),
             const Padding(padding: EdgeInsets.fromLTRB(12, 10, 12, 0), child: ChallengeButton()),
           ]);
         },

@@ -30,6 +30,7 @@ import 'chapter_screen.dart';
 import 'audio_library.dart';
 import 'trusted_screens.dart';
 import 'quran_screen.dart';
+import 'adhkar_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class HomeTab extends StatefulWidget {
@@ -201,6 +202,7 @@ class _HomeTabState extends State<HomeTab> {
           // The chapters, as a row that moves right and left.
           const SliverToBoxAdapter(child: _ChapterStrip()),
           SliverToBoxAdapter(child: _TodayStrip(onSetWird: widget.onOpenMore)),
+          const SliverToBoxAdapter(child: LessonsHomeCard()),
           if (repo.fatwaOfDay != null)
             SliverToBoxAdapter(child: _FatwaOfDay(fatwa: repo.fatwaOfDay!)),
           const SliverToBoxAdapter(child: _DailyVerse()),
@@ -303,7 +305,6 @@ class _HomeTabState extends State<HomeTab> {
           // «الأسئلة»: today's question and a button to the section, after the videos.
           const SliverToBoxAdapter(child: _GroupTitle('الأسئلة', Icons.quiz_outlined)),
           const SliverToBoxAdapter(child: QuizHomeStrip()),
-          const SliverToBoxAdapter(child: LeadersHomeCard()),
           if (repo.channel.isNotEmpty) ...[
             SliverToBoxAdapter(
               child: _SectionTitle('أحدث منشورات القناة',
@@ -333,10 +334,10 @@ class _HomeTabState extends State<HomeTab> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(p.date, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                                Text(friendlyDate(p.date), style: const TextStyle(color: Colors.grey, fontSize: 12)),
                                 const SizedBox(height: 6),
                                 Expanded(
-                                  child: Text(p.text,
+                                  child: Text(withShortLinks(p.text),
                                       maxLines: 4, overflow: TextOverflow.ellipsis, style: const TextStyle(height: 1.7)),
                                 ),
                               ],
@@ -351,7 +352,6 @@ class _HomeTabState extends State<HomeTab> {
             ),
           ],
 
-          const SliverToBoxAdapter(child: LessonsHomeCard()),
           const SliverToBoxAdapter(child: HomeAnnouncement(place: 'bottom')),
 
           // ------------------------------------------------ تصفّح المكتبة
@@ -383,17 +383,38 @@ class _HomeTabState extends State<HomeTab> {
                           : item is Recording
                               ? _RecordingRow(rec: item)
                               : const SizedBox.shrink();
-              // The prayer card, after the first ten items.
-              if (i == 10) {
-                return Column(children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-                    child: PrayerSkyCard(onTap: () => openPrayer(context)),
+              // Cards between the items, spread out: prayer, Quran, adhkar, zakat, «لوحتي».
+              final Widget? extra = switch (i) {
+                10 => PrayerSkyCard(onTap: () => openPrayer(context)),
+                30 => const _QuranPromo(),
+                40 => _Promo(
+                    icon: Icons.spa_outlined,
+                    title: 'الأذكار',
+                    subtitle: 'حصن المسلم كاملاً، وعدّاد التسبيح',
+                    colors: const [Color(0xFF2E7D32), Color(0xFF1B5E20)],
+                    onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AdhkarScreen())),
                   ),
-                  tile,
-                ]);
-              }
-              return tile;
+                55 when Cloud.instance.zakatOn => _Promo(
+                    icon: Icons.calculate_outlined,
+                    title: 'حاسبة الزكاة',
+                    subtitle: 'احسب زكاة مالك وذهبك بسهولة',
+                    colors: const [Color(0xFF8E6B1E), Color(0xFF5E4612)],
+                    onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ZakatScreen())),
+                  ),
+                70 => _Promo(
+                    icon: Icons.dashboard_outlined,
+                    title: 'لوحتي',
+                    subtitle: 'نقاطك وأوسمتك وما قرأته هذا الشهر',
+                    colors: const [Color(0xFF0E3B44), Color(0xFF1F5E3B)],
+                    onTap: () => openDashboard(context),
+                  ),
+                _ => null,
+              };
+              if (extra == null) return tile;
+              return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Padding(padding: const EdgeInsets.fromLTRB(12, 8, 12, 8), child: extra),
+                tile,
+              ]);
             },
           ),
           const SliverToBoxAdapter(child: SizedBox(height: 24)),
@@ -871,12 +892,12 @@ class _ResumeState extends State<_Resume> {
                 child: Text('أكمل:', style: TextStyle(fontWeight: FontWeight.bold)),
               ),
             ),
-            if (f != null) chip(Icons.article_outlined, f.title, () => openFatwa(context, f)),
+            if (f != null) chip(Icons.article_outlined, withoutSymbols(f.title), () => openFatwa(context, f)),
             if (_page != null)
               chip(Icons.auto_stories_outlined, 'المصحف · صفحة $_page',
                   () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const QuranScreen()))),
             if (book != null)
-              chip(Icons.menu_book_outlined, book.title,
+              chip(Icons.menu_book_outlined, withoutSymbols(book.title),
                   () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => BookReaderScreen(book: book)))),
           ],
         ),
@@ -1048,6 +1069,13 @@ class _MostReadState extends State<_MostRead> {
             for (final e in snap.data ?? const <(String, int)>[])
               if (repo.findById(e.$1) != null) repo.findById(e.$1)!,
           ].take(3).toList();
+          if (snap.connectionState == ConnectionState.waiting) {
+            return const Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              _SectionTitle('الأكثر قراءة'),
+              SkeletonTile(),
+              SkeletonTile(),
+            ]);
+          }
           if (list.isEmpty) return const SizedBox.shrink();
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1137,7 +1165,8 @@ class _VideoStripState extends State<_VideoStrip> {
         step: 250,
         gap: 10,
         itemCount: widget.videos.length,
-        itemBuilder: (context, i) => VideoCard(video: widget.videos[i], width: 240),
+        itemBuilder: (context, i) =>
+            Align(alignment: Alignment.topCenter, child: VideoCard(video: widget.videos[i], width: 240)),
       );
 }
 
@@ -1577,5 +1606,92 @@ class _RecordingRow extends StatelessWidget {
           ),
           onTap: () => openRecording(context, rec),
         ),
+      );
+}
+
+
+/// A coloured card between the items of the long list.
+class _Promo extends StatelessWidget {
+  final IconData icon;
+  final String title, subtitle;
+  final List<Color> colors;
+  final VoidCallback onTap;
+  const _Promo({required this.icon, required this.title, required this.subtitle, required this.colors, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => Material(
+        borderRadius: BorderRadius.circular(18),
+        clipBehavior: Clip.antiAlias,
+        elevation: 1.5,
+        child: Ink(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(begin: Alignment.topRight, end: Alignment.bottomLeft, colors: colors),
+          ),
+          child: InkWell(
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(children: [
+                Icon(icon, color: kGold, size: 34),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(title,
+                        style: const TextStyle(
+                            fontFamily: 'Tajawal', color: Colors.white, fontSize: 19, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 2),
+                    Text(subtitle, style: const TextStyle(color: Colors.white, fontSize: 13.5)),
+                  ]),
+                ),
+                const Icon(Icons.chevron_left, color: Colors.white),
+              ]),
+            ),
+          ),
+        ),
+      );
+}
+
+/// «المصحف», with «أكمل من صفحة …» when the reader has a page.
+class _QuranPromo extends StatelessWidget {
+  const _QuranPromo();
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<SharedPreferences>(
+        future: SharedPreferences.getInstance(),
+        builder: (context, snap) {
+          final page = snap.data?.getInt('quranPage');
+          return Material(
+            borderRadius: BorderRadius.circular(18),
+            clipBehavior: Clip.antiAlias,
+            elevation: 1.5,
+            child: Ink(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                    begin: Alignment.topRight, end: Alignment.bottomLeft, colors: [Color(0xFFD4AF5A), Color(0xFFB8913A)]),
+              ),
+              child: InkWell(
+                onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const QuranScreen())),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(children: [
+                    const Icon(Icons.auto_stories_outlined, color: Color(0xFF1B1B1B), size: 34),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        const Text('المصحف',
+                            style: TextStyle(
+                                fontFamily: 'Tajawal', color: Color(0xFF1B1B1B), fontSize: 19, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 2),
+                        Text(page == null ? 'مصحف المدينة برواية حفص، بلا إنترنت' : 'أكمل من صفحة $page',
+                            style: const TextStyle(color: Color(0xFF1B1B1B), fontSize: 13.5)),
+                      ]),
+                    ),
+                    const Icon(Icons.chevron_left, color: Color(0xFF1B1B1B)),
+                  ]),
+                ),
+              ),
+            ),
+          );
+        },
       );
 }

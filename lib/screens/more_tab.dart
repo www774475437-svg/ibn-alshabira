@@ -43,15 +43,6 @@ class MoreTab extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 8),
           children: [
             _ReaderStats(count: repo.readThisMonth),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 6, 12, 2),
-              child: OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(46), side: const BorderSide(color: kGold)),
-                icon: const Icon(Icons.dashboard_outlined, color: kGold),
-                label: const Text('لوحتي: نقاطي وأوسمتي وملفي', style: TextStyle(fontWeight: FontWeight.bold)),
-                onPressed: () => openDashboard(context),
-              ),
-            ),
             _BigCard(
               icon: Icons.auto_stories_outlined,
               title: 'المصحف',
@@ -85,8 +76,8 @@ class MoreTab extends StatelessWidget {
                     onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ZakatScreen())),
                   ),
                 ),
-                if (Cloud.instance.timetableOn || Cloud.instance.isAdmin) const SizedBox(width: 8),
-                if (Cloud.instance.timetableOn || Cloud.instance.isAdmin)
+                if (lessonsVisible() || Cloud.instance.isAdmin) const SizedBox(width: 8),
+                if (lessonsVisible() || Cloud.instance.isAdmin)
                 Expanded(
                   child: _MiniCard(
                     icon: Icons.event_note_outlined,
@@ -643,34 +634,135 @@ class _BigCard extends StatelessWidget {
       );
 }
 
-class _ReaderStats extends StatelessWidget {
+/// What the reader read this month, with his monthly goal, and the way to «لوحتي».
+class _ReaderStats extends StatefulWidget {
   final int count;
   const _ReaderStats({required this.count});
 
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-        child: Card(
-          color: brandColor(context),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                const Icon(Icons.auto_stories, color: kGold, size: 34),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Text(
-                    count == 0
-                        ? 'لم تقرأ أي جواب هذا الشهر بعد'
-                        : 'الأجوبة التي قرأتها هذا الشهر: $count\nبارك الله فيك',
-                    style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.6),
-                  ),
-                ),
-              ],
+  State<_ReaderStats> createState() => _ReaderStatsState();
+}
+
+class _ReaderStatsState extends State<_ReaderStats> {
+  int _goal = 30;
+
+  @override
+  void initState() {
+    super.initState();
+    SharedPreferences.getInstance().then((p) {
+      if (mounted) setState(() => _goal = p.getInt('monthGoal') ?? 30);
+    });
+  }
+
+  Future<void> _setGoal() async {
+    final v = await showModalBottomSheet<int>(
+      context: context,
+      builder: (c) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Padding(
+            padding: EdgeInsets.all(14),
+            child: Text('هدفك في الشهر', style: TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.bold, fontSize: 18)),
+          ),
+          Wrap(spacing: 8, runSpacing: 8, alignment: WrapAlignment.center, children: [
+            for (final n in const [10, 20, 30, 50, 100, 200])
+              ChoiceChip(label: Text('$n جواباً'), selected: n == _goal, onSelected: (_) => Navigator.pop(c, n)),
+          ]),
+          const SizedBox(height: 18),
+        ]),
+      ),
+    );
+    if (v == null) return;
+    (await SharedPreferences.getInstance()).setInt('monthGoal', v);
+    if (mounted) setState(() => _goal = v);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final count = widget.count;
+    final done = count >= _goal;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      child: Material(
+        borderRadius: BorderRadius.circular(22),
+        clipBehavior: Clip.antiAlias,
+        elevation: 3,
+        child: Ink(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topRight,
+              end: Alignment.bottomLeft,
+              colors: [Color(0xFF7A5A12), Color(0xFFB8913A), Color(0xFF1F5E3B)],
+              stops: [0, .45, 1],
             ),
           ),
+          child: Column(children: [
+            InkWell(
+              onTap: _setGoal,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+                child: Row(children: [
+                  SizedBox(
+                    width: 74,
+                    height: 74,
+                    child: Stack(fit: StackFit.expand, children: [
+                      CircularProgressIndicator(
+                        value: (count / _goal).clamp(0.0, 1.0),
+                        strokeWidth: 7,
+                        strokeCap: StrokeCap.round,
+                        backgroundColor: Colors.white24,
+                        color: Colors.white,
+                      ),
+                      Center(
+                        child: Column(mainAxisSize: MainAxisSize.min, children: [
+                          Text('$count',
+                              style: const TextStyle(
+                                  fontFamily: 'Tajawal', color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold, height: 1)),
+                          Text('من $_goal', style: const TextStyle(color: Colors.white70, fontSize: 11.5)),
+                        ]),
+                      ),
+                    ]),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      const Text('قراءتي هذا الشهر',
+                          style: TextStyle(fontFamily: 'Tajawal', color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 4),
+                      Text(
+                        count == 0
+                            ? 'لم تقرأ جواباً بعد، ابدأ اليوم'
+                            : done
+                                ? 'أتممت هدفك، بارك الله فيك 🌿'
+                                : 'بقي ${_goal - count} لتتم هدفك، بارك الله فيك',
+                        style: const TextStyle(color: Colors.white, height: 1.5),
+                      ),
+                      const Text('اضغط لتغيير الهدف', style: TextStyle(color: Colors.white60, fontSize: 11.5)),
+                    ]),
+                  ),
+                ]),
+              ),
+            ),
+            InkWell(
+              onTap: () => openDashboard(context),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+                color: Colors.black.withValues(alpha: .18),
+                child: const Row(children: [
+                  Icon(Icons.dashboard_outlined, color: Colors.white, size: 20),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text('لوحتي: نقاطي وأوسمتي وملفي',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  ),
+                  Icon(Icons.chevron_left, color: Colors.white),
+                ]),
+              ),
+            ),
+          ]),
         ),
-      );
+      ),
+    );
+  }
 }
 
 class _Group extends StatelessWidget {

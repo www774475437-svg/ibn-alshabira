@@ -879,6 +879,12 @@ class Repository extends ChangeNotifier {
     notifyListeners();
   }
 
+  void removeRecentSearch(String q) {
+    recentSearches = [...recentSearches]..remove(q);
+    _prefs.setStringList('recentSearches', recentSearches);
+    notifyListeners();
+  }
+
   void clearRecentSearches() {
     recentSearches = [];
     _prefs.setStringList('recentSearches', recentSearches);

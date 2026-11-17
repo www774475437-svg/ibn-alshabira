@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../config.dart';
 
 import '../services/cloud.dart';
+import '../services/net.dart';
 import 'account_screens.dart';
 import 'books_tab.dart';
 import 'extra_screens.dart';
@@ -149,10 +150,15 @@ class _HomeShellState extends State<HomeShell> {
         }
 
         return Scaffold(
-          body: IndexedStack(
-            index: index,
-            children: [for (final id in ids) KeyedSubtree(key: ValueKey(id), child: page(id))],
-          ),
+          body: Column(children: [
+            Expanded(
+              child: IndexedStack(
+                index: index,
+                children: [for (final id in ids) KeyedSubtree(key: ValueKey(id), child: page(id))],
+              ),
+            ),
+            const _OfflineBar(),
+          ]),
           bottomNavigationBar: NavigationBarTheme(
             // Six or seven buttons: smaller labels so every name fits.
             data: NavigationBarThemeData(
@@ -172,4 +178,49 @@ class _HomeShellState extends State<HomeShell> {
       },
     );
   }
+}
+
+
+/// «أنت بلا إنترنت»: a small strip above the buttons while the internet is off.
+class _OfflineBar extends StatefulWidget {
+  const _OfflineBar();
+
+  @override
+  State<_OfflineBar> createState() => _OfflineBarState();
+}
+
+class _OfflineBarState extends State<_OfflineBar> {
+  @override
+  void initState() {
+    super.initState();
+    Net.instance.start();
+  }
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: Net.instance,
+        builder: (context, _) => AnimatedSize(
+          duration: const Duration(milliseconds: 250),
+          child: !Net.instance.offline
+              ? const SizedBox(width: double.infinity)
+              : Material(
+                  color: const Color(0xFF3A3A3A),
+                  child: InkWell(
+                    onTap: Net.instance.check,
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                      child: Row(children: [
+                        Icon(Icons.wifi_off_rounded, color: Colors.white, size: 18),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text('أنت بلا إنترنت — تقرأ المحفوظ في جهازك',
+                              style: TextStyle(color: Colors.white, fontSize: 13)),
+                        ),
+                        Icon(Icons.refresh, color: Colors.white70, size: 18),
+                      ]),
+                    ),
+                  ),
+                ),
+        ),
+      );
 }

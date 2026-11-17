@@ -80,6 +80,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const Text('نقطة', style: TextStyle(color: Colors.white70)),
                   const SizedBox(height: 6),
                   Text('${quiz.levelTitle} · ${earned.length} أوسمة', style: const TextStyle(color: Colors.white)),
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                    decoration: BoxDecoration(color: kGold.withValues(alpha: .22), borderRadius: BorderRadius.circular(14)),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      const Icon(Icons.auto_stories, color: kGold, size: 18),
+                      const SizedBox(width: 6),
+                      Text('قرأتَ هذا الشهر: ${Repository.instance.readThisMonth}',
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    ]),
+                  ),
                 ]),
               ),
               const SizedBox(height: 10),
@@ -254,42 +265,114 @@ class PublicProfileScreen extends StatelessWidget {
 }
 
 /// The top three of the quiz on the home page (from the site file).
-class LeadersHomeCard extends StatelessWidget {
+class LeadersHomeCard extends StatefulWidget {
   const LeadersHomeCard({super.key});
 
   @override
-  Widget build(BuildContext context) => FutureBuilder<List<LeaderRow>>(
-        future: Quiz.instance.leaders('month').then((l) async => l.isNotEmpty ? l : await Quiz.instance.leaders('all')),
+  State<LeadersHomeCard> createState() => _LeadersHomeCardState();
+}
+
+class _LeadersHomeCardState extends State<LeadersHomeCard> {
+  late final Future<(List<LeaderRow>, bool)> _load = () async {
+    final m = await Quiz.instance.leaders('month');
+    if (m.isNotEmpty) return (m, true);
+    return (await Quiz.instance.leaders('all'), false);
+  }();
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<(List<LeaderRow>, bool)>(
+        future: _load,
         builder: (context, snap) {
-          final l = (snap.data ?? const <LeaderRow>[]).take(3).toList();
-          if (l.isEmpty) return const SizedBox.shrink();
-          const medals = ['🥇', '🥈', '🥉'];
+          final waiting = snap.connectionState == ConnectionState.waiting;
+          final l = (snap.data?.$1 ?? const <LeaderRow>[]).take(3).toList();
+          final month = snap.data?.$2 ?? true;
+          // Second on the right, first in the middle, third on the left.
+          Widget step(int rank) {
+            final r = rank <= l.length ? l[rank - 1] : null;
+            const medals = ['🥇', '🥈', '🥉'];
+            const heights = [92.0, 70.0, 54.0];
+            return Expanded(
+              child: Column(mainAxisAlignment: MainAxisAlignment.end, children: [
+                Text(medals[rank - 1], style: TextStyle(fontSize: rank == 1 ? 34 : 28)),
+                const SizedBox(height: 2),
+                if (waiting)
+                  const Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Skeleton(height: 14, radius: 7))
+                else
+                  Text(r?.name ?? '—',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.bold, fontSize: rank == 1 ? 15 : 13.5)),
+                Text(r == null ? ' ' : '${r.score} إجابة صحيحة',
+                    style: const TextStyle(color: kGold, fontSize: 12)),
+                const SizedBox(height: 4),
+                Container(
+                  height: heights[rank - 1],
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: rank == 1
+                          ? const [Color(0xFFE9C46A), Color(0xFFB8913A)]
+                          : rank == 2
+                              ? const [Color(0xFFD9DEE2), Color(0xFF9AA5AD)]
+                              : const [Color(0xFFD9A066), Color(0xFF9C6B3A)],
+                    ),
+                  ),
+                  child: Text('$rank',
+                      style: const TextStyle(
+                          fontFamily: 'Tajawal', fontSize: 26, fontWeight: FontWeight.bold, color: Color(0xFF1B1B1B))),
+                ),
+              ]),
+            );
+          }
+
           return Padding(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
             child: Material(
-              borderRadius: BorderRadius.circular(18),
-              color: kGold.withValues(alpha: .12),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(18),
-                onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LeaderboardScreen())),
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(borderRadius: BorderRadius.circular(18), border: Border.all(color: kGold)),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                    const Text('المتصدّرون في الأسئلة',
-                        style: TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.bold, fontSize: 16)),
-                    const SizedBox(height: 6),
-                    Row(children: [
-                      for (var i = 0; i < l.length; i++)
-                        Expanded(
-                          child: Column(children: [
-                            Text(medals[i], style: const TextStyle(fontSize: 26)),
-                            Text(l[i].name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold)),
-                            Text('${l[i].score}', style: const TextStyle(color: kGoldChip)),
-                          ]),
+              borderRadius: BorderRadius.circular(20),
+              clipBehavior: Clip.antiAlias,
+              elevation: 2,
+              child: Ink(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                      begin: Alignment.topRight, end: Alignment.bottomLeft, colors: [Color(0xFF0E3B44), Color(0xFF1F5E3B)]),
+                ),
+                child: InkWell(
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LeaderboardScreen())),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                      Row(children: [
+                        const Icon(Icons.emoji_events, color: kGold, size: 26),
+                        const SizedBox(width: 8),
+                        const Text('المتصدّرون',
+                            style: TextStyle(fontFamily: 'Tajawal', color: Colors.white, fontWeight: FontWeight.bold, fontSize: 19)),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                              color: kGold.withValues(alpha: .2), borderRadius: BorderRadius.circular(10)),
+                          child: Text(month ? 'هذا الشهر' : 'كل الوقت',
+                              style: const TextStyle(color: kGold, fontSize: 12)),
                         ),
+                        const Spacer(),
+                        const Text('الكل', style: TextStyle(color: Colors.white70)),
+                        const Icon(Icons.chevron_left, color: Colors.white70),
+                      ]),
+                      if (!waiting && l.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 6),
+                          child: Text('كن أول المتصدّرين: أجب عن الأسئلة واجمع النقاط',
+                              textAlign: TextAlign.center, style: TextStyle(color: Colors.white70, fontSize: 13)),
+                        ),
+                      const SizedBox(height: 8),
+                      Row(crossAxisAlignment: CrossAxisAlignment.end, children: [step(2), step(1), step(3)]),
                     ]),
-                  ]),
+                  ),
                 ),
               ),
             ),
