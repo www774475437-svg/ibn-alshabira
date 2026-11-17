@@ -96,6 +96,8 @@ class _QuizHomeScreenState extends State<QuizHomeScreen> {
                     const PopupMenuItem(value: 'bulk', child: Text('إضافة أسئلة كثيرة دفعة واحدة')),
                     const PopupMenuItem(value: 'ai', child: Text('اقتراحات الذكاء الاصطناعي')),
                     const PopupMenuItem(value: 'now', child: Text('أرسل الأسئلة الآن')),
+                    PopupMenuItem(
+                        value: 'friday', child: Text(Quiz.instance.fridayOn ? 'أوقف مسابقة الجمعة' : 'شغّل مسابقة الجمعة')),
                     const PopupMenuItem(value: 'sugs', child: Text('الأسئلة المقترحة')),
                     const PopupMenuItem(value: 'stats', child: Text('إحصاءات الأسئلة')),
                     const PopupMenuItem(value: 'thanks', child: Text('رسالة شكر للأوائل')),
@@ -122,6 +124,7 @@ class _QuizHomeScreenState extends State<QuizHomeScreen> {
                     children: [
                       _ScoreHeader(quiz: quiz),
                       const Padding(padding: EdgeInsets.fromLTRB(12, 10, 12, 0), child: ChallengeButton()),
+                      const FridayCard(),
                       if (quiz.thanks.isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
@@ -189,6 +192,13 @@ class _QuizHomeScreenState extends State<QuizHomeScreen> {
         await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MySuggestionsScreen()));
       case 'ai':
         await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AiSuggestionsScreen()));
+      case 'friday':
+        final err = await Quiz.instance.setFriday(!Quiz.instance.fridayOn);
+        if (context.mounted) {
+          _toast(context,
+              err ?? (Quiz.instance.fridayOn ? 'شُغّلت. علّم أسئلتها بـ«سؤال الجمعة» في محرر السؤال' : 'أُوقفت مسابقة الجمعة'),
+              ok: err == null);
+        }
       case 'now':
         final err = await Quiz.instance.publishNow();
         if (context.mounted) {
@@ -1779,6 +1789,17 @@ class _QuestionEditorState extends State<QuestionEditor> {
                 _dirty = true;
               }),
             ),
+            if (Quiz.instance.fridayOn)
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('سؤال الجمعة'),
+                subtitle: const Text('يظهر يوم الجمعة في «مسابقة الجمعة»'),
+                value: _q.friday,
+                onChanged: (v) => setState(() {
+                  _q.friday = v;
+                  _dirty = true;
+                }),
+              ),
             const SizedBox(height: 10),
             TextField(controller: _hint, onChanged: (_) => _dirty = true, decoration: dec('تلميح (اختياري)')),
             SwitchListTile(
@@ -2536,6 +2557,66 @@ class SeriesTestScreen extends StatelessWidget {
                       ),
                     for (final q in list) _QTile(q: q),
                   ]),
+          );
+        },
+      );
+}
+
+
+/// «مسابقة الجمعة»: the question(s) on Friday; the winners from Saturday.
+class FridayCard extends StatelessWidget {
+  const FridayCard({super.key});
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: Quiz.instance,
+        builder: (context, _) {
+          final quiz = Quiz.instance;
+          if (!quiz.fridayOn) return const SizedBox.shrink();
+          final isFriday = DateTime.now().weekday == DateTime.friday;
+          final qs = quiz.fridayQs;
+          Widget box(Widget child) => Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(18),
+                    gradient: const LinearGradient(colors: [Color(0xFF0E3B44), Color(0xFF1F5E3B)]),
+                    border: Border.all(color: kGold),
+                  ),
+                  child: child,
+                ),
+              );
+          if (isFriday && qs.isNotEmpty) {
+            final left = qs.where((q) => !quiz.marks.containsKey(q.id)).toList();
+            return box(Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              const Text('🏆 مسابقة الجمعة',
+                  style: TextStyle(fontFamily: 'Tajawal', color: kGold, fontWeight: FontWeight.bold, fontSize: 18)),
+              Text(left.isEmpty ? 'أجبت عن أسئلة اليوم، والفائزون يُعلنون غداً بإذن الله.' : '${left.length} سؤالاً اليوم فقط',
+                  style: const TextStyle(color: Colors.white, height: 1.7)),
+              if (left.isNotEmpty)
+                FilledButton(
+                  style: FilledButton.styleFrom(backgroundColor: kGold, foregroundColor: Colors.black),
+                  onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => QuestionScreen(q: left.first, queue: left))),
+                  child: const Text('أجب الآن'),
+                ),
+            ]));
+          }
+          return FutureBuilder<(String, List<String>)>(
+            future: quiz.fridayWinners(),
+            builder: (context, snap) {
+              final w = snap.data?.$2 ?? const [];
+              if (w.isEmpty) return const SizedBox.shrink();
+              return box(Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                const Text('🏆 الفائزون في مسابقة الجمعة',
+                    style: TextStyle(fontFamily: 'Tajawal', color: kGold, fontWeight: FontWeight.bold, fontSize: 17)),
+                const SizedBox(height: 6),
+                Wrap(spacing: 6, runSpacing: 6, children: [
+                  for (final n in w.take(30))
+                    Chip(label: Text(n), backgroundColor: Colors.white.withValues(alpha: .9)),
+                ]),
+              ]));
+            },
           );
         },
       );

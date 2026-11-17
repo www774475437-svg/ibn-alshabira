@@ -88,6 +88,14 @@ class _AdhkarScreenState extends State<AdhkarScreen> {
           final all = snap.data!;
           final n = normalizeArabic(_q);
           final items = n.isEmpty ? all : all.where((c) => normalizeArabic(c.name).contains(n)).toList();
+          // Adhkar whose own words hold the searched word.
+          final hits = n.length < 2
+              ? const <(_Category, _Dhikr)>[]
+              : [
+                  for (final c in all)
+                    for (final d in c.items)
+                      if (normalizeArabic(d.text).contains(n)) (c, d),
+                ].take(40).toList();
           void open(_Category c, [String? key]) => Navigator.of(context)
               .push(MaterialPageRoute(builder: (_) => _CategoryScreen(category: c, progressKey: key)))
               .then((_) {
@@ -162,7 +170,7 @@ class _AdhkarScreenState extends State<AdhkarScreen> {
                   child: TextField(
                     onChanged: (v) => setState(() => _q = v),
                     decoration: InputDecoration(
-                      hintText: 'ابحث في الأبواب، مثل: النوم، السفر',
+                      hintText: 'ابحث في الأذكار، مثل: النوم، السفر، الكرب',
                       prefixIcon: const Icon(Icons.search),
                       isDense: true,
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
@@ -199,6 +207,32 @@ class _AdhkarScreenState extends State<AdhkarScreen> {
                   );
                 },
               ),
+              if (hits.isNotEmpty) ...[
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 12, 18, 4),
+                    child: Text('في نصوص الأذكار (${hits.length})',
+                        style: const TextStyle(fontFamily: 'Tajawal', fontSize: 17, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+                SliverList.builder(
+                  itemCount: hits.length,
+                  itemBuilder: (context, i) {
+                    final (c, d) = hits[i];
+                    return Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+                      child: Card(
+                        margin: EdgeInsets.zero,
+                        child: ListTile(
+                          title: Text(d.text, maxLines: 3, overflow: TextOverflow.ellipsis, style: const TextStyle(height: 1.7)),
+                          subtitle: Text(c.name, style: const TextStyle(color: kGoldChip)),
+                          onTap: () => open(c),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
               const SliverToBoxAdapter(
                 child: Padding(
                   padding: EdgeInsets.all(12),

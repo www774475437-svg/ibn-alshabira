@@ -23,6 +23,9 @@ import 'content_screens.dart';
 import 'extra_screens.dart';
 import 'review_screen.dart';
 import 'quiz_screens.dart';
+import 'prayer_screen.dart';
+import 'tools_screens.dart';
+import '../widgets/sky_card.dart';
 import '../services/cloud.dart';
 
 class MoreTab extends StatelessWidget {
@@ -49,6 +52,10 @@ class MoreTab extends StatelessWidget {
               onTap: () =>
                   Navigator.of(context).push(MaterialPageRoute(builder: (_) => const QuranScreen())),
             ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+              child: PrayerSkyCard(onTap: () => openPrayer(context)),
+            ),
             _BigCard(
               icon: Icons.spa_outlined,
               title: 'الأذكار',
@@ -56,6 +63,28 @@ class MoreTab extends StatelessWidget {
               color: const Color(0xFF2E7D32),
               onTap: () =>
                   Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AdhkarScreen())),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+              child: Row(children: [
+                if (Cloud.instance.zakatOn || Cloud.instance.isAdmin)
+                Expanded(
+                  child: _MiniCard(
+                    icon: Icons.calculate_outlined,
+                    title: 'حاسبة الزكاة',
+                    onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ZakatScreen())),
+                  ),
+                ),
+                if (Cloud.instance.timetableOn || Cloud.instance.isAdmin) const SizedBox(width: 8),
+                if (Cloud.instance.timetableOn || Cloud.instance.isAdmin)
+                Expanded(
+                  child: _MiniCard(
+                    icon: Icons.event_note_outlined,
+                    title: 'جدول الدروس',
+                    onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LessonsScreen())),
+                  ),
+                ),
+              ]),
             ),
             _BigCard(
               icon: Icons.quiz_outlined,
@@ -271,6 +300,20 @@ class MoreTab extends StatelessWidget {
             ]),
             const _Group('الإعدادات'),
             _Section(children: [
+              if (!kIsWeb && (Cloud.instance.sunanOn || Cloud.instance.isAdmin))
+                ListTile(
+                  leading: const _IconBox(Icons.notifications_active_outlined),
+                  title: const Text('تذكيرات السنن'),
+                  subtitle: const Text('الكهف يوم الجمعة، وصيام الاثنين والخميس والأيام البيض'),
+                  trailing: const Icon(Icons.chevron_left),
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SunanScreen())),
+                ),
+              ListTile(
+                leading: const _IconBox(Icons.mosque_outlined),
+                title: const Text('مواقيت الصلاة والقبلة'),
+                trailing: const Icon(Icons.chevron_left),
+                onTap: () => openPrayer(context),
+              ),
               ListTile(
                 leading: const _IconBox(Icons.palette_outlined),
                 title: const Text('شعار التطبيق'),
@@ -797,4 +840,33 @@ class _LogoPicker extends StatelessWidget {
       ),
     );
   }
+}
+
+
+/// A small tidy card for a tool, two in a row.
+class _MiniCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final VoidCallback onTap;
+  const _MiniCard({required this.icon, required this.title, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => Material(
+        color: kGold.withValues(alpha: .14),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: const BorderSide(color: kGold)),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            child: Row(children: [
+              Icon(icon, color: kGoldChip),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(title, style: const TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.bold, fontSize: 15)),
+              ),
+            ]),
+          ),
+        ),
+      );
 }

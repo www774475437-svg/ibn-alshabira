@@ -74,6 +74,8 @@ class QuizQ {
   String src;
   /// The answers chapter whose «اختبر نفسك» holds this question ('' = none).
   String series;
+  /// One of this week's «مسابقة الجمعة» questions.
+  bool friday;
 
   QuizQ({
     required this.id,
@@ -101,6 +103,7 @@ class QuizQ {
     List<int>? corrects,
     this.src = '',
     this.series = '',
+    this.friday = false,
   })  : choices = choices ?? ['', ''],
         corrects = corrects ?? [];
 
@@ -137,6 +140,7 @@ class QuizQ {
         corrects: [for (final c in (m['corrects'] as List? ?? const [])) (c as num).toInt()],
         src: '${m['src'] ?? ''}',
         series: '${m['series'] ?? ''}',
+        friday: m['friday'] == true,
       );
 
   Map<String, dynamic> toMap() => {
@@ -163,6 +167,7 @@ class QuizQ {
         'corrects': corrects,
         'src': src,
         'series': series,
+        'friday': friday,
       };
 
   QuizQ copy({String? id, String? cat}) => QuizQ.fromMap(id ?? this.id, toMap()..['cat'] = cat ?? this.cat)
@@ -229,6 +234,29 @@ class Quiz extends ChangeNotifier {
   String lastDay = '';
   String thanks = '';
 
+  /// «مسابقة الجمعة»: on/off by the sheikh; its questions are marked
+  /// «سؤال الجمعة»; winners come from the site file on Saturday.
+  bool fridayOn = false;
+  List<QuizQ> get fridayQs => live.where((q) => q.friday).toList();
+
+  Future<String?> setFriday(bool on) async {
+    try {
+      await _db.doc('config/quiz').set({'friday': on}, SetOptions(merge: true));
+      fridayOn = on;
+      await Cloud.instance.logAction(on ? 'تشغيل مسابقة الجمعة' : 'إيقاف مسابقة الجمعة');
+      notifyListeners();
+      return null;
+    } catch (_) {
+      return 'تعذّر الحفظ';
+    }
+  }
+
+  /// Winners of the last Friday contest (names, or numbers).
+  Future<(String, List<String>)> fridayWinners() async {
+    final m = await SiteFiles.get('friday.json');
+    return ('${m?['day'] ?? ''}', [for (final w in (m?['winners'] as List? ?? const [])) '$w']);
+  }
+
   // ------------------------------------------------------------ loading
   Future<void> load({bool force = false}) async {
     if (loading || (loaded && !force)) return;
@@ -265,6 +293,7 @@ class Quiz extends ChangeNotifier {
       all = [for (final q in (m['qs'] as List? ?? const [])) QuizQ.fromMap('${q['id']}', Map<String, dynamic>.from(q as Map))]
         ..sort((a, b) => a.order.compareTo(b.order));
       thanks = '${m['thanks'] ?? ''}';
+      fridayOn = m['fridayOn'] == true;
     }
     try {
       await _syncAccount();
@@ -281,6 +310,7 @@ class Quiz extends ChangeNotifier {
       all = [for (final d in qq.docs) QuizQ.fromMap(d.id, d.data())]..sort((a, b) => a.order.compareTo(b.order));
       final cfg = await _db.doc('config/quiz').get();
       thanks = '${cfg.data()?['thanks'] ?? ''}';
+      fridayOn = cfg.data()?['friday'] == true;
       await _syncAccount();
       unawaited(_loadStats());
     } catch (e) {

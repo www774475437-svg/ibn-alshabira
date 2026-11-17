@@ -619,10 +619,26 @@ class _AnnouncementTabState extends State<AnnouncementTab> {
   late String _color = Cloud.instance.annColor;
   late String _place = Cloud.instance.annPlace;
   late String _action = Cloud.instance.annAction;
+  late int _from = Cloud.instance.annFrom, _to = Cloud.instance.annTo;
+
+  Future<int?> _pick(int current) async {
+    final start = current > 0 ? DateTime.fromMillisecondsSinceEpoch(current) : DateTime.now();
+    final d = await showDatePicker(
+        context: context, initialDate: start, firstDate: DateTime.now().subtract(const Duration(days: 1)), lastDate: DateTime(2100));
+    if (d == null || !mounted) return null;
+    final t = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(start));
+    if (t == null) return null;
+    return DateTime(d.year, d.month, d.day, t.hour, t.minute).millisecondsSinceEpoch;
+  }
+
+  static String _when(int ms) {
+    final d = DateTime.fromMillisecondsSinceEpoch(ms);
+    return '${d.day}/${d.month} ${d.hour}:${d.minute.toString().padLeft(2, '0')}';
+  }
 
   Future<void> _save(String text) async {
     final err = await Cloud.instance
-        .setAnnouncement(text, color: _color, place: _place, action: _action, button: _button.text);
+        .setAnnouncement(text, color: _color, place: _place, action: _action, button: _button.text, from: _from, to: _to);
     if (!mounted) return;
     _toast(context, err ?? (text.trim().isEmpty ? 'أُزيل الإعلان' : 'نُشر الإعلان ✅'));
   }
@@ -667,6 +683,32 @@ class _AnnouncementTabState extends State<AnnouncementTab> {
           const SizedBox(height: 8),
           TextField(controller: _button, maxLength: 30, onChanged: (_) => setState(() {}), decoration: _deco('كلمة الزر، مثل: ابدأ التحدّي')),
         ],
+        const SizedBox(height: 8),
+        const Text('وقت الظهور والاختفاء (اختياري):', style: TextStyle(fontWeight: FontWeight.bold)),
+        Row(children: [
+          Expanded(
+            child: OutlinedButton(
+              onPressed: () async {
+                final v = await _pick(_from);
+                if (v != null) setState(() => _from = v);
+              },
+              onLongPress: () => setState(() => _from = 0),
+              child: Text(_from == 0 ? 'يظهر: الآن' : 'يظهر: ${_when(_from)}'),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: OutlinedButton(
+              onPressed: () async {
+                final v = await _pick(_to);
+                if (v != null) setState(() => _to = v);
+              },
+              onLongPress: () => setState(() => _to = 0),
+              child: Text(_to == 0 ? 'يختفي: لا' : 'يختفي: ${_when(_to)}'),
+            ),
+          ),
+        ]),
+        const Text('اضغط مطوّلاً على الزر لإلغاء الوقت.', style: TextStyle(color: Colors.grey, fontSize: 12)),
         const SizedBox(height: 8),
         AnnouncementCard(
             text: _text.text.isEmpty ? 'هكذا يظهر الإعلان' : _text.text,

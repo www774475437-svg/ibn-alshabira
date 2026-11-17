@@ -131,6 +131,59 @@ class AdhkarNotifications {
 }
 
 
+/// One-off reminders at given times (Sunnah reminders, lesson reminders).
+/// [ids] in [from, from+count) are cleared first, then the new ones set.
+class OnceNotifications {
+  static Future<void> replace(int from, int count, List<(DateTime, String, String)> items) async {
+    if (!DailyNotifications._ready) return;
+    try {
+      for (var i = 0; i < count; i++) {
+        await DailyNotifications._plugin.cancel(from + i);
+      }
+      if (items.isEmpty) return;
+      await DailyNotifications._plugin
+          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+          ?.requestNotificationsPermission();
+      final now = DateTime.now();
+      var i = 0;
+      for (final it in items) {
+        if (i >= count || !it.$1.isAfter(now)) continue;
+        await DailyNotifications._plugin.zonedSchedule(
+          from + i++,
+          it.$2,
+          it.$3,
+          tz.TZDateTime.from(it.$1, tz.UTC),
+          const NotificationDetails(
+            android: AndroidNotificationDetails(
+              'sunan',
+              'تذكيرات',
+              channelDescription: 'تذكيرات السنن ومواعيد الدروس',
+              importance: Importance.defaultImportance,
+              priority: Priority.defaultPriority,
+            ),
+          ),
+          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        );
+      }
+    } catch (_) {}
+  }
+
+  static Future<void> showNow(String title, String body) async {
+    if (!DailyNotifications._ready) return;
+    try {
+      await DailyNotifications._plugin.show(
+        8,
+        title,
+        body,
+        const NotificationDetails(
+          android: AndroidNotificationDetails('sunan', 'تذكيرات',
+              channelDescription: 'تذكيرات السنن ومواعيد الدروس', importance: Importance.high, priority: Priority.high),
+        ),
+      );
+    } catch (_) {}
+  }
+}
+
 /// Every few hours, even with the app closed, Android asks whether a newer
 /// version is out; if so, one notification per version tells the reader.
 @pragma('vm:entry-point')

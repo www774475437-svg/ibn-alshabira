@@ -245,6 +245,12 @@ class _QuranScreenState extends State<QuranScreen> {
     if (page != null) _goTo(page);
   }
 
+  Future<void> _openHifz() async {
+    final q = _q!;
+    final page = await Navigator.of(context).push<int>(MaterialPageRoute(builder: (_) => HifzScreen(q: q, current: _page)));
+    if (page != null) _goTo(page);
+  }
+
   Future<void> _openSearch() async {
     final q = _q!;
     final index = await Navigator.of(context).push<int>(MaterialPageRoute(builder: (_) => _SearchScreen(q: q)));
@@ -376,6 +382,7 @@ class _QuranScreenState extends State<QuranScreen> {
           IconButton(tooltip: 'بحث في المصحف', icon: const Icon(Icons.search), onPressed: _openSearch),
           IconButton(tooltip: 'العلامات', icon: const Icon(Icons.bookmarks_outlined), onPressed: _openMarks),
           IconButton(tooltip: 'الفهرس', icon: const Icon(Icons.format_list_bulleted), onPressed: _openIndex),
+          IconButton(tooltip: 'حفظي', icon: const Icon(Icons.psychology_outlined), onPressed: _openHifz),
         ],
       ),
       body: Column(
@@ -961,6 +968,144 @@ class _MarksScreen extends StatelessWidget {
           );
         },
       ),
+    );
+  }
+}
+
+
+/// «حفظي»: the pages the reader has memorized, by juz, and what to review
+/// today (the pages reviewed longest ago). Kept on the phone only.
+class HifzScreen extends StatefulWidget {
+  final QuranData q;
+  final int current;
+  const HifzScreen({super.key, required this.q, required this.current});
+
+  @override
+  State<HifzScreen> createState() => _HifzScreenState();
+}
+
+class _HifzScreenState extends State<HifzScreen> {
+  Map<int, int> _pages = {}; // page -> last reviewed (ms)
+  int _perDay = 5;
+
+  @override
+  void initState() {
+    super.initState();
+    SharedPreferences.getInstance().then((p) {
+      final raw = p.getString('hifz') ?? '{}';
+      final m = Map<String, dynamic>.from(jsonDecode(raw) as Map);
+      if (!mounted) return;
+      setState(() {
+        _pages = {for (final e in m.entries) int.parse(e.key): (e.value as num).toInt()};
+        _perDay = p.getInt('hifzPerDay') ?? 5;
+      });
+    });
+  }
+
+  Future<void> _save() async {
+    final p = await SharedPreferences.getInstance();
+    await p.setString('hifz', jsonEncode({for (final e in _pages.entries) '${e.key}': e.value}));
+    await p.setInt('hifzPerDay', _perDay);
+  }
+
+  void _toggle(int page) {
+    setState(() => _pages.containsKey(page) ? _pages.remove(page) : _pages[page] = DateTime.now().millisecondsSinceEpoch);
+    _save();
+  }
+
+  (int, int) _juzRange(int j) {
+    final start = widget.q.juzPage[j];
+    final end = j + 1 < widget.q.juzPage.length ? widget.q.juzPage[j + 1] - 1 : QuranData.pages;
+    return (start, end);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final today = [..._pages.entries]..sort((a, b) => a.value.compareTo(b.value));
+    final dayAgo = DateTime.now().subtract(const Duration(hours: 20)).millisecondsSinceEpoch;
+    final due = today.where((e) => e.value < dayAgo).take(_perDay).toList();
+    return Scaffold(
+      appBar: AppBar(title: const Text('حفظي')),
+      body: ListView(padding: const EdgeInsets.all(12), children: [
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Text('حفظت ${QuranData.digits(_pages.length)} صفحة من ${QuranData.digits(QuranData.pages)}',
+                  style: const TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.bold, fontSize: 17)),
+              const SizedBox(height: 8),
+              LinearProgressIndicator(value: _pages.length / QuranData.pages, color: kGold, minHeight: 8),
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                icon: Icon(_pages.containsKey(widget.current) ? Icons.check_circle : Icons.add_circle_outline),
+                label: Text(_pages.containsKey(widget.current)
+                    ? 'الصفحة ${QuranData.digits(widget.current)} محفوظة'
+                    : 'علّم الصفحة ${QuranData.digits(widget.current)} محفوظة'),
+                onPressed: () => _toggle(widget.current),
+              ),
+            ]),
+          ),
+        ),
+        if (_pages.isNotEmpty) ...[
+          Row(children: [
+            const Text('مراجعة اليوم', style: TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.bold, fontSize: 16)),
+            const Spacer(),
+            DropdownButton<int>(
+              value: _perDay,
+              underline: const SizedBox(),
+              items: [for (final n in const [3, 5, 10, 20]) DropdownMenuItem(value: n, child: Text('$n صفحات'))],
+              onChanged: (v) {
+                setState(() => _perDay = v ?? 5);
+                _save();
+              },
+            ),
+          ]),
+          if (due.isEmpty)
+            const Padding(padding: EdgeInsets.all(8), child: Text('راجعت ما عليك اليوم، بارك الله فيك.', style: TextStyle(color: Colors.grey)))
+          else
+            for (final e in due)
+              ListTile(
+                leading: const Icon(Icons.menu_book, color: kGold),
+                title: Text('صفحة ${QuranData.digits(e.key)}'),
+                subtitle: Text('الجزء ${QuranData.digits(widget.q.juzOfPage(e.key))}'),
+                onTap: () => Navigator.pop(context, e.key),
+                trailing: TextButton(
+                  onPressed: () {
+                    setState(() => _pages[e.key] = DateTime.now().millisecondsSinceEpoch);
+                    _save();
+                  },
+                  child: const Text('راجعتها ✓'),
+                ),
+              ),
+          const Divider(height: 24),
+        ],
+        const Text('الأجزاء', style: TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.bold, fontSize: 16)),
+        for (var j = 0; j < widget.q.juzPage.length; j++)
+          Builder(builder: (context) {
+            final (a, b) = _juzRange(j);
+            final n = [for (var p = a; p <= b; p++) p].where(_pages.containsKey).length;
+            final total = b - a + 1;
+            return ExpansionTile(
+              title: Text('الجزء ${QuranData.digits(j + 1)}'),
+              subtitle: LinearProgressIndicator(value: n / total, color: kGold),
+              trailing: Text('${QuranData.digits(n)}/${QuranData.digits(total)}'),
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Wrap(spacing: 6, runSpacing: 6, children: [
+                    for (var p = a; p <= b; p++)
+                      FilterChip(
+                        label: Text(QuranData.digits(p)),
+                        selected: _pages.containsKey(p),
+                        selectedColor: kGold.withValues(alpha: .35),
+                        onSelected: (_) => _toggle(p),
+                      ),
+                  ]),
+                ),
+              ],
+            );
+          }),
+      ]),
     );
   }
 }

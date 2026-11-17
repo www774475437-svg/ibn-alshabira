@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart' show Timestamp;
 import 'package:flutter/material.dart';
+import 'tools_screens.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -313,6 +314,7 @@ class AdminScreen extends StatelessWidget {
           (const Tab(icon: Icon(Icons.edit_note), text: 'نشر ومسودات'), const _PublishTab()),
           if (full) (const Tab(icon: Icon(Icons.campaign), text: 'الإعلان'), const AnnouncementTab()),
           if (full) (const Tab(icon: Icon(Icons.category), text: 'الأبواب'), const ChaptersTab()),
+          if (full) (const Tab(icon: Icon(Icons.dashboard_customize), text: 'أدوات الشيخ'), const _ToolsTab()),
           if (full) (const Tab(icon: Icon(Icons.person_pin), text: 'عن الشيخ'), const AboutTab()),
           (const Tab(icon: Icon(Icons.flag), text: 'البلاغات'), const _ReportsTab()),
           (const Tab(icon: Icon(Icons.search_off), text: 'بحث بلا نتيجة'), const MissesTab()),
@@ -1145,6 +1147,36 @@ class _UsageTabState extends State<UsageTab> {
                 ),
             ]),
           );
+        },
+      );
+}
+
+
+/// The sheikh's tools in one tidy list: live lesson, timetable, Sunnah
+/// reminders, the zakat calculator.
+class _ToolsTab extends StatelessWidget {
+  const _ToolsTab();
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: Cloud.instance,
+        builder: (context, _) {
+          final c = Cloud.instance;
+          Widget tile(IconData i, String t, String sub, bool on, Widget page) => Card(
+                child: ListTile(
+                  leading: Icon(i, color: kGold),
+                  title: Text(t, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: Text(sub),
+                  trailing: Text(on ? 'مفعّل' : 'مطفأ', style: TextStyle(color: on ? const Color(0xFF2E7D32) : Colors.grey)),
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => page)),
+                ),
+              );
+          return ListView(padding: const EdgeInsets.all(12), children: [
+            tile(Icons.sensors, 'درس مباشر (مجلس العلم)', 'شريط أحمر في الرئيسية ورابط البث والتعليقات', c.liveOn, const LiveControlScreen()),
+            tile(Icons.event_note, 'جدول الدروس', 'الدروس القادمة وتذكير قبلها', c.timetableOn, const LessonsScreen()),
+            tile(Icons.notifications_active_outlined, 'تذكيرات السنن', 'الكهف، الاثنين والخميس، البيض، عرفة، عاشوراء', c.sunanOn, const SunanScreen()),
+            tile(Icons.calculate_outlined, 'حاسبة الزكاة', 'اعتمدها لتظهر للناس', c.zakatOn, const ZakatScreen()),
+          ]);
         },
       );
 }

@@ -1,6 +1,9 @@
 import 'benefit_card.dart';
 import 'quiz_screens.dart';
 import '../widgets/announcement.dart';
+import '../widgets/sky_card.dart';
+import 'prayer_screen.dart';
+import 'tools_screens.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -114,6 +117,7 @@ class _HomeTabState extends State<HomeTab> {
         slivers: [
           SliverToBoxAdapter(child: _Header(onOpenSearch: onOpenSearch, onOpenMore: widget.onOpenMore)),
           const SliverToBoxAdapter(child: HomeAnnouncement(place: 'top')),
+          const SliverToBoxAdapter(child: LiveBanner()),
           // The search in the trusted scholars' books, with the AI.
           SliverToBoxAdapter(
             child: Padding(
@@ -344,6 +348,7 @@ class _HomeTabState extends State<HomeTab> {
             ),
           ],
 
+          const SliverToBoxAdapter(child: LessonsHomeCard()),
           const SliverToBoxAdapter(child: HomeAnnouncement(place: 'bottom')),
 
           // ------------------------------------------------ تصفّح المكتبة
@@ -366,11 +371,26 @@ class _HomeTabState extends State<HomeTab> {
             itemCount: _feedFor(repo).length,
             itemBuilder: (context, i) {
               final item = _feedFor(repo)[i];
-              if (item is Fatwa) return FatwaTile(fatwa: item);
-              if (item is Book) return _BookRow(book: item);
-              if (item is TrustedScholar) return _ScholarRow(scholar: item);
-              if (item is Recording) return _RecordingRow(rec: item);
-              return const SizedBox.shrink();
+              final Widget tile = item is Fatwa
+                  ? FatwaTile(fatwa: item)
+                  : item is Book
+                      ? _BookRow(book: item)
+                      : item is TrustedScholar
+                          ? _ScholarRow(scholar: item)
+                          : item is Recording
+                              ? _RecordingRow(rec: item)
+                              : const SizedBox.shrink();
+              // The prayer card, after the first ten items.
+              if (i == 10) {
+                return Column(children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                    child: PrayerSkyCard(onTap: () => openPrayer(context)),
+                  ),
+                  tile,
+                ]);
+              }
+              return tile;
             },
           ),
           const SliverToBoxAdapter(child: SizedBox(height: 24)),
@@ -899,7 +919,9 @@ class _ChapterStrip extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
-                    Text('${repo.countInChapter(c.id)}', style: const TextStyle(fontSize: 10.5, color: Colors.grey)),
+                    repo.newChapters.contains(c.id)
+                        ? const Text('جديد', style: TextStyle(fontSize: 10.5, color: Color(0xFFC62828), fontWeight: FontWeight.bold))
+                        : Text('${repo.countInChapter(c.id)}', style: const TextStyle(fontSize: 10.5, color: Colors.grey)),
                   ],
                 ),
               ),

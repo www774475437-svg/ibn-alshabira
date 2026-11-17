@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/models.dart';
 import '../data/repository.dart';
+import '../services/cloud.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 
@@ -33,6 +34,7 @@ class FavoritesTab extends StatelessWidget {
           builder: (context, _) => TabBarView(
             children: [
               _List(
+                edited: true,
                 items: repo.favoriteFatwas,
                 empty: const EmptyState(
                   icon: Icons.bookmark_border,
@@ -58,14 +60,31 @@ class FavoritesTab extends StatelessWidget {
 class _List extends StatelessWidget {
   final List<Fatwa> items;
   final Widget empty;
-  const _List({required this.items, required this.empty});
+  final bool edited;
+  const _List({required this.items, required this.empty, this.edited = false});
 
   @override
   Widget build(BuildContext context) {
     if (items.isEmpty) return empty;
-    return ListView.builder(
-      itemCount: items.length,
-      itemBuilder: (context, i) => FatwaTile(fatwa: items[i]),
+    return ListenableBuilder(
+      listenable: Cloud.instance,
+      builder: (context, _) {
+        final changed = edited ? Cloud.instance.editedSaved : const <String>{};
+        return ListView.builder(
+          itemCount: items.length,
+          itemBuilder: (context, i) => changed.contains(items[i].id)
+              ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  Container(
+                    margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(color: kGold.withValues(alpha: .18), borderRadius: BorderRadius.circular(8)),
+                    child: const Text('✎ عدّل الشيخ هذا الجواب', style: TextStyle(color: kGoldChip, fontSize: 12.5, fontWeight: FontWeight.bold)),
+                  ),
+                  FatwaTile(fatwa: items[i]),
+                ])
+              : FatwaTile(fatwa: items[i]),
+        );
+      },
     );
   }
 }

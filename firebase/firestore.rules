@@ -104,6 +104,14 @@ service cloud.firestore {
       allow create: if signedIn() && request.resource.data.uid == request.auth.uid;
       allow read, update, delete: if isAdmin();
     }
+    // «مجلس العلم»: comments under the sheikh's live lesson.
+    match /liveComments/{id} {
+      allow read: if true;
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid
+        && request.resource.data.text is string && request.resource.data.text.size() <= 400
+        && id.matches('[0-9]{14}_' + request.auth.uid);
+      allow delete: if isAdmin();
+    }
     match /benefits/{id} { allow read: if true; allow write: if isAdmin(); }
     match /users/{uid} {
       allow read, write: if signedIn() && request.auth.uid == uid;

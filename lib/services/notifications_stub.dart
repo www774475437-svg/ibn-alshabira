@@ -15,3 +15,8 @@ class UpdateWatch {
   static Future<void> start() async {}
   static Future<void> checkNow() async {}
 }
+
+class OnceNotifications {
+  static Future<void> replace(int from, int count, List<(DateTime, String, String)> items) async {}
+  static Future<void> showNow(String title, String body) async {}
+}

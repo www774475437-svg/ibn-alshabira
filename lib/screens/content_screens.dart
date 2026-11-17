@@ -1,5 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
+
+import '../config.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 
 import '../data/models.dart';
@@ -38,6 +41,12 @@ class SeriesScreen extends StatelessWidget {
           appBar: AppBar(
             title: Text(series.title),
             actions: [
+              IconButton(
+                tooltip: 'مشاركة السلسلة',
+                icon: const Icon(Icons.share),
+                onPressed: () => Share.share('سلسلة «${series.title}» من أجوبة الشيخ قايد بن غانم الشابرة (${items.length} جواباً):\n'
+                    '${AppConfig.siteUrl}#/s/${series.id}'),
+              ),
               if (cloud.isAdmin)
                 IconButton(
                   tooltip: 'حذف السلسلة',

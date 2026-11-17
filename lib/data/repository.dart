@@ -489,6 +489,26 @@ class Repository extends ChangeNotifier {
 
   int countInChapter(String id) => fatwas.where((f) => f.chapter == id).length;
 
+  /// Chapters holding answers from the last two weeks that the reader has
+  /// not opened yet («جديد» on the chapter).
+  Set<String> get newChapters {
+    final key = fatwas.length * 7919 + readLog.values.fold<int>(0, (a, b) => a + b.length);
+    if (key == _newKey) return _newChapters;
+    _newKey = key;
+    final read = everRead;
+    final since = DateTime.now().subtract(const Duration(days: 14));
+    final out = <String>{};
+    for (final f in fatwas) {
+      if (out.contains(f.chapter) || read.contains(f.id)) continue;
+      final d = DateTime.tryParse(f.date);
+      if (d != null && d.isAfter(since)) out.add(f.chapter);
+    }
+    return _newChapters = out;
+  }
+
+  int _newKey = -1;
+  Set<String> _newChapters = {};
+
   /// Every word of the query must appear (in any order).
   List<Video> _fetchedVideos = [];
 

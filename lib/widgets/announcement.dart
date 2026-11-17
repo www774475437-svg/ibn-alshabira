@@ -26,7 +26,7 @@ class HomeAnnouncement extends StatelessWidget {
         builder: (context, _) {
           final c = Cloud.instance;
           final where = const ['top', 'middle', 'bottom'].contains(c.annPlace) ? c.annPlace : 'middle';
-          if (c.announcement.isEmpty || where != place) return const SizedBox.shrink();
+          if (!c.announcementNow || where != place) return const SizedBox.shrink();
           return Padding(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
             child: AnnouncementCard(text: c.announcement, color: c.annColor, action: c.annAction, button: c.annButton),

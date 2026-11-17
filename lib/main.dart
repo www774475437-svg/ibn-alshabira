@@ -16,7 +16,10 @@ import 'services/day_log.dart';
 import 'services/fresh_posts.dart';
 import 'services/live_feed.dart';
 import 'services/challenge.dart';
+import 'screens/content_screens.dart';
 import 'services/notifications.dart';
+import 'services/prayer.dart';
+import 'services/reminders.dart';
 import 'theme.dart';
 
 Future<void> main() async {
@@ -37,6 +40,13 @@ Future<void> main() async {
     if (Cloud.instance.user != null) Challenges.instance.load();
   });
   DayLog.instance.start();
+  // Reminders and the prayer widget, once the settings have loaded.
+  Future<void>.delayed(const Duration(seconds: 12), () async {
+    await Reminders.schedule();
+    await Reminders.scheduleLessons();
+    await Prayer.instance.load();
+    await Prayer.instance.pushWidget();
+  });
   if (quick) Future.delayed(const Duration(milliseconds: 400), Repository.instance.loadRest);
   // Set up the daily notification after the first frame; never blocks startup.
   DailyNotifications.init().then(
@@ -53,6 +63,9 @@ Future<void> main() async {
 /// Routes: "/" home, "/fatwa/<id>" a single fatwa (shareable web link).
 Route<dynamic>? onGenerateRoute(RouteSettings settings) {
   final name = settings.name ?? '/';
+  if (name.startsWith('/s/')) {
+    return MaterialPageRoute(settings: settings, builder: (_) => SeriesScreen(seriesId: name.substring(3)));
+  }
   final routeId = AppConfig.idFromRoute(name);
   if (routeId != null) {
     final f = Repository.instance.findById(routeId);
@@ -98,6 +111,12 @@ class IbnAlshabiraApp extends StatelessWidget {
         onGenerateRoute: onGenerateRoute,
         // A shared link to one fatwa opens it directly, with home underneath.
         onGenerateInitialRoutes: (initial) {
+          if (initial.startsWith('/s/')) {
+            return [
+              MaterialPageRoute(settings: const RouteSettings(name: '/'), builder: (_) => const HomeShell()),
+              MaterialPageRoute(settings: RouteSettings(name: initial), builder: (_) => SeriesScreen(seriesId: initial.substring(3))),
+            ];
+          }
           final initialId = AppConfig.idFromRoute(initial);
           if (initialId != null) {
             final f = Repository.instance.findById(initialId);

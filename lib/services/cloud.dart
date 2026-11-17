@@ -615,6 +615,11 @@ class Cloud extends ChangeNotifier {
           if (isLater(e.value)) (e.key, '${e.value['title'] ?? ''}', (e.value['publishAt'] as Timestamp).toDate()),
       ]..sort((a, b) => a.$3.compareTo(b.$3));
       remoteIds = {for (final e in visible) e.key};
+      editSigs = {
+        for (final id in {...docs.keys, ...edits.keys})
+          if (!id.startsWith('_')) id: _fnv(jsonEncode(_plain({'d': docs[id], 'e': {...?edits[id]}..removeWhere((k, _) => const {'summary', 'verified', 'by', 'at', 'verifiedBy'}.contains(k))}))),
+      };
+      unawaited(_baselineSaved());
       summaries = {
         for (final e in edits.entries)
           if ('${e.value['summary'] ?? ''}'.trim().isNotEmpty) e.key: '${e.value['summary']}'.trim(),
@@ -703,6 +708,46 @@ class Cloud extends ChangeNotifier {
     } catch (_) {
       return 'تعذّر الحفظ';
     }
+  }
+
+  /// A fingerprint of each answer the staff changed in the app, to tell a
+  /// reader when the sheikh edits an answer he saved.
+  Map<String, String> editSigs = {};
+  Set<String> editedSaved = {};
+
+  static String _fnv(String s) {
+    var h = 0x811c9dc5;
+    for (final c in s.codeUnits) {
+      h ^= c;
+      h = (h * 0x01000193) & 0xFFFFFFFF;
+    }
+    return h.toRadixString(16);
+  }
+
+  /// Saved answers get their fingerprint remembered the first time; after
+  /// that, a different fingerprint means the sheikh edited it.
+  Future<void> _baselineSaved() async {
+    final p = await SharedPreferences.getInstance();
+    final out = <String>{};
+    for (final id in Repository.instance.favorites) {
+      final now = editSigs[id] ?? '';
+      final seen = p.getString('editSeen_$id');
+      if (seen == null) {
+        await p.setString('editSeen_$id', now);
+      } else if (seen != now) {
+        out.add(id);
+      }
+    }
+    editedSaved = out;
+    notifyListeners();
+  }
+
+  /// Opening the answer clears its «عدّله الشيخ» mark.
+  Future<void> markEditSeen(String id) async {
+    if (!editedSaved.contains(id) && !Repository.instance.favorites.contains(id)) return;
+    final p = await SharedPreferences.getInstance();
+    await p.setString('editSeen_$id', editSigs[id] ?? '');
+    if (editedSaved.remove(id)) notifyListeners();
   }
 
   /// One-line summaries the staff approved: answer id -> line.
@@ -909,6 +954,29 @@ class Cloud extends ChangeNotifier {
 
   /// The sheikh's lessons timetable (free text; hidden while empty).
   String schedule = '';
+
+  /// The announcement shows only between these times (ms; 0 = no limit).
+  int annFrom = 0, annTo = 0;
+  bool get announcementNow {
+    final n = DateTime.now().millisecondsSinceEpoch;
+    return announcement.isNotEmpty && (annFrom == 0 || n >= annFrom) && (annTo == 0 || n < annTo);
+  }
+
+  /// «جدول الدروس»: hidden from readers until the sheikh turns it on.
+  bool timetableOn = false;
+  List<Map<String, dynamic>> timetable = [];
+
+  /// «تذكيرات السنن»: off until the sheikh turns them on; he edits the texts.
+  bool sunanOn = false;
+  Map<String, String> sunanTexts = {};
+
+  /// «مجلس العلم»: the sheikh's live lesson.
+  bool liveOn = false;
+  String liveUrl = '', liveTitle = '', liveRoom = '';
+
+  /// «حاسبة الزكاة»: shown to readers after the sheikh approves it.
+  bool zakatOn = false;
+  String zakatNote = '';
 
   /// Counts this device once a day, so the staff see how many *readers*
   /// came (not how many pages were opened).
@@ -1134,6 +1202,23 @@ class Cloud extends ChangeNotifier {
           if (e.value is int) '${e.key}': e.value as int,
       };
       schedule = '${c['schedule']?['text'] ?? ''}';
+      annFrom = (an?['from'] as num?)?.toInt() ?? 0;
+      annTo = (an?['to'] as num?)?.toInt() ?? 0;
+      timetableOn = c['timetable']?['on'] == true;
+      timetable = [
+        for (final m in ((c['timetable']?['items'] ?? []) as List))
+          if (m is Map) Map<String, dynamic>.from(m),
+      ];
+      sunanOn = c['sunan']?['on'] == true;
+      sunanTexts = {
+        for (final e in ((c['sunan']?['texts'] ?? {}) as Map).entries) '${e.key}': '${e.value}',
+      };
+      liveOn = c['live']?['on'] == true;
+      liveUrl = '${c['live']?['url'] ?? ''}';
+      liveTitle = '${c['live']?['title'] ?? ''}';
+      liveRoom = '${c['live']?['room'] ?? ''}';
+      zakatOn = c['zakat']?['on'] == true;
+      zakatNote = '${c['zakat']?['note'] ?? ''}';
       subs = {
         for (final e in ((c['subs']?['map'] ?? {}) as Map).entries)
           '${e.key}': ((e.value ?? []) as List).map((x) => '$x').toList(),
@@ -1306,7 +1391,7 @@ class Cloud extends ChangeNotifier {
   }
 
   Future<String?> setAnnouncement(String text,
-      {String color = 'gold', String place = 'middle', String action = '', String button = ''}) async {
+      {String color = 'gold', String place = 'middle', String action = '', String button = '', int from = 0, int to = 0}) async {
     try {
       final t = text.trim();
       await _db.doc('config/announcement').set({
@@ -1317,7 +1402,11 @@ class Cloud extends ChangeNotifier {
         'place': place,
         'action': action,
         'button': button.trim(),
+        'from': from,
+        'to': to,
       });
+      annFrom = from;
+      annTo = to;
       _log(t.isEmpty ? 'إزالة الإعلان' : 'نشر إعلان', t);
       await _bump();
       announcement = t;

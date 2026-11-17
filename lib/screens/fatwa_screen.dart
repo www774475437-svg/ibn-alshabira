@@ -59,6 +59,7 @@ class _FatwaScreenState extends State<FatwaScreen> {
     _pager = PageController(initialPage: _index);
     repo.markRead(current.id);
     Cloud.instance.addView(current.id);
+    Cloud.instance.markEditSeen(current.id);
     if (!_modeLoaded) {
       _modeLoaded = true;
       SharedPreferences.getInstance().then((p) {

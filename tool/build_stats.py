@@ -204,7 +204,21 @@ def main():
 
     save('quiz.json', {'at': now.isoformat(), 'cats': cats, 'qs': qs,
                        'thanks': cfg.get('thanks', ''), 'chPerDay': cfg.get('chPerDay', 2),
-                       'readPoints': cfg.get('readPoints', False)})
+                       'readPoints': cfg.get('readPoints', False), 'fridayOn': cfg.get('friday', False)})
+
+    # «مسابقة الجمعة»: who answered the Friday questions right (last Friday).
+    if cfg.get('friday'):
+        fq = {q['id'] for q in qs if q.get('friday')}
+        fri = now.date() - dt.timedelta(days=(now.weekday() - 4) % 7)
+        fdocs = docs if fri.isoformat() == today else day_docs(fri.isoformat())
+        winners = []
+        for _, m in fdocs:
+            a = m.get('a') or {}
+            got = [qid for qid in fq if isinstance(a.get(qid), list) and len(a[qid]) > 1 and a[qid][1]]
+            if fq and len(got) == len(fq):
+                name = (m.get('name') or '').strip()
+                winners.append(name if name else f"رقم {str(m.get('u', '')).lstrip('g')}")
+        save('friday.json', {'at': now.isoformat(), 'day': fri.isoformat(), 'winners': sorted(set(winners))})
     save('stats.json', {'at': now.isoformat(), 'q': now_totals['quiz']})
     save('views.json', {'at': now.isoformat(), 'v': now_totals['views'],
                         'shares': now_totals.get('shares', 0), 'readers': readers})

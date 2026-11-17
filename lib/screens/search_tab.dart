@@ -92,7 +92,16 @@ class _SearchTabState extends State<SearchTab> {
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(chapterIcon(c.icon), color: kGold),
                 title: Text(c.name),
-                trailing: Text('${repo.countInChapter(c.id)}'),
+                trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                  if (repo.newChapters.contains(c.id))
+                    Container(
+                      margin: const EdgeInsetsDirectional.only(end: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                      decoration: BoxDecoration(color: const Color(0xFFC62828), borderRadius: BorderRadius.circular(8)),
+                      child: const Text('جديد', style: TextStyle(color: Colors.white, fontSize: 11)),
+                    ),
+                  Text('${repo.countInChapter(c.id)}'),
+                ]),
                 onTap: () {
                   Navigator.pop(ctx);
                   Navigator.of(context).push(
