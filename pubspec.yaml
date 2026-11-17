@@ -1,7 +1,7 @@
 name: ibn_alshabira
 description: "تطبيق ابن الشابرة — فتاوى ومقالات وكتب الشيخ قايد بن غانم الشابرة"
 publish_to: 'none'
-version: 4.3.1+1
+version: 4.3.2+1
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -34,6 +34,7 @@ dependencies:
   wakelock_plus: ^1.2.8
   geolocator: ^13.0.2
   sensors_plus: ^6.1.1
+  record: ^6.0.0
 
 dev_dependencies:
   flutter_test:

@@ -36,7 +36,21 @@ def get(url):
         return r.read().decode('utf-8', 'replace')
 
 
+def _from_app():
+    """Channel posts the app made itself (kept by the publish job)."""
+    try:
+        url = 'https://raw.githubusercontent.com/www774475437-svg/ibn-alshabira/media/posted.json'
+        return set(json.loads(get(url)).get('ids', []))
+    except Exception:
+        return set()
+
+
+FROM_APP = set()
+
+
 def main():
+    global FROM_APP
+    FROM_APP = _from_app()
     posts = {}
     before = None
     for page in range(MAX_PAGES):
@@ -53,6 +67,8 @@ def main():
                 continue
             pid = int(m.group(1))
             found.append(pid)
+            if pid in FROM_APP:  # posted from the app: already in it
+                continue
             tm = text_re.search(block)
             text = clean(tm.group(1)) if tm else ''
             if len(text) < 20:

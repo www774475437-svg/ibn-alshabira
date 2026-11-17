@@ -8,6 +8,8 @@ import '../services/cloud.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/announcement.dart';
+import '../widgets/voice_recorder.dart';
+import '../services/telegram_out.dart';
 
 void _toast(BuildContext context, String t) =>
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t)));
@@ -475,6 +477,9 @@ class _ReplyScreenState extends State<ReplyScreen> {
   bool _publish = false;
   bool _busy = false;
   String _refId = '';
+  bool _channel = false, _withLink = true;
+  String _form = 'qa';
+  Recorded? _voice;
 
   /// Refer the asker to an answer that already exists in the app.
   void _pickExisting() {
@@ -542,7 +547,24 @@ class _ReplyScreenState extends State<ReplyScreen> {
       _toast(context, err);
       return;
     }
-    _toast(context, _publish ? 'أُرسل الرد ونُشر الجواب للجميع ✅' : 'أُرسل الرد إلى السائل ✅');
+    var note = '';
+    if (_publish && (_channel || _voice != null)) {
+      final id = Cloud.instance.lastPublishedId;
+      final title = _title.text.trim().isEmpty ? widget.question.split('\n').first : _title.text.trim();
+      if (_channel) {
+        final e = await TelegramOut.queueText(
+            TelegramOut.format(
+                form: _form, title: title, question: widget.question, text: _reply.text, link: _withLink && id.isNotEmpty ? TelegramOut.linkOf(id) : ''),
+            answerId: id);
+        note = e ?? ' ويُنشر في القناة خلال دقائق';
+      }
+      if (_voice != null) {
+        final e = await TelegramOut.queueVoice(_voice!.bytes, _voice!.ext, caption: title, answerId: id);
+        note += e == null ? '، والتسجيل في قناة الصوتيات' : ' ($e)';
+      }
+    }
+    if (!mounted) return;
+    _toast(context, _publish ? 'أُرسل الرد ونُشر الجواب للجميع ✅$note' : 'أُرسل الرد إلى السائل ✅');
     Navigator.of(context).pop();
   }
 
@@ -588,6 +610,27 @@ class _ReplyScreenState extends State<ReplyScreen> {
             ),
             const SizedBox(height: 12),
             TextField(controller: _title, decoration: _deco('عنوان الجواب')),
+            const SizedBox(height: 8),
+            VoiceRecorder(onDone: (r) => _voice = r),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('انشر في القناة'),
+              subtitle: const Text('رسالة واحدة مرتبة في قناة الشيخ على تيليجرام'),
+              value: _channel,
+              onChanged: (v) => setState(() => _channel = v),
+            ),
+            if (_channel) ...[
+              Wrap(spacing: 6, children: [
+                ChoiceChip(label: const Text('سؤال وجواب'), selected: _form == 'qa', onSelected: (_) => setState(() => _form = 'qa')),
+                ChoiceChip(label: const Text('مقالة'), selected: _form == 'article', onSelected: (_) => setState(() => _form = 'article')),
+              ]),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('مع الرابط القصير إلى التطبيق'),
+                value: _withLink,
+                onChanged: (v) => setState(() => _withLink = v ?? true),
+              ),
+            ],
           ],
           const SizedBox(height: 16),
           FilledButton.icon(

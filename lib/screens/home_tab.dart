@@ -5,6 +5,7 @@ import '../widgets/sky_card.dart';
 import 'prayer_screen.dart';
 import 'tools_screens.dart';
 import 'profile_screen.dart';
+import 'compose_screen.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -399,6 +400,8 @@ class _HomeTabState extends State<HomeTab> {
         ],
         ),
       ),
+          // The sheikh's «+», on the other side from the «back to top» arrow.
+          const PositionedDirectional(bottom: 16, end: 16, child: ComposeFab()),
           // Back to the top, once the reader has gone far down.
           if (_showTop)
             PositionedDirectional(

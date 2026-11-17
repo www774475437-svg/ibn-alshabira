@@ -8,6 +8,7 @@ import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 
 import '../services/cloud.dart';
 import '../services/reminders.dart';
+import '../services/telegram_out.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 
@@ -548,6 +549,7 @@ class LiveControlScreen extends StatefulWidget {
 class _LiveControlScreenState extends State<LiveControlScreen> {
   late final _url = TextEditingController(text: Cloud.instance.liveUrl);
   late final _title = TextEditingController(text: Cloud.instance.liveTitle);
+  bool _announce = true;
 
   Future<void> _set(bool on) async {
     if (on && youtubeId(_url.text) == null) {
@@ -557,6 +559,9 @@ class _LiveControlScreenState extends State<LiveControlScreen> {
     final room = on ? '${DateTime.now().millisecondsSinceEpoch}' : Cloud.instance.liveRoom;
     final err = await Cloud.instance.setConfig(
         'live', {'on': on, 'url': _url.text.trim(), 'title': _title.text.trim(), 'room': room}, on ? 'بدء درس مباشر' : 'إنهاء الدرس المباشر');
+    if (on && err == null && _announce) {
+      await TelegramOut.queueText('🔴 الشيخ في درس مباشر الآن${_title.text.trim().isEmpty ? '' : ': ${_title.text.trim()}'}\n\n${_url.text.trim()}');
+    }
     if (mounted) _say(context, err ?? (on ? 'ظهر الشريط للناس' : 'انتهى الدرس'), ok: err == null);
     if (mounted) setState(() {});
   }
@@ -570,6 +575,12 @@ class _LiveControlScreenState extends State<LiveControlScreen> {
         TextField(controller: _url, decoration: const InputDecoration(labelText: 'رابط البث في يوتيوب', border: OutlineInputBorder())),
         const SizedBox(height: 10),
         TextField(controller: _title, decoration: const InputDecoration(labelText: 'عنوان الدرس (اختياري)', border: OutlineInputBorder())),
+        CheckboxListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('أعلِن في قناة تيليجرام أيضاً'),
+          value: _announce,
+          onChanged: (v) => setState(() => _announce = v ?? true),
+        ),
         const SizedBox(height: 16),
         FilledButton.icon(
           style: FilledButton.styleFrom(

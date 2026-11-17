@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'telegram_out.dart';
+
 import '../data/models.dart';
 import '../data/repository.dart';
 
@@ -125,7 +127,12 @@ class LiveFeed {
     return (q, a);
   }
 
+  static Set<int> _fromApp = {};
+
   static Future<bool> _fromTelegram(SharedPreferences prefs) async {
+    try {
+      _fromApp = await TelegramOut.postedIds();
+    } catch (_) {}
     final known = Repository.instance.lastChannelId;
     final f = <Map<String, dynamic>>[];
     final c = <Map<String, dynamic>>[];
@@ -148,6 +155,7 @@ class LiveFeed {
         any = true;
         if (id < low) low = id;
         if (id <= known) continue;
+        if (_fromApp.contains(id)) continue; // posted from the app: already inside
         final tm = _text.firstMatch(block);
         var text = tm == null ? '' : clean(tm.group(1)!);
         text = text.replaceAll(_hashtags, '').replaceAll(RegExp(r'\n{3,}'), '\n\n').trim();

@@ -13,6 +13,8 @@ import '../widgets/common.dart';
 import '../data/hijri.dart';
 import '../services/voice.dart';
 import 'admin_extra.dart';
+import 'audio_library.dart';
+import '../services/telegram_out.dart';
 import 'ask_screen.dart';
 import 'favorites_tab.dart';
 import 'quran_screen.dart';
@@ -757,6 +759,19 @@ class _AnswerBodyState extends State<_AnswerBody> {
         Wrap(
           alignment: WrapAlignment.center,
           children: [
+            // The sheikh's voice answer, posted to his recordings channel.
+            FutureBuilder<Map<String, int>>(
+              future: TelegramOut.voices(),
+              builder: (context, snap) {
+                final mid = snap.data?[fatwa.id];
+                if (mid == null) return const SizedBox.shrink();
+                return FilledButton.tonalIcon(
+                  icon: const Icon(Icons.mic, size: 20),
+                  label: const Text('جواب الشيخ بصوته'),
+                  onPressed: () => openRecording(context, Recording(mid, 'v', fatwa.title, '', fatwa.date, '')),
+                );
+              },
+            ),
             if (fatwa.audio.startsWith('http'))
               FilledButton.tonalIcon(
                 icon: const Icon(Icons.headphones, size: 20),

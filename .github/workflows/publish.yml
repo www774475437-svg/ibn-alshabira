@@ -1,0 +1,43 @@
+name: Publish from the app to Telegram
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+concurrency:
+  group: media-branch-publish
+  cancel-in-progress: false
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get the media branch
+        run: git clone --depth 1 --branch media "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" media
+      - uses: actions/checkout@v4
+        with:
+          path: code
+          sparse-checkout: tool
+      - name: Post what the sheikh published
+        working-directory: media
+        env:
+          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: python3 -I ../code/tool/tg_publish.py
+      - name: Save
+        run: |
+          [ -f media/posted.json ] || exit 0
+          cd media && git status --porcelain | grep -q . || exit 0
+          cd ..
+          mkdir out && cp media/posted.json out/
+          for i in 1 2 3; do
+            rm -rf m && git clone --depth 1 --branch media "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" m
+            cp out/* m/ && cd m
+            git config user.name "publish-bot"
+            git config user.email "publish-bot@users.noreply.github.com"
+            git add posted.json
+            git diff --cached --quiet && exit 0
+            git commit -q -m "Posted from the app"
+            git push origin HEAD:media && exit 0
+            cd ..
+          done
+          exit 1

@@ -15,6 +15,7 @@ import 'ai.dart';
 import 'day_log.dart';
 import 'notifications.dart';
 import 'site_files.dart';
+import 'telegram_out.dart';
 
 /// Online features (app and website): Google sign-in, admins, views,
 /// «هل أفادك الجواب؟», error reports, published answers and title edits.
@@ -640,6 +641,9 @@ class Cloud extends ChangeNotifier {
     }
   }
 
+  /// The id of the answer published last (to post it in the channel too).
+  String lastPublishedId = '';
+
   Future<String?> publishAnswer({
     required String chapter,
     required String title,
@@ -649,13 +653,14 @@ class Cloud extends ChangeNotifier {
     DateTime? publishAt,
     String sub = '',
     String audio = '',
+    String type = 'fatwa',
   }) async {
     try {
       final now = publishAt ?? DateTime.now();
-      await _db.collection('answers').add({
+      final ref = await _db.collection('answers').add({
         if (publishAt != null) 'publishAt': Timestamp.fromDate(publishAt),
         'chapter': chapter,
-        'type': 'fatwa',
+        'type': type,
         'title': title.trim(),
         'question': question.trim(),
         'answer': answer.trim(),
@@ -666,6 +671,7 @@ class Cloud extends ChangeNotifier {
         'source': '',
         'by': email,
       });
+      lastPublishedId = ref.id;
       _log(publishAt == null ? 'نشر جواب' : 'جدولة جواب', title);
       await loadRemoteAnswers();
       return null;
@@ -1075,6 +1081,11 @@ class Cloud extends ChangeNotifier {
       });
       _log('تعديل جواب', title);
       await loadRemoteAnswers();
+      // The same post in the channel is edited too (if the app posted it).
+      unawaited(TelegramOut.queueEdit(
+          id,
+          TelegramOut.format(
+              form: question.trim().isEmpty ? 'article' : 'qa', title: title, question: question, text: answer, link: TelegramOut.linkOf(id))));
       return null;
     } catch (_) {
       return 'تعذّر الحفظ';
