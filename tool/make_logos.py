@@ -1,6 +1,7 @@
 import math, sys
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
-F = '/home/claude/fonts/'
+import os
+F = os.environ.get('FONTS_DIR', 'fonts/')
 AMIRI_B = F+'Amiri-1.000/Amiri-Bold.ttf'
 KUFI_B = F+'ReemKufi-1.7/ttf/ReemKufi-Bold.ttf'
 GOLD = (214, 178, 94); GOLD2 = (240, 212, 140); GREEN = (22, 64, 42); DGREEN = (10, 36, 23)
