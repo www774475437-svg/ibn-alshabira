@@ -11,7 +11,7 @@ jobs:
           git init -q r && cd r
           git remote add origin "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}"
           git fetch -q origin '+refs/heads/retag/*:refs/remotes/retag/*'
-          for b in $(git for-each-ref --format='%(refname:strip=2)' refs/remotes/retag); do
+          for b in $(git for-each-ref --format='%(refname:strip=3)' refs/remotes/retag); do
             git push -q -f origin "refs/remotes/retag/$b:refs/tags/$b"
             git push -q origin --delete "retag/$b"
             echo "moved $b"
