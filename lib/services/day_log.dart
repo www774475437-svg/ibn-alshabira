@@ -7,6 +7,7 @@ import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'cloud.dart';
+import 'members.dart';
 import 'quiz.dart';
 
 /// Everything a phone has to tell the server in a day, kept on the phone and
@@ -151,6 +152,8 @@ class DayLog with WidgetsBindingObserver {
   /// Minutes on screen go only with something else, or when the app closes.
   Future<void> flush({bool closing = false}) async {
     _roll();
+    // The reader's summary for the staff: at most once in six hours.
+    unawaited(Members.pushCard());
     if (_sending || !Cloud.instance.ready) return;
     if (!_dirty && !(closing && _minutes != _sentMin)) return;
     _sending = true;

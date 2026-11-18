@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import 'members_screen.dart';
+
 import '../config.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
@@ -72,7 +74,16 @@ class AskerChatScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final cloud = Cloud.instance;
     return Scaffold(
-      appBar: AppBar(title: Text(label, style: const TextStyle(fontSize: 17))),
+      appBar: AppBar(
+        title: Text(label, style: const TextStyle(fontSize: 17)),
+        actions: [
+          IconButton(
+            tooltip: 'ملفه: قراءاته وإنجازاته',
+            icon: const Icon(Icons.account_circle_outlined),
+            onPressed: () => openMember(context, uid),
+          ),
+        ],
+      ),
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: cloud.allQuestions(),
         builder: (context, snap) {
