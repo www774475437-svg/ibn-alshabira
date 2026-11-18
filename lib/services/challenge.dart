@@ -37,12 +37,17 @@ class Challenge {
   bool get allFinished => players.isNotEmpty && players.every((p) => p.finished);
   int get now => DateTime.now().millisecondsSinceEpoch;
   bool get inLobby => status == 'lobby' && now < lobbyUntil;
-  bool get playing => !over && (status == 'play' || (status == 'lobby' && now >= lobbyUntil));
+  /// Nobody but the host came in.
+  bool get empty => players.length < 2;
+  /// Cancelled: nobody joined before the waiting time ended. Not counted.
+  bool get cancelled => status == 'cancelled' || (status == 'lobby' && now >= lobbyUntil && empty);
+  bool get playing => !over && !cancelled && (status == 'play' || (status == 'lobby' && now >= lobbyUntil));
   int get playStart => startAt > 0 ? startAt : lobbyUntil;
   /// The last moment anyone can still be answering.
   int get deadline => playStart + qids.length * secs * 1000 + 45000;
 
   bool get over =>
+      cancelled ||
       status == 'done' ||
       (allFinished && players.length >= 2) ||
       (status != 'lobby' || now >= lobbyUntil) && now > deadline ||
@@ -165,10 +170,39 @@ class Challenges extends ChangeNotifier {
     } else {
       return false;
     }
+    _lastSpend = data.containsKey('credits') ? 'credit' : 'day';
     played++;
     await _db.doc('quizUsers/${u.uid}').set(data, SetOptions(merge: true));
     notifyListeners();
     return true;
+  }
+
+  String _lastSpend = 'day';
+
+  /// Nobody joined: the host's phone marks the challenge cancelled and gives
+  /// the day's challenge back (or the extra one), once.
+  Future<void> cancelEmpty(Challenge c) async {
+    final u = Cloud.instance.user;
+    if (u == null || c.host != u.uid || !c.empty || c.status == 'cancelled') return;
+    final p = await SharedPreferences.getInstance();
+    final key = 'chRefund_${c.code}';
+    if (p.getBool(key) == true) return;
+    await p.setBool(key, true);
+    try {
+      await _db.doc('challenges/${c.code}').update({'status': 'cancelled'});
+      final spent = p.getString('chSpend_${c.code}') ?? 'day';
+      final data = <String, dynamic>{'chPlayed': FieldValue.increment(-1)};
+      if (spent == 'credit') {
+        credits++;
+        data['credits'] = credits;
+      } else if (usedToday > 0) {
+        usedToday--;
+        data['chUsed'] = usedToday;
+      }
+      if (played > 0) played--;
+      await _db.doc('quizUsers/${u.uid}').set(data, SetOptions(merge: true));
+      notifyListeners();
+    } catch (_) {}
   }
 
   String get _name {
@@ -239,6 +273,9 @@ class Challenges extends ChangeNotifier {
         });
         if (ok) {
           await _remember(code);
+          try {
+            (await SharedPreferences.getInstance()).setString('chSpend_$code', _lastSpend);
+          } catch (_) {}
           return (code, null);
         }
       } catch (e) {

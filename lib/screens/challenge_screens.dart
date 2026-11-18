@@ -412,14 +412,24 @@ class _ChallengeRoomState extends State<ChallengeRoom> {
           if (me != null && !me.finished && c.playing && !_playing) {
             WidgetsBinding.instance.addPostFrameCallback((_) => _play(c));
           }
-          if (c.over && !_counted) {
+          if (c.cancelled && !_counted) {
+            _counted = true;
+            Challenges.instance.cancelEmpty(c);
+          } else if (c.over && !_counted) {
             _counted = true;
             Challenges.instance.countResult(c);
           }
           return Scaffold(
             appBar: AppBar(title: Text(c.mode == 'duel' ? 'تحدٍّ فردي' : 'تحدٍّ جماعي')),
             body: ListView(padding: const EdgeInsets.all(14), children: [
-              if (c.inLobby) ..._lobby(c, me, uid) else if (!c.over) ..._waiting(c, me) else ..._results(c, uid),
+              if (c.inLobby)
+                ..._lobby(c, me, uid)
+              else if (c.cancelled)
+                ..._cancelled(c, uid)
+              else if (!c.over)
+                ..._waiting(c, me)
+              else
+                ..._results(c, uid),
             ]),
           );
         },
@@ -467,6 +477,24 @@ class _ChallengeRoomState extends State<ChallengeRoom> {
         ),
       ),
       const SizedBox(height: 12),
+      Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: c.empty ? Colors.orange.withValues(alpha: .12) : const Color(0xFF2E7D32).withValues(alpha: .12),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Column(children: [
+          Text(c.empty ? 'لم يدخل أحد بعد' : 'دخل ${c.players.length - 1} ${c.players.length - 1 == 1 ? 'شخص' : 'أشخاص'}',
+              style: TextStyle(
+                  fontFamily: 'Tajawal',
+                  fontWeight: FontWeight.bold,
+                  fontSize: 20,
+                  color: c.empty ? Colors.orange.shade800 : const Color(0xFF2E7D32))),
+          Text(c.empty ? 'إن لم يدخل أحد قبل انتهاء الوقت يُلغى التحدي ولا يُحسب من تحدياتك' : 'في الغرفة ${c.players.length} من ${c.max}',
+              textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey, fontSize: 12.5)),
+        ]),
+      ),
+      const SizedBox(height: 6),
       Text('في الغرفة (${c.players.length})', style: const TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.bold, fontSize: 16)),
       for (final p in c.players)
         ListTile(
@@ -481,18 +509,39 @@ class _ChallengeRoomState extends State<ChallengeRoom> {
           },
           child: const Text('ادخل الغرفة'),
         ),
-      if (c.host == uid && c.players.length >= 2)
+      if (c.host == uid)
         Padding(
           padding: const EdgeInsets.only(top: 8),
           child: FilledButton.icon(
             style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
             icon: const Icon(Icons.play_arrow_rounded),
-            label: const Text('ابدأ الآن'),
-            onPressed: () => Challenges.instance.startNow(c),
+            label: Text(c.empty ? 'ابدأ الآن (بعد أن يدخل أحد)' : 'ابدأ الآن'),
+            onPressed: c.empty ? null : () => Challenges.instance.startNow(c),
           ),
         ),
     ];
   }
+
+  List<Widget> _cancelled(Challenge c, String? uid) => [
+        const SizedBox(height: 30),
+        const Icon(Icons.event_busy, size: 64, color: Colors.orange),
+        const SizedBox(height: 10),
+        const Text('أُلغي التحدّي', textAlign: TextAlign.center,
+            style: TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.bold, fontSize: 22)),
+        const SizedBox(height: 6),
+        Text(
+            c.host == uid
+                ? 'لم يدخل أحد خلال الدقيقتين، فلم يُحسب من تحدياتك. أنشئ تحدياً جديداً وأرسل الرابط لصاحبك وهو جاهز.'
+                : 'لم يبدأ هذا التحدّي لأنه لم يدخل أحد في وقته.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(height: 1.8)),
+        const SizedBox(height: 16),
+        FilledButton.icon(
+          icon: const Icon(Icons.arrow_forward),
+          label: const Text('رجوع إلى التحدّيات'),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ];
 
   List<Widget> _waiting(Challenge c, ChPlayer? me) {
     final done = c.players.where((p) => p.finished).length;
