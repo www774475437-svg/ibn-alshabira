@@ -269,6 +269,11 @@ class Challenges extends ChangeNotifier {
   bool _rtOnline = false;
   int _rooms = 0;
 
+  /// For the Friday tournament (it shares the live connection).
+  Future<bool> rtOk() => _rtOk();
+  FirebaseDatabase get rtDb => _rt;
+  http.Client get web => _http;
+
   static bool isRtCode(String code) {
     final n = int.tryParse(code.trim()) ?? 0;
     return n >= 10000 && n < 50000;

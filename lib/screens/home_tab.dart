@@ -1,5 +1,6 @@
 import 'benefit_card.dart';
 import 'quiz_screens.dart';
+import 'tour_screens.dart';
 import '../widgets/announcement.dart';
 import '../widgets/sky_card.dart';
 import 'prayer_screen.dart';
@@ -304,6 +305,7 @@ class _HomeTabState extends State<HomeTab> {
           ],
           // «الأسئلة»: today's question and a button to the section, after the videos.
           const SliverToBoxAdapter(child: _GroupTitle('الأسئلة', Icons.quiz_outlined)),
+          const SliverToBoxAdapter(child: TourHomeCard()),
           const SliverToBoxAdapter(child: QuizHomeStrip()),
           if (repo.channel.isNotEmpty) ...[
             SliverToBoxAdapter(

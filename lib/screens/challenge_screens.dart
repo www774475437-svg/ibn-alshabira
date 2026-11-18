@@ -9,11 +9,13 @@ import '../data/repository.dart';
 import '../services/challenge.dart';
 import '../services/cloud.dart';
 import '../services/quiz.dart';
+import '../services/tour.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/source_book.dart';
 import 'account_screens.dart';
 import 'quiz_screens.dart' show QuestionEditor;
+import 'tour_screens.dart';
 
 void _say(BuildContext context, String text, {bool ok = true}) {
   ScaffoldMessenger.of(context)
@@ -45,6 +47,7 @@ class _ChallengeHomeState extends State<ChallengeHome> {
     Quiz.instance.load();
     Challenges.instance.load();
     Challenges.instance.checkInvites();
+    Tour.instance.load();
   }
 
   Future<void> _create(String mode) async {
@@ -188,7 +191,7 @@ class _ChallengeHomeState extends State<ChallengeHome> {
   Widget build(BuildContext context) {
     final ch = Challenges.instance;
     return ListenableBuilder(
-      listenable: Listenable.merge([ch, Cloud.instance]),
+      listenable: Listenable.merge([ch, Cloud.instance, Tour.instance]),
       builder: (context, _) {
         final staff = Cloud.instance.isAdmin;
         final signed = Cloud.instance.user != null;
@@ -199,20 +202,38 @@ class _ChallengeHomeState extends State<ChallengeHome> {
               if (staff)
                 PopupMenuButton<String>(
                   onSelected: (v) => Navigator.of(context).push(MaterialPageRoute(
-                      builder: (_) => v == 'req'
+                      builder: (_) => v == 'tour'
+                          ? const TourAdminScreen()
+                          : v == 'req'
                           ? const CreditRequestsScreen()
                           : v == 'set'
                               ? const ChallengeSettingsScreen()
                               : const ChallengeStatsScreen())),
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(value: 'req', child: Text('طلبات التحدّيات الإضافية')),
-                    PopupMenuItem(value: 'set', child: Text('إعدادات التحدّيات')),
-                    PopupMenuItem(value: 'stats', child: Text('إحصاءات التحدّيات')),
+                  itemBuilder: (_) => [
+                    if (Cloud.instance.canManageStaff)
+                      const PopupMenuItem(value: 'tour', child: Text('أسئلة بطولة الجمعة')),
+                    const PopupMenuItem(value: 'req', child: Text('طلبات التحدّيات الإضافية')),
+                    const PopupMenuItem(value: 'set', child: Text('إعدادات التحدّيات')),
+                    const PopupMenuItem(value: 'stats', child: Text('إحصاءات التحدّيات')),
                   ],
                 ),
             ],
           ),
           body: ListView(padding: const EdgeInsets.all(12), children: [
+            if (Tour.instance.on)
+              Card(
+                color: kGold.withValues(alpha: .12),
+                child: ListTile(
+                  leading: const Icon(Icons.emoji_events, color: kGold, size: 34),
+                  title: const Text('بطولة الجمعة', style: TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.bold)),
+                  subtitle: const Text('كل جمعة 9 مساءً بتوقيت مكة · السجلّ وأبطال السنة'),
+                  trailing: const Icon(Icons.chevron_left),
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => Tour.instance.showCard
+                          ? TourScreen(dayKey: Tour.keyOf(Tour.nextStart()))
+                          : const TourRecordScreen())),
+                ),
+              ),
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -706,7 +727,10 @@ class _ChallengeRoomState extends State<ChallengeRoom> {
 /// the end, then one write with the result.
 class ChallengePlay extends StatefulWidget {
   final Challenge c;
-  const ChallengePlay({super.key, required this.c});
+  /// The Friday tournament: its own questions and its own way to send.
+  final List<QuizQ>? qs;
+  final Future<void> Function(int right, int wrong, int score, int ms)? onDone;
+  const ChallengePlay({super.key, required this.c, this.qs, this.onDone});
 
   @override
   State<ChallengePlay> createState() => _ChallengePlayState();
@@ -721,7 +745,11 @@ class _ChallengePlayState extends State<ChallengePlay> {
   bool _done = false;
   Challenge get c => widget.c;
 
-  QuizQ? get _q => _i < c.qids.length ? Quiz.instance.all.where((q) => q.id == c.qids[_i]).firstOrNull : null;
+  QuizQ? get _q => _i >= c.qids.length
+      ? null
+      : widget.qs != null
+          ? (_i < widget.qs!.length ? widget.qs![_i] : null)
+          : Quiz.instance.all.where((q) => q.id == c.qids[_i]).firstOrNull;
 
   @override
   void initState() {
@@ -767,6 +795,10 @@ class _ChallengePlayState extends State<ChallengePlay> {
   Future<void> _send() async {
     _done = true;
     final unanswered = c.qids.length - _right - _wrong;
+    if (widget.onDone != null) {
+      await widget.onDone!(_right, _wrong + unanswered, _score, _clock.elapsedMilliseconds);
+      return;
+    }
     await Challenges.instance.finish(c, right: _right, wrong: _wrong + unanswered, score: _score, ms: _clock.elapsedMilliseconds);
   }
 
@@ -781,11 +813,11 @@ class _ChallengePlayState extends State<ChallengePlay> {
       _score += 10 + _left ~/ 3;
     } else {
       _wrong++;
-      if (q != null) unawaited(Challenges.instance.markWrong(c.code, q.id));
+      if (q != null && widget.qs == null) unawaited(Challenges.instance.markWrong(c.code, q.id));
     }
     HapticFeedback.selectionClick();
     // The first time a reader meets a question counts in his record too.
-    if (q != null && !Quiz.instance.marks.containsKey(q.id)) await Quiz.instance.answer(q, ok: ok, choice: i);
+    if (q != null && widget.qs == null && !Quiz.instance.marks.containsKey(q.id)) await Quiz.instance.answer(q, ok: ok, choice: i);
     await Future<void>.delayed(const Duration(milliseconds: 600));
     if (!mounted) return;
     if (_i + 1 >= c.qids.length) {
@@ -810,7 +842,7 @@ class _ChallengePlayState extends State<ChallengePlay> {
           automaticallyImplyLeading: false,
           title: Text('سؤال ${_i + 1} من ${c.qids.length}'),
           actions: [
-            if (q != null && Cloud.instance.canManageStaff)
+            if (q != null && widget.qs == null && Cloud.instance.canManageStaff)
               IconButton(tooltip: 'تعديل السؤال', icon: const Icon(Icons.edit_note), onPressed: () => _edit(q)),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),

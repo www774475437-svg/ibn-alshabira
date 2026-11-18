@@ -227,7 +227,8 @@ def main():
 
     save('quiz.json', {'at': now.isoformat(), 'cats': cats, 'qs': qs,
                        'thanks': cfg.get('thanks', ''), 'chPerDay': cfg.get('chPerDay', 2),
-                       'readPoints': cfg.get('readPoints', False), 'fridayOn': cfg.get('friday', False)})
+                       'readPoints': cfg.get('readPoints', False), 'fridayOn': cfg.get('friday', False),
+                       'tourOn': cfg.get('tour', False)})
 
     # «مسابقة الجمعة»: who answered the Friday questions right (last Friday).
     if cfg.get('friday'):

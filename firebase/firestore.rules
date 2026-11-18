@@ -102,6 +102,17 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['players', 'status', 'startAt', 'rematch', 'rematchBy']);
       allow delete: if isAdmin();
     }
+    // «بطولة الجمعة»: the questions stay locked until the room opens (ten
+    // minutes before 9 pm Mecca time); a player who found the live room full
+    // keeps his result here; the server reads them for the record.
+    match /tours/{day} {
+      allow read: if isAdmin() || isBot() || (signedIn() && request.time >= resource.data.openAt);
+      allow write: if isAdmin();
+      match /p/{uid} {
+        allow create, update: if signedIn() && request.auth.uid == uid;
+        allow read: if isAdmin() || isBot();
+      }
+    }
     match /creditRequests/{id} {
       allow create: if signedIn() && request.resource.data.uid == request.auth.uid;
       allow read, update, delete: if isAdmin();

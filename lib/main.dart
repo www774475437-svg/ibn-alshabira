@@ -16,6 +16,7 @@ import 'services/day_log.dart';
 import 'services/fresh_posts.dart';
 import 'services/live_feed.dart';
 import 'services/challenge.dart';
+import 'services/tour.dart';
 import 'screens/content_screens.dart';
 import 'screens/challenge_screens.dart';
 import 'services/notifications.dart';
@@ -45,6 +46,7 @@ Future<void> main() async {
     // while the app is open, and at once when it comes back to the front.
     Challenges.instance.onInvite = _showInvite;
     Challenges.instance.startInvites();
+    Tour.instance.load();
     AppLifecycleListener(onResume: Challenges.instance.checkInvites);
   });
   DayLog.instance.start();

@@ -236,6 +236,76 @@ def members(full):
     print(f'members: {len(state)} ({len(rows)} read, {len(fresh)} new, full={full})')
 
 
+
+# --------------------------------------------------------- Friday tournament
+RT = 'https://ibn-alshabira-default-rtdb.firebaseio.com'
+
+
+def rt(path, method='GET'):
+    req = urllib.request.Request(f'{RT}/{path}.json?auth={TOKEN}', method=method)
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return json.loads(r.read() or b'null')
+
+
+def tours():
+    """tours.json: which coming Fridays have questions (so the card shows),
+    and the record of each finished tournament: its first ten, from the live
+    room and from Firestore (players who found the live room full). The live
+    room is deleted once it is in the record."""
+    try:
+        prev = json.load(open('tours.json', encoding='utf-8'))
+    except Exception:
+        prev = {'h': [], 'ready': {}}
+    done = {h['d'] for h in prev.get('h', [])}
+    now = dt.datetime.now(dt.timezone.utc)
+    first = dt.datetime(now.year, now.month, now.day, 18, tzinfo=dt.timezone.utc)
+    while first.weekday() != 4 or now > first + dt.timedelta(minutes=30):
+        first += dt.timedelta(days=1)
+    ready = {}
+    for i in range(5):
+        k = (first + dt.timedelta(days=7 * i)).strftime('%Y-%m-%d')
+        d = get_doc(f'tours/{k}')
+        if d and int(d.get('n') or 0) > 0:
+            ready[k] = int(d['n'])
+    hist = list(prev.get('h', []))
+    for back in range(1, 4):
+        start = first - dt.timedelta(days=7 * back) if first > now else first - dt.timedelta(days=7 * (back - 1))
+        if start + dt.timedelta(minutes=25) > now:
+            continue
+        k = start.strftime('%Y-%m-%d')
+        if k in done:
+            continue
+        d = get_doc(f'tours/{k}')
+        if not d or not d.get('qs'):
+            continue
+        players = {}
+        try:
+            for uid, m in (rt(f'tour/{k}/p') or {}).items():
+                if isinstance(m, dict):
+                    players[uid] = m
+        except Exception as e:
+            print('live room:', e)
+            continue  # try again next time, so nobody is missed
+        for uid, _, m in list_all(f'tours/{k}/p', ['name', 'no', 'score', 'right', 'wrong', 'ms', 'finished']):
+            players.setdefault(uid, m)
+        ranked = sorted(players.values(), key=lambda m: (-int(m.get('score') or 0), int(m.get('ms') or 0) or 1 << 30))
+        top = [{'n': str(m.get('name') or 'طالب علم')[:60], 'no': int(m.get('no') or 0), 's': int(m.get('score') or 0),
+                'r': int(m.get('right') or 0), 'ms': int(m.get('ms') or 0)} for m in ranked[:10]]
+        if len(players) < 2:
+            top = []  # cancelled: fewer than two
+        hist.append({'d': k, 'n': len(players), 'q': len(d['qs']), 'top': top})
+        try:
+            rt(f'tour/{k}', 'DELETE')
+        except Exception as e:
+            print('could not delete the live room:', e)
+        print(f'tournament {k}: {len(players)} players')
+    hist.sort(key=lambda h: h['d'], reverse=True)
+    out = {'at': int(now.timestamp() * 1000), 'ready': ready, 'h': hist[:400]}
+    with open('tours.json', 'w', encoding='utf-8') as f:
+        json.dump(out, f, ensure_ascii=False, separators=(',', ':'))
+    print(f'tours: ready {ready}, record {len(hist)}')
+
+
 def main():
     full = os.environ.get('FULL') == '1' or dt.datetime.now(dt.timezone.utc).hour < 6
     try:
@@ -243,6 +313,15 @@ def main():
     except Exception as e:
         print('public pages failed:', e)
     if sign_in():
+        try:
+            tours()
+        except urllib.error.HTTPError as e:
+            print('tours failed:', e.code, e.read().decode()[:400])
+        except Exception as e:
+            print('tours failed:', e)
+        if os.environ.get('TOURS_ONLY') == '1':
+            print('reads:', READS)
+            return
         try:
             members(full)
         except urllib.error.HTTPError as e:

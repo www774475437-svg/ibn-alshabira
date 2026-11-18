@@ -4,6 +4,9 @@ on:
     - cron: '23 1,7,13,19 * * *'
     # Every half hour: only looks whether the sheikh pressed «أرسل الأسئلة الآن».
     - cron: '*/30 * * * *'
+    # «بطولة الجمعة» (9 pm Mecca = 18:00 UTC): its card just before, its record just after.
+    - cron: '23 17 * * 5'
+    - cron: '41 18 * * 5'
   workflow_dispatch:
 concurrency:
   group: media-branch-stats
@@ -37,7 +40,7 @@ jobs:
           [ -f media/quiz.json ] || [ -f media/profiles.json ] || exit 0
           cd media && git status --porcelain | grep -q . || exit 0
           cd ..
-          mkdir out && for f in quiz.json stats.json views.json usage.json stats-state.json leaders.json friday.json profiles.json; do if [ -f media/$f ]; then cp media/$f out/; fi; done
+          mkdir out && for f in quiz.json stats.json views.json usage.json stats-state.json leaders.json friday.json profiles.json tours.json; do if [ -f media/$f ]; then cp media/$f out/; fi; done
           for i in 1 2 3; do
             rm -rf m && git clone --depth 1 --branch media "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" m
             cp out/* m/ && cd m

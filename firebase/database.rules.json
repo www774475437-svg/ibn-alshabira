@@ -9,8 +9,12 @@
             ".write": "auth != null && $uid === auth.uid && data.parent().parent().exists()"
           }
         },
-        "rematch": { ".write": "auth != null && data.parent().exists()" },
-        "rematchBy": { ".write": "auth != null && data.parent().exists()" }
+        "rematch": {
+          ".write": "auth != null && data.parent().exists()"
+        },
+        "rematchBy": {
+          ".write": "auth != null && data.parent().exists()"
+        }
       }
     },
     "inv": {
@@ -19,6 +23,18 @@
         "$code": {
           ".write": "auth != null",
           ".validate": "newData.hasChildren(['by', 'at']) && newData.child('by').isString() && newData.child('by').val().length < 60"
+        }
+      }
+    },
+    "tour": {
+      "$day": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid === '3oqvJwPEiXSohYH7GnqwCH1E7HY2'",
+        "p": {
+          "$uid": {
+            ".write": "auth != null && $uid === auth.uid",
+            ".validate": "newData.hasChildren(['name', 'score']) && newData.child('name').isString() && newData.child('name').val().length < 80"
+          }
         }
       }
     }

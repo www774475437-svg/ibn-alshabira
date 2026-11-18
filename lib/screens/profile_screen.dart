@@ -13,6 +13,7 @@ import '../services/site_files.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'challenge_screens.dart';
+import '../services/tour.dart';
 import 'quiz_screens.dart';
 
 Future<void> openDashboard(BuildContext context) =>
@@ -389,6 +390,16 @@ class ProfileView extends StatelessWidget {
           box('تسجيلات سمعها', n('ls'), Icons.headphones, const Color(0xFF3B4A8C)),
         ],
       ),
+      if (Tour.instance.winsOf(int.tryParse('$no') ?? 0) > 0)
+        Card(
+          color: kGold.withValues(alpha: .15),
+          margin: const EdgeInsets.only(top: 10),
+          child: ListTile(
+            leading: const Icon(Icons.emoji_events, color: kGold, size: 34),
+            title: const Text('بطل الجمعة', style: TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.bold, fontSize: 18)),
+            subtitle: Text('فاز ببطولة الجمعة ${Tour.instance.winsOf(int.tryParse('$no') ?? 0)} مرة'),
+          ),
+        ),
       if (badges.isNotEmpty) ...[
         const _Head('الأوسمة'),
         Wrap(spacing: 8, runSpacing: 8, children: [
