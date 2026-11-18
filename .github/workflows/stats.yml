@@ -25,18 +25,25 @@ jobs:
         env:
           CHECK_ONLY: ${{ github.event.schedule == '*/30 * * * *' && '1' || '0' }}
         run: python3 -I ../code/tool/build_stats.py
+      - name: Readers' public pages and the staff list of members
+        if: github.event.schedule != '*/30 * * * *'
+        working-directory: media
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          FULL: ${{ github.event_name == 'workflow_dispatch' && '1' || '0' }}
+        run: python3 -I ../code/tool/members.py
       - name: Save
         run: |
-          [ -f media/quiz.json ] || exit 0
+          [ -f media/quiz.json ] || [ -f media/profiles.json ] || exit 0
           cd media && git status --porcelain | grep -q . || exit 0
           cd ..
-          mkdir out && cp media/quiz.json media/stats.json media/views.json media/usage.json media/stats-state.json media/leaders.json out/ && (cp media/friday.json out/ 2>/dev/null || true)
+          mkdir out && for f in quiz.json stats.json views.json usage.json stats-state.json leaders.json friday.json profiles.json; do if [ -f media/$f ]; then cp media/$f out/; fi; done
           for i in 1 2 3; do
             rm -rf m && git clone --depth 1 --branch media "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" m
             cp out/* m/ && cd m
             git config user.name "stats-bot"
             git config user.email "stats-bot@users.noreply.github.com"
-            git add quiz.json stats.json views.json usage.json stats-state.json leaders.json $( [ -f friday.json ] && echo friday.json )
+            git add $(ls ../out)
             git diff --cached --quiet && exit 0
             git commit -q -m "Quiz and counts"
             git push origin HEAD:media && exit 0
