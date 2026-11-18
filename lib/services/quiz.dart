@@ -82,6 +82,9 @@ class QuizQ {
   String book;
   /// A question that came with the app and the staff deleted.
   bool removed;
+  /// Kept for the challenges only: never shown in the practice lists, so
+  /// nobody can learn it before a challenge.
+  bool challengeOnly;
 
   QuizQ({
     required this.id,
@@ -112,6 +115,7 @@ class QuizQ {
     this.friday = false,
     this.book = '',
     this.removed = false,
+    this.challengeOnly = false,
   })  : choices = choices ?? ['', ''],
         corrects = corrects ?? [];
 
@@ -151,6 +155,7 @@ class QuizQ {
         friday: m['friday'] == true,
         book: '${m['book'] ?? ''}',
         removed: m['removed'] == true,
+        challengeOnly: m['ch'] == true,
       );
 
   Map<String, dynamic> toMap() => {
@@ -180,6 +185,7 @@ class QuizQ {
         'friday': friday,
         'book': book,
         if (removed) 'removed': true,
+        'ch': challengeOnly,
       };
 
   QuizQ copy({String? id, String? cat}) => QuizQ.fromMap(id ?? this.id, toMap()..['cat'] = cat ?? this.cat)
@@ -290,6 +296,7 @@ class Quiz extends ChangeNotifier {
       ];
     }
     await _mergeBuiltin();
+    await _loadFixed();
     loaded = true;
     fromCloud = Cloud.instance.isAdmin;
     loading = false;
@@ -490,7 +497,49 @@ class Quiz extends ChangeNotifier {
 
   List<QuizCat> get visibleCats => isStaff ? cats : cats.where((c) => !c.hidden).toList();
 
-  List<QuizQ> get live => all.where((q) => q.isLive && (!kidsMode || q.kids)).toList();
+  /// Everything published, the challenge questions included.
+  List<QuizQ> get liveAll => all.where((q) => q.isLive && (!kidsMode || q.kids)).toList();
+
+  /// What the reader practises with: the challenge-only questions stay out.
+  List<QuizQ> get live => liveAll.where((q) => !q.challengeOnly).toList();
+
+  // ------------------------------------------------ mistakes and review
+  /// Mistakes the reader has since answered right in «أخطائي».
+  Set<String> fixed = {};
+
+  Future<void> _loadFixed() async {
+    try {
+      fixed = ((await SharedPreferences.getInstance()).getStringList('quizFixed') ?? const []).toSet();
+    } catch (_) {}
+  }
+
+  Future<void> setFixed(String id, bool ok) async {
+    ok ? fixed.add(id) : fixed.remove(id);
+    try {
+      (await SharedPreferences.getInstance()).setStringList('quizFixed', fixed.toList());
+    } catch (_) {}
+    notifyListeners();
+  }
+
+  /// The questions the reader got wrong and has not yet put right.
+  List<QuizQ> get mistakes {
+    final byId = {for (final q in all) q.id: q};
+    final l = [
+      for (final e in marks.entries)
+        if (!e.value.ok && !fixed.contains(e.key) && byId[e.key] != null) (byId[e.key]!, e.value.at)
+    ]..sort((a, b) => b.$2.compareTo(a.$2));
+    return [for (final x in l) x.$1];
+  }
+
+  /// The questions the reader answered right (newest first).
+  List<QuizQ> get rightOnes {
+    final byId = {for (final q in all) q.id: q};
+    final l = [
+      for (final e in marks.entries)
+        if ((e.value.ok || fixed.contains(e.key)) && byId[e.key] != null) (byId[e.key]!, e.value.at)
+    ]..sort((a, b) => b.$2.compareTo(a.$2));
+    return [for (final x in l) x.$1];
+  }
 
   List<QuizQ> inCat(String cat, {int level = 0}) => (isStaff ? all : live)
       .where((q) => q.cat == cat && (level == 0 || q.level == level))

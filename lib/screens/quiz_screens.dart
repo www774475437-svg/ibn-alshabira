@@ -28,9 +28,23 @@ void _toast(BuildContext context, String text, {bool ok = true}) {
 Future<void> openQuiz(BuildContext context) =>
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => const QuizHomeScreen()));
 
+/// One run of questions: how many were answered and how many right.
+class QuizRun {
+  int right = 0, total = 0;
+}
+
+/// Starts [list] as a review: answers are not recorded; a mistake answered
+/// right here leaves «أخطائي».
+void startPractice(BuildContext context, List<QuizQ> list) {
+  if (list.isEmpty) return;
+  final l = [...list]..shuffle();
+  Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => QuestionScreen(q: l.first, queue: l.sublist(1), practice: true, run: QuizRun())));
+}
+
 Future<void> openQuestion(BuildContext context, QuizQ q, {List<QuizQ> next = const [], bool preview = false}) =>
     Navigator.of(context)
-        .push(MaterialPageRoute(builder: (_) => QuestionScreen(q: q, queue: next, preview: preview)));
+        .push(MaterialPageRoute(builder: (_) => QuestionScreen(q: q, queue: next, preview: preview, run: QuizRun())));
 
 /// Shares a widget (inside a RepaintBoundary) as a picture.
 Future<void> shareBoundary(BuildContext context, GlobalKey key, String text) async {
@@ -125,6 +139,36 @@ class _QuizHomeScreenState extends State<QuizHomeScreen> {
                     padding: const EdgeInsets.only(bottom: 90),
                     children: [
                       _ScoreHeader(quiz: quiz),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+                        child: Row(children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                  minimumSize: const Size.fromHeight(48),
+                                  foregroundColor: const Color(0xFFC62828),
+                                  side: const BorderSide(color: Color(0xFFC62828))),
+                              icon: const Icon(Icons.replay),
+                              label: Text('أخطائي (${quiz.mistakes.length})'),
+                              onPressed: () => Navigator.of(context)
+                                  .push(MaterialPageRoute(builder: (_) => const MyMistakesScreen())),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                  minimumSize: const Size.fromHeight(48),
+                                  foregroundColor: const Color(0xFF2E7D32),
+                                  side: const BorderSide(color: Color(0xFF2E7D32))),
+                              icon: const Icon(Icons.fact_check_outlined),
+                              label: const Text('مراجعة ما أجبت عنه'),
+                              onPressed: () => Navigator.of(context)
+                                  .push(MaterialPageRoute(builder: (_) => const MyRightScreen())),
+                            ),
+                          ),
+                        ]),
+                      ),
                       const Padding(padding: EdgeInsets.fromLTRB(12, 10, 12, 0), child: ChallengeButton()),
                       const FridayCard(),
                       if (quiz.thanks.isNotEmpty)
@@ -500,6 +544,7 @@ class _QTile extends StatelessWidget {
       if (q.hidden) 'مخفي',
       if (q.releaseAt != null && q.releaseAt!.isAfter(DateTime.now())) 'مجدول',
       if (q.kids) 'للأطفال',
+      if (q.challengeOnly) 'للتحديات فقط',
     ];
     return ListTile(
       leading: Icon(
@@ -525,7 +570,11 @@ class QuestionScreen extends StatefulWidget {
   final QuizQ q;
   final List<QuizQ> queue;
   final bool preview;
-  const QuestionScreen({super.key, required this.q, this.queue = const [], this.preview = false});
+  /// A review («أخطائي» / «مراجعة»): nothing is recorded.
+  final bool practice;
+  final QuizRun? run;
+  const QuestionScreen(
+      {super.key, required this.q, this.queue = const [], this.preview = false, this.practice = false, this.run});
 
   @override
   State<QuestionScreen> createState() => _QuestionScreenState();
@@ -551,7 +600,8 @@ class _QuestionScreenState extends State<QuestionScreen> {
 
   QuizQ get q => widget.q;
   QuizMark? get _mark => Quiz.instance.marks[q.id];
-  bool get _done => widget.preview ? _previewDone : _mark != null;
+  bool get _local => widget.preview || widget.practice;
+  bool get _done => _local ? _previewDone : _mark != null;
 
   @override
   void initState() {
@@ -562,7 +612,7 @@ class _QuestionScreenState extends State<QuestionScreen> {
     _display = List.generate(q.type == QuizType.trueFalse ? 2 : q.choices.length, (i) => i);
     if (q.type == QuizType.choice) _display.shuffle(math.Random(seed));
     if (_orderNow.length > 1 && _isRightOrder()) _orderNow = _orderNow.reversed.toList();
-    if (Quiz.instance.timer && !_done && !widget.preview) {
+    if (Quiz.instance.timer && !_done && !_local) {
       _t = Timer.periodic(const Duration(seconds: 1), (t) {
         if (!mounted) return;
         setState(() => _left--);
@@ -599,11 +649,18 @@ class _QuestionScreenState extends State<QuestionScreen> {
                 ? (_picksOf(choice).length == q.rightSet.length && _picksOf(choice).containsAll(q.rightSet))
                 : choice == q.correct);
     HapticFeedback.mediumImpact();
-    if (widget.preview) {
+    final run = widget.run;
+    if (run != null) {
+      run.total++;
+      if (ok) run.right++;
+    }
+    if (_local) {
       setState(() {
         _picked = choice;
         _previewDone = true;
       });
+      final m = _mark;
+      if (widget.practice && m != null && !m.ok) await Quiz.instance.setFixed(q.id, ok);
       return;
     }
     setState(() => _picked = choice);
@@ -615,13 +672,19 @@ class _QuestionScreenState extends State<QuestionScreen> {
   Widget build(BuildContext context) {
     final quiz = Quiz.instance;
     final mark = _mark;
-    final ok = widget.preview ? (q.type == QuizType.order ? _isRightOrder() : _picked == q.correct) : mark?.ok == true;
-    final chosen = widget.preview ? _picked : mark?.choice;
+    final ok = _local
+        ? (q.type == QuizType.order
+            ? _isRightOrder()
+            : q.multi
+                ? (_picksOf(_picked).length == q.rightSet.length && _picksOf(_picked).containsAll(q.rightSet))
+                : _picked == q.correct)
+        : mark?.ok == true;
+    final chosen = _local ? _picked : mark?.choice;
     final pct = quiz.percentRight(q.id);
     final cat = quiz.cats.where((c) => c.id == q.cat).firstOrNull;
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.preview ? 'معاينة السؤال' : (cat?.name ?? 'سؤال')),
+        title: Text(widget.preview ? 'معاينة السؤال' : widget.practice ? 'مراجعة' : (cat?.name ?? 'سؤال')),
         actions: [
           if (!widget.preview)
             IconButton(
@@ -661,6 +724,12 @@ class _QuestionScreenState extends State<QuestionScreen> {
               padding: EdgeInsets.only(bottom: 8),
               child: Text('معاينة: لا تُحسب هذه الإجابة، وهكذا يظهر السؤال للناس.',
                   style: TextStyle(color: Colors.orange, fontSize: 12.5)),
+            ),
+          if (widget.practice)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text('مراجعة: لا تتغير نتيجتك${widget.queue.isEmpty ? '' : ' · بقي ${widget.queue.length}'}',
+                  style: const TextStyle(color: kGoldChip, fontSize: 12.5)),
             ),
           Row(children: [
             Chip(label: Text(Quiz.levelNames[q.level] ?? ''), visualDensity: VisualDensity.compact),
@@ -729,6 +798,16 @@ class _QuestionScreenState extends State<QuestionScreen> {
                             fontWeight: FontWeight.bold,
                             color: ok ? const Color(0xFF2E7D32) : const Color(0xFFC62828))),
                   ]),
+                  if (!ok && q.type != QuizType.order)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text.rich(TextSpan(children: [
+                        const TextSpan(text: 'الجواب الصحيح: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                        TextSpan(
+                            text: [for (final i in q.rightSet) if (i < _options.length) _options[i]].join('، '),
+                            style: const TextStyle(color: Color(0xFF2E7D32), fontWeight: FontWeight.bold)),
+                      ]), style: const TextStyle(fontSize: 16, height: 1.7)),
+                    ),
                   if (pct != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 6),
@@ -786,11 +865,16 @@ class _QuestionScreenState extends State<QuestionScreen> {
                     icon: const Icon(Icons.arrow_back),
                     label: const Text('التالي'),
                     onPressed: () => Navigator.of(context).pushReplacement(MaterialPageRoute(
-                        builder: (_) => QuestionScreen(q: widget.queue.first, queue: widget.queue.sublist(1)))),
+                        builder: (_) => QuestionScreen(
+                            q: widget.queue.first,
+                            queue: widget.queue.sublist(1),
+                            practice: widget.practice,
+                            run: widget.run))),
                   ),
                 ),
               ],
             ]),
+            if (widget.queue.isEmpty && (widget.run?.total ?? 0) > 1) _RunSummary(run: widget.run!),
           ],
         ],
       ),
@@ -1521,6 +1605,7 @@ class _QuestionEditorState extends State<QuestionEditor> {
   late final _linkUrl = TextEditingController(text: _q.linkUrl);
   late final _src = TextEditingController(text: _q.src);
   late String _book = _q.book;
+  late bool _ch = _q.challengeOnly;
   late bool _many = _q.corrects.length > 1;
   late final List<TextEditingController> _choices = [
     for (final c in (_q.choices.isEmpty ? ['', ''] : _q.choices)) TextEditingController(text: c)
@@ -1538,6 +1623,7 @@ class _QuestionEditorState extends State<QuestionEditor> {
     ..linkUrl = _linkUrl.text.trim()
     ..src = _src.text.trim()
     ..book = _book
+    ..challengeOnly = _ch
     ..choices = _q.type == QuizType.trueFalse ? ['صح', 'خطأ'] : [for (final c in _choices) c.text.trim()];
 
   Future<void> _save({bool asDraft = false}) async {
@@ -1782,6 +1868,16 @@ class _QuestionEditorState extends State<QuestionEditor> {
               ],
               onChanged: (v) => setState(() {
                 _book = v ?? '';
+                _dirty = true;
+              }),
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('للتحديات فقط'),
+              subtitle: const Text('لا يظهر في الأبواب للتدريب، فلا يحفظه أحد قبل التحدي'),
+              value: _ch,
+              onChanged: (v) => setState(() {
+                _ch = v;
                 _dirty = true;
               }),
             ),
@@ -2629,5 +2725,111 @@ class FridayCard extends StatelessWidget {
             },
           );
         },
+      );
+}
+
+
+/// The end of a run: «أصبت 8 من 10», and the way to the mistakes.
+class _RunSummary extends StatelessWidget {
+  final QuizRun run;
+  const _RunSummary({required this.run});
+
+  @override
+  Widget build(BuildContext context) {
+    final good = run.right * 10 >= run.total * 8;
+    return Card(
+      margin: const EdgeInsets.only(top: 16),
+      color: const Color(0xFF0E3B44),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(children: [
+          Icon(good ? Icons.emoji_events : Icons.flag_outlined, color: kGold, size: 40),
+          const SizedBox(height: 6),
+          Text('انتهت الأسئلة', style: const TextStyle(color: Colors.white70)),
+          Text('أصبت ${run.right} من ${run.total}',
+              style: const TextStyle(fontFamily: 'Tajawal', color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 10),
+          if (run.right < run.total)
+            FilledButton.icon(
+              style: FilledButton.styleFrom(backgroundColor: kGold, foregroundColor: Colors.black),
+              icon: const Icon(Icons.replay),
+              label: const Text('أخطائي: أعدها عليّ'),
+              onPressed: () => Navigator.of(context)
+                  .pushReplacement(MaterialPageRoute(builder: (_) => const MyMistakesScreen())),
+            ),
+        ]),
+      ),
+    );
+  }
+}
+
+/// «أخطائي»: every question answered wrong and not yet put right, with a
+/// button that asks them again one after another.
+class MyMistakesScreen extends StatelessWidget {
+  const MyMistakesScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: Quiz.instance,
+        builder: (context, _) => _ReviewList(
+          title: 'أخطائي',
+          list: Quiz.instance.mistakes,
+          empty: 'لا أخطاء عندك الآن، بارك الله فيك. كل سؤال تخطئ فيه يظهر هنا لتعيده.',
+          button: 'أعد الأسئلة الخاطئة',
+          color: const Color(0xFFC62828),
+        ),
+      );
+}
+
+/// «مراجعة ما أجبت عنه»: the questions answered right, to keep them.
+class MyRightScreen extends StatelessWidget {
+  const MyRightScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: Quiz.instance,
+        builder: (context, _) => _ReviewList(
+          title: 'مراجعة ما أجبت عنه صحيحاً',
+          list: Quiz.instance.rightOnes,
+          empty: 'لم تجب عن أسئلة بعد.',
+          button: 'راجعها سؤالاً بعد سؤال',
+          color: const Color(0xFF2E7D32),
+        ),
+      );
+}
+
+class _ReviewList extends StatelessWidget {
+  final String title, empty, button;
+  final List<QuizQ> list;
+  final Color color;
+  const _ReviewList({required this.title, required this.list, required this.empty, required this.button, required this.color});
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: Text(title)),
+        body: list.isEmpty
+            ? EmptyState(icon: Icons.fact_check_outlined, text: empty)
+            : ListView(padding: const EdgeInsets.fromLTRB(12, 12, 12, 30), children: [
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(54), backgroundColor: color),
+                  icon: const Icon(Icons.play_arrow_rounded),
+                  label: Text('$button (${list.length})'),
+                  onPressed: () => startPractice(context, list),
+                ),
+                const SizedBox(height: 8),
+                for (final q in list)
+                  Card(
+                    child: ListTile(
+                      title: Text(q.text, maxLines: 3, overflow: TextOverflow.ellipsis, style: const TextStyle(height: 1.6)),
+                      subtitle: q.type == QuizType.order || q.correct >= q.choices.length
+                          ? null
+                          : Text('الصحيح: ${q.type == QuizType.trueFalse ? (q.correct == 0 ? 'صح' : 'خطأ') : q.choices[q.correct]}',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(color: Color(0xFF2E7D32))),
+                      onTap: () => startPractice(context, [q]),
+                    ),
+                  ),
+              ]),
       );
 }

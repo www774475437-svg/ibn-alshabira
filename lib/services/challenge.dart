@@ -188,13 +188,20 @@ class Challenges extends ChangeNotifier {
       return cs.contains(q.cat) || bs.contains(q.book);
     }
 
-    final pool = quiz.live
+    final pool = quiz.liveAll
         .where((q) => q.type != QuizType.order && !q.multi && from(q) && (level == 0 || q.level == level))
         .toList()
       ..shuffle();
-    final fresh = pool.where((q) => !quiz.marks.containsKey(q.id)).toList();
-    final seen = pool.where((q) => quiz.marks.containsKey(q.id)).toList();
-    return [...fresh, ...seen].take(count).map((q) => q.id).toList();
+    bool fresh(QuizQ q) => !quiz.marks.containsKey(q.id);
+    // The challenge-only questions first (nobody could practise them), new
+    // ones before seen ones; practice questions only if those run out.
+    final order = [
+      ...pool.where((q) => q.challengeOnly && fresh(q)),
+      ...pool.where((q) => !q.challengeOnly && fresh(q)),
+      ...pool.where((q) => q.challengeOnly && !fresh(q)),
+      ...pool.where((q) => !q.challengeOnly && !fresh(q)),
+    ];
+    return order.take(count).map((q) => q.id).toList();
   }
 
   Future<(String?, String?)> create(

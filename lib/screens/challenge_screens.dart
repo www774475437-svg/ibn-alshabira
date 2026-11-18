@@ -12,6 +12,7 @@ import '../services/quiz.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/source_book.dart';
+import 'account_screens.dart';
 
 void _say(BuildContext context, String text, {bool ok = true}) {
   ScaffoldMessenger.of(context)
@@ -49,7 +50,7 @@ class _ChallengeHomeState extends State<ChallengeHome> {
     var level = 0, count = 5, secs = 30;
     final cats = <String>{}, books = <String>{};
     // Only the books that have questions.
-    final withQs = {for (final q in quiz.live) q.book}..remove('');
+    final withQs = {for (final q in quiz.liveAll) q.book}..remove('');
     final bookList = [for (final b in Repository.instance.books) if (withQs.contains(b.id)) b];
     final go = await showModalBottomSheet<bool>(
       context: context,
@@ -240,11 +241,26 @@ class _ChallengeHomeState extends State<ChallengeHome> {
             ),
             const SizedBox(height: 10),
             if (!signed)
-              const Card(
+              Card(
                 child: Padding(
-                  padding: EdgeInsets.all(14),
-                  child: Text('سجّل الدخول من «المزيد» لتبدأ التحدّيات، فهي تحتاج حساباً.',
-                      textAlign: TextAlign.center, style: TextStyle(height: 1.7)),
+                  padding: const EdgeInsets.all(14),
+                  child: Column(children: [
+                    const Text('التحدّيات تحتاج حساباً، حتى يعرفك أصحابك وتُحفظ نتائجك.',
+                        textAlign: TextAlign.center, style: TextStyle(height: 1.7)),
+                    const SizedBox(height: 10),
+                    FilledButton.icon(
+                      style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
+                      icon: const Icon(Icons.login),
+                      label: const Text('سجّل الدخول'),
+                      onPressed: () async {
+                        await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AccountScreen()));
+                        if (mounted) {
+                          await Challenges.instance.load();
+                          setState(() {});
+                        }
+                      },
+                    ),
+                  ]),
                 ),
               ),
             Row(children: [
