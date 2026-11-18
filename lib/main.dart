@@ -41,6 +41,11 @@ Future<void> main() async {
   Timer.periodic(const Duration(minutes: 10), (_) => LiveFeed.refresh());
   Future<void>.delayed(const Duration(seconds: 8), () {
     if (Cloud.instance.user != null) Challenges.instance.load();
+    // Invites to a challenge by one's number: looked for every 30 seconds
+    // while the app is open, and at once when it comes back to the front.
+    Challenges.instance.onInvite = _showInvite;
+    Challenges.instance.startInvites();
+    AppLifecycleListener(onResume: Challenges.instance.checkInvites);
   });
   DayLog.instance.start();
   // Reminders and the prayer widget, once the settings have loaded.
@@ -63,6 +68,33 @@ Future<void> main() async {
   );
   // A notification to every reader when a new version comes out.
   Future.delayed(const Duration(seconds: 3), UpdateWatch.start);
+}
+
+final appNavKey = GlobalKey<NavigatorState>();
+
+void _showInvite(String code, String by, String mode) {
+  final what = mode == 'duel' ? 'تحدٍّ فردي' : 'تحدٍّ جماعي';
+  OnceNotifications.showNow('دعوة إلى $what ⚡', 'دعاك $by إلى $what، ادخل التطبيق وانضمّ خلال دقيقتين.');
+  final ctx = appNavKey.currentContext;
+  if (ctx == null) return;
+  showDialog<void>(
+    context: ctx,
+    builder: (d) => AlertDialog(
+      icon: const Icon(Icons.bolt, size: 40, color: Color(0xFFC9A227)),
+      title: Text('دعوة إلى $what'),
+      content: Text('دعاك $by إلى $what في الأسئلة.\nرقم الغرفة: $code', textAlign: TextAlign.center, style: const TextStyle(height: 1.8)),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(d), child: const Text('لاحقاً')),
+        FilledButton(
+          onPressed: () {
+            Navigator.pop(d);
+            appNavKey.currentState?.push(MaterialPageRoute(builder: (_) => ChallengeRoom(code: code, autoJoin: true)));
+          },
+          child: const Text('انضمّ الآن'),
+        ),
+      ],
+    ),
+  );
 }
 
 /// Routes: "/" home, "/fatwa/<id>" a single fatwa (shareable web link).
@@ -99,6 +131,7 @@ class IbnAlshabiraApp extends StatelessWidget {
     return ListenableBuilder(
       listenable: repo,
       builder: (context, _) => MaterialApp(
+        navigatorKey: appNavKey,
         title: 'ابن الشابرة',
         debugShowCheckedModeBanner: false,
         locale: const Locale('ar'),

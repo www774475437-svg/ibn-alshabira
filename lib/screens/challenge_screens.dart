@@ -13,6 +13,7 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/source_book.dart';
 import 'account_screens.dart';
+import 'quiz_screens.dart' show QuestionEditor;
 
 void _say(BuildContext context, String text, {bool ok = true}) {
   ScaffoldMessenger.of(context)
@@ -43,13 +44,18 @@ class _ChallengeHomeState extends State<ChallengeHome> {
     super.initState();
     Quiz.instance.load();
     Challenges.instance.load();
+    Challenges.instance.checkInvites();
   }
 
   Future<void> _create(String mode) async {
     final quiz = Quiz.instance;
-    if (!quiz.loaded || quiz.loading) {
+    // The questions inside the app are enough; the site file keeps loading
+    // in the background. Wait only if the phone has none at all.
+    if (quiz.all.isEmpty) {
       setState(() => _busy = true);
-      await quiz.load();
+      try {
+        await quiz.load().timeout(const Duration(seconds: 12));
+      } catch (_) {}
       if (!mounted) return;
       setState(() => _busy = false);
     }
@@ -368,9 +374,12 @@ class _ChallengeRoomState extends State<ChallengeRoom> {
   bool _counted = false, _playing = false, _joinTried = false;
   Timer? _tick;
 
+  late final Stream<Challenge?> _stream = Challenges.instance.watch(widget.code);
+
   @override
   void initState() {
     super.initState();
+    Challenges.instance.roomOpened();
     _tick = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
     });
@@ -379,7 +388,40 @@ class _ChallengeRoomState extends State<ChallengeRoom> {
   @override
   void dispose() {
     _tick?.cancel();
+    Challenges.instance.roomClosed();
     super.dispose();
+  }
+
+  Future<void> _inviteByNo(Challenge c) async {
+    final no = TextEditingController();
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (d) => AlertDialog(
+        title: const Text('ادعُ برقمه'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Text('اكتب رقم الشخص (6 أرقام، تجده في ملفه)، فتصله دعوة في التطبيق.',
+              style: TextStyle(color: Colors.grey, height: 1.6)),
+          const SizedBox(height: 8),
+          TextField(
+            controller: no,
+            autofocus: true,
+            keyboardType: TextInputType.number,
+            maxLength: 6,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontFamily: 'Tajawal', fontSize: 24, letterSpacing: 4),
+            decoration: const InputDecoration(hintText: '000000', counterText: ''),
+          ),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('إلغاء')),
+          FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('أرسل الدعوة')),
+        ],
+      ),
+    );
+    if (go != true || !mounted) return;
+    final err = await Challenges.instance.invite(no.text, c);
+    if (!mounted) return;
+    _say(context, err ?? 'أُرسلت الدعوة إلى الرقم ${no.text.trim()}', ok: err == null);
   }
 
   String get _link => '${AppConfig.siteUrl}#/c/${widget.code}';
@@ -393,7 +435,7 @@ class _ChallengeRoomState extends State<ChallengeRoom> {
 
   @override
   Widget build(BuildContext context) => StreamBuilder<Challenge?>(
-        stream: Challenges.instance.watch(widget.code),
+        stream: _stream,
         builder: (context, snap) {
           final c = snap.data;
           if (c == null) {
@@ -421,8 +463,9 @@ class _ChallengeRoomState extends State<ChallengeRoom> {
           if (c.cancelled && !_counted) {
             _counted = true;
             Challenges.instance.cancelEmpty(c);
-          } else if (c.over && !_counted) {
+          } else if (c.over && !c.partial && !_counted) {
             _counted = true;
+            Challenges.instance.ended(c);
             Challenges.instance.countResult(c);
           }
           return Scaffold(
@@ -432,7 +475,7 @@ class _ChallengeRoomState extends State<ChallengeRoom> {
                 ..._lobby(c, me, uid)
               else if (c.cancelled)
                 ..._cancelled(c, uid)
-              else if (!c.over)
+              else if (!c.over || c.partial)
                 ..._waiting(c, me)
               else
                 ..._results(c, uid),
@@ -483,6 +526,22 @@ class _ChallengeRoomState extends State<ChallengeRoom> {
         ),
       ),
       const SizedBox(height: 12),
+      if (c.partial)
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFF2E7D32).withValues(alpha: .12),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: const Column(children: [
+            Icon(Icons.check_circle, color: Color(0xFF2E7D32), size: 34),
+            SizedBox(height: 4),
+            Text('دخلتَ الغرفة', style: TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.bold, fontSize: 20, color: Color(0xFF2E7D32))),
+            Text('انتظر حتى يبدأ صاحب التحدّي، أو حتى ينتهي الوقت فيبدأ وحده.',
+                textAlign: TextAlign.center, style: TextStyle(color: Colors.grey, fontSize: 12.5)),
+          ]),
+        )
+      else ...[
       Container(
         padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
@@ -507,6 +566,7 @@ class _ChallengeRoomState extends State<ChallengeRoom> {
           leading: Icon(p.uid == c.host ? Icons.star : Icons.person, color: kGold),
           title: Text(p.uid == uid ? '${p.name} (أنت)' : p.name),
         ),
+      ],
       if (me == null)
         FilledButton(
           onPressed: () async {
@@ -514,6 +574,16 @@ class _ChallengeRoomState extends State<ChallengeRoom> {
             if (err != null && mounted) _say(context, err, ok: false);
           },
           child: const Text('ادخل الغرفة'),
+        ),
+      if (c.host == uid)
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(46)),
+            icon: const Icon(Icons.person_add_alt_1),
+            label: const Text('ادعُ شخصاً برقمه'),
+            onPressed: () => _inviteByNo(c),
+          ),
         ),
       if (c.host == uid)
         Padding(
@@ -555,10 +625,11 @@ class _ChallengeRoomState extends State<ChallengeRoom> {
       const SizedBox(height: 40),
       const Icon(Icons.hourglass_top, size: 54, color: kGold),
       const SizedBox(height: 10),
-      Text(me?.finished == true ? 'انتظر حتى ينتهي الآخرون' : 'التحدّي جارٍ',
+      Text(c.over && c.partial ? 'تُجمع النتيجة الآن…' : me?.finished == true ? 'انتظر حتى ينتهي الآخرون' : 'التحدّي جارٍ',
           textAlign: TextAlign.center, style: const TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.bold, fontSize: 20)),
       const SizedBox(height: 6),
-      Text('أنهى $done من ${c.players.length}', textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey)),
+      if (!c.partial)
+        Text('أنهى $done من ${c.players.length}', textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey)),
       if (me != null && !me.finished)
         Padding(
           padding: const EdgeInsets.only(top: 16),
@@ -665,9 +736,9 @@ class _ChallengePlayState extends State<ChallengePlay> {
     super.dispose();
   }
 
-  void _startTimer() {
+  void _startTimer({bool keep = false}) {
     _t?.cancel();
-    _left = c.secs > 0 ? c.secs : 15;
+    if (!keep) _left = c.secs > 0 ? c.secs : 15;
     _t = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted) return;
       setState(() => _left--);
@@ -676,6 +747,21 @@ class _ChallengePlayState extends State<ChallengePlay> {
         _pick(-1);
       }
     });
+  }
+
+  /// The developer and the sheikh only: fix the question from inside the
+  /// challenge (text, choices, right answer); it reaches everyone with the
+  /// next questions file (asked for at once). The time stops meanwhile.
+  Future<void> _edit(QuizQ q) async {
+    _t?.cancel();
+    final saved = await Navigator.of(context).push<bool>(MaterialPageRoute(builder: (_) => QuestionEditor(q: q)));
+    if (!mounted) return;
+    if (saved == true) {
+      unawaited(Quiz.instance.publishNow());
+      _say(context, 'حُفظ التعديل، ويصل إلى الجميع خلال نصف ساعة تقريباً.');
+    }
+    setState(() {});
+    if (_picked == null) _startTimer(keep: true);
   }
 
   Future<void> _send() async {
@@ -724,6 +810,8 @@ class _ChallengePlayState extends State<ChallengePlay> {
           automaticallyImplyLeading: false,
           title: Text('سؤال ${_i + 1} من ${c.qids.length}'),
           actions: [
+            if (q != null && Cloud.instance.canManageStaff)
+              IconButton(tooltip: 'تعديل السؤال', icon: const Icon(Icons.edit_note), onPressed: () => _edit(q)),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Center(

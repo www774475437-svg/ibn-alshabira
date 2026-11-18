@@ -10,3 +10,4 @@ jobs:
           channel: stable
       - run: flutter pub get
       - run: flutter test test/quiz_books_test.dart -r expanded
+      - run: flutter analyze --no-fatal-infos --no-fatal-warnings lib
