@@ -47,6 +47,12 @@ class _ChallengeHomeState extends State<ChallengeHome> {
 
   Future<void> _create(String mode) async {
     final quiz = Quiz.instance;
+    if (!quiz.loaded || quiz.loading) {
+      setState(() => _busy = true);
+      await quiz.load();
+      if (!mounted) return;
+      setState(() => _busy = false);
+    }
     var level = 0, count = 5, secs = 30;
     final cats = <String>{}, books = <String>{};
     // Only the books that have questions.

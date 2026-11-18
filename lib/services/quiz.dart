@@ -278,30 +278,55 @@ class Quiz extends ChangeNotifier {
   }
 
   // ------------------------------------------------------------ loading
-  Future<void> load({bool force = false}) async {
-    if (loading || (loaded && !force)) return;
+  Future<void>? _inFlight;
+
+  /// Loads the questions. Called again while loading, it waits for the same
+  /// load (so a challenge never starts before the questions are there).
+  Future<void> load({bool force = false}) {
+    if (_inFlight != null) return _inFlight!;
+    if (loaded && !force) return Future.value();
+    return _inFlight = _load().whenComplete(() => _inFlight = null);
+  }
+
+  void _defaultCats() {
+    if (cats.isNotEmpty) return;
+    // Nothing yet: show the starting buttons all the same.
+    cats = [
+      for (var i = 0; i < defaultCats.length; i++)
+        QuizCat(id: 'd$i', name: defaultCats[i].$1, icon: defaultCats[i].$2, color: defaultCats[i].$3, order: i)
+    ];
+  }
+
+  Future<void> _load() async {
     loading = true;
-    await _loadLocal();
-    // Readers take the quiz from the site file (made four times a day), which
-    // costs no Firestore reads. The staff work on Firestore itself, live.
-    if (!Cloud.instance.isAdmin) {
-      await _loadFromSite();
-    } else {
-      await _loadFromCloud();
+    try {
+      await _loadLocal();
+      // The questions inside the app first, so they are there at once (even
+      // with a slow or no connection); the site file comes after.
+      if (!loaded && all.isEmpty) {
+        _defaultCats();
+        await _mergeBuiltin();
+        await _loadFixed();
+        notifyListeners();
+      }
+      // Readers take the quiz from the site file (made four times a day), which
+      // costs no Firestore reads. The staff work on Firestore itself, live.
+      if (!Cloud.instance.isAdmin) {
+        await _loadFromSite();
+      } else {
+        await _loadFromCloud();
+      }
+      _defaultCats();
+      await _mergeBuiltin();
+      await _loadFixed();
+    } catch (e) {
+      debugPrint('quiz load: $e');
+    } finally {
+      loaded = true;
+      fromCloud = Cloud.instance.isAdmin;
+      loading = false;
+      notifyListeners();
     }
-    if (cats.isEmpty) {
-      // Nothing yet: show the starting buttons all the same.
-      cats = [
-        for (var i = 0; i < defaultCats.length; i++)
-          QuizCat(id: 'd$i', name: defaultCats[i].$1, icon: defaultCats[i].$2, color: defaultCats[i].$3, order: i)
-      ];
-    }
-    await _mergeBuiltin();
-    await _loadFixed();
-    loaded = true;
-    fromCloud = Cloud.instance.isAdmin;
-    loading = false;
-    notifyListeners();
   }
 
   /// Questions that come inside the app (from the sheikh's books). A question
@@ -499,7 +524,12 @@ class Quiz extends ChangeNotifier {
   List<QuizCat> get visibleCats => isStaff ? cats : cats.where((c) => !c.hidden).toList();
 
   /// Everything published, the challenge questions included.
-  List<QuizQ> get liveAll => all.where((q) => q.isLive && (!kidsMode || q.kids)).toList();
+  List<QuizQ> get liveAll {
+    final l = all.where((q) => q.isLive).toList();
+    // Kids mode keeps the questions the sheikh marked for children, when there are some.
+    if (kidsMode && l.any((q) => q.kids)) return l.where((q) => q.kids).toList();
+    return l;
+  }
 
   /// What the reader practises with: the challenge-only questions stay out.
   List<QuizQ> get live => liveAll.where((q) => !q.challengeOnly).toList();

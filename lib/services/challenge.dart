@@ -242,6 +242,7 @@ class Challenges extends ChangeNotifier {
       {required String mode, String cat = '', String books = '', int level = 0, int count = 5, int secs = 15}) async {
     final u = Cloud.instance.user;
     if (u == null) return (null, 'سجّل الدخول أولاً لتبدأ تحدّياً.');
+    await Quiz.instance.load(); // the questions must be there first
     final qids = pick(cat: cat, books: books, level: level, count: count);
     if (qids.length < 3) return (null, 'لا توجد أسئلة كافية لهذا الاختيار بعد.');
     if (!await _spend()) return (null, 'انتهت تحدّياتك اليوم. اطلب من الشيخ تحدّيات إضافية.');
