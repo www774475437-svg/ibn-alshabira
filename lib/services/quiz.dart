@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -77,6 +78,10 @@ class QuizQ {
   String series;
   /// One of this week's «مسابقة الجمعة» questions.
   bool friday;
+  /// The sheikh's book the question comes from (a book id in the library).
+  String book;
+  /// A question that came with the app and the staff deleted.
+  bool removed;
 
   QuizQ({
     required this.id,
@@ -105,6 +110,8 @@ class QuizQ {
     this.src = '',
     this.series = '',
     this.friday = false,
+    this.book = '',
+    this.removed = false,
   })  : choices = choices ?? ['', ''],
         corrects = corrects ?? [];
 
@@ -142,6 +149,8 @@ class QuizQ {
         src: '${m['src'] ?? ''}',
         series: '${m['series'] ?? ''}',
         friday: m['friday'] == true,
+        book: '${m['book'] ?? ''}',
+        removed: m['removed'] == true,
       );
 
   Map<String, dynamic> toMap() => {
@@ -169,6 +178,8 @@ class QuizQ {
         'src': src,
         'series': series,
         'friday': friday,
+        'book': book,
+        if (removed) 'removed': true,
       };
 
   QuizQ copy({String? id, String? cat}) => QuizQ.fromMap(id ?? this.id, toMap()..['cat'] = cat ?? this.cat)
@@ -278,11 +289,73 @@ class Quiz extends ChangeNotifier {
           QuizCat(id: 'd$i', name: defaultCats[i].$1, icon: defaultCats[i].$2, color: defaultCats[i].$3, order: i)
       ];
     }
+    await _mergeBuiltin();
     loaded = true;
     fromCloud = Cloud.instance.isAdmin;
     loading = false;
     notifyListeners();
   }
+
+  /// Questions that come inside the app (from the sheikh's books). A question
+  /// saved by the staff with the same id (edited, hidden or deleted) wins.
+  static List<Map<String, dynamic>>? _builtin;
+
+  static const _builtinCats = {
+    'الزواج والأسرة': ('i_favorite_border', 0xFF9C3D3D),
+    'طلب العلم': ('i_library_books_outlined', 0xFF5B3A7A),
+    'المنهج والدعوة': ('i_shield_outlined', 0xFF145A32),
+    'الصحة والعافية': ('i_spa_outlined', 0xFF2E7D32),
+    'الرقائق': ('i_favorite_border', 0xFF3B4A8C),
+    'قضايا معاصرة': ('i_library_books_outlined', 0xFF7A4A1E),
+  };
+
+  /// The same number on every phone and on the site (String.hashCode is not).
+  static int _stableId(String s) {
+    var h = 7;
+    for (final c in s.codeUnits) {
+      h = (h * 31 + c) & 0x3fffffff;
+    }
+    return h;
+  }
+
+  Future<void> _mergeBuiltin() async {
+    try {
+      _builtin ??= [
+        for (final q in (jsonDecode(await rootBundle.loadString('assets/data/quiz_books.json'))['qs'] as List))
+          Map<String, dynamic>.from(q as Map)
+      ];
+    } catch (e) {
+      debugPrint('quiz books: $e');
+      return;
+    }
+    String catId(String name) {
+      final c = cats.where((c) => c.name.trim() == name).firstOrNull;
+      if (c != null) return c.id;
+      final (icon, color) = _builtinCats[name] ?? ('i_library_books_outlined', 0xFF1F5E3B);
+      final n = QuizCat(id: 'bc_${_stableId(name)}', name: name, icon: icon, color: color, order: 100 + cats.length);
+      cats.add(n);
+      return n.id;
+    }
+
+    final have = {for (final q in all) q.id};
+    for (final m in _builtin!) {
+      final id = '${m['id']}';
+      if (have.contains(id)) continue;
+      final cat = catId('${m['cat']}');
+      all.add(QuizQ.fromMap(id, {...m, 'cat': cat}));
+    }
+    all.removeWhere((q) => q.removed);
+    // Readers only see what is published; the staff see everything to edit it.
+    if (!Cloud.instance.isAdmin) all.removeWhere((q) => q.draft || q.hidden);
+    // A category with no question left for readers stays out of their list.
+    if (!Cloud.instance.isAdmin) {
+      final used = {for (final q in all) q.cat};
+      cats.removeWhere((c) => c.id.startsWith('bc_') && !used.contains(c.id));
+    }
+  }
+
+  /// The questions taken from one book of the sheikh.
+  List<QuizQ> ofBook(String bookId) => live.where((q) => q.book == bookId).toList();
 
   /// True when the questions came from Firestore (staff), not the site file.
   bool fromCloud = false;
@@ -939,7 +1012,12 @@ class Quiz extends ChangeNotifier {
 
   Future<String?> deleteQ(QuizQ q) async {
     try {
-      await _db.doc('quizQs/${q.id}').delete();
+      if (q.id.startsWith('b_')) {
+        // A question from the app itself: remember it is deleted.
+        await _db.doc('quizQs/${q.id}').set({...q.toMap(), 'removed': true});
+      } else {
+        await _db.doc('quizQs/${q.id}').delete();
+      }
       await Cloud.instance.logAction('الأسئلة: حذف سؤال', q.text);
       await load(force: true);
       return null;

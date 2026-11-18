@@ -218,7 +218,9 @@ def main():
     cats = [dict(m, id=i) for i, m in collection('quizCats')]
     qs = []
     for i, m in collection('quizQs'):
-        if m.get('draft') or m.get('hidden'):
+        # The app's own questions (b_…) always pass, so a hidden or deleted
+        # one is hidden on the phones too.
+        if (m.get('draft') or m.get('hidden')) and not i.startswith('b_'):
             continue
         qs.append(dict(m, id=i))
     cfg = dict(collection('config')).get('quiz', {})

@@ -5,11 +5,13 @@ import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../config.dart';
+import '../data/repository.dart';
 import '../services/challenge.dart';
 import '../services/cloud.dart';
 import '../services/quiz.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../widgets/source_book.dart';
 
 void _say(BuildContext context, String text, {bool ok = true}) {
   ScaffoldMessenger.of(context)
@@ -44,7 +46,11 @@ class _ChallengeHomeState extends State<ChallengeHome> {
 
   Future<void> _create(String mode) async {
     final quiz = Quiz.instance;
-    var cat = '', level = 0, count = 5, secs = 30;
+    var level = 0, count = 5, secs = 30;
+    final cats = <String>{}, books = <String>{};
+    // Only the books that have questions.
+    final withQs = {for (final q in quiz.live) q.book}..remove('');
+    final bookList = [for (final b in Repository.instance.books) if (withQs.contains(b.id)) b];
     final go = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
@@ -56,12 +62,33 @@ class _ChallengeHomeState extends State<ChallengeHome> {
               Text(mode == 'duel' ? 'تحدٍّ فردي (أنت وصديق)' : 'تحدٍّ جماعي (أنت وأصحابك)',
                   style: const TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.bold, fontSize: 18)),
               const SizedBox(height: 12),
-              const Text('الأسئلة من:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const Text('الأسئلة من الأبواب (اختر باباً أو أكثر):', style: TextStyle(fontWeight: FontWeight.bold)),
               Wrap(spacing: 6, runSpacing: 4, children: [
-                ChoiceChip(label: const Text('كل الأبواب (عشوائي)'), selected: cat.isEmpty, onSelected: (_) => set(() => cat = '')),
+                ChoiceChip(
+                    label: const Text('عشوائي من الكل'),
+                    selected: cats.isEmpty && books.isEmpty,
+                    onSelected: (_) => set(() {
+                          cats.clear();
+                          books.clear();
+                        })),
                 for (final k in quiz.visibleCats.where((k) => !k.hidden))
-                  ChoiceChip(label: Text(k.name), selected: cat == k.id, onSelected: (_) => set(() => cat = k.id)),
+                  FilterChip(
+                      label: Text(k.name),
+                      selected: cats.contains(k.id),
+                      onSelected: (v) => set(() => v ? cats.add(k.id) : cats.remove(k.id))),
               ]),
+              if (bookList.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                const Text('أو من كتب الشيخ:', style: TextStyle(fontWeight: FontWeight.bold)),
+                Wrap(spacing: 6, runSpacing: 4, children: [
+                  for (final b in bookList)
+                    FilterChip(
+                        avatar: const Icon(Icons.menu_book_outlined, size: 16),
+                        label: Text(b.title, overflow: TextOverflow.ellipsis),
+                        selected: books.contains(b.id),
+                        onSelected: (v) => set(() => v ? books.add(b.id) : books.remove(b.id))),
+                ]),
+              ],
               const SizedBox(height: 10),
               const Text('الصعوبة:', style: TextStyle(fontWeight: FontWeight.bold)),
               Wrap(spacing: 6, children: [
@@ -93,7 +120,8 @@ class _ChallengeHomeState extends State<ChallengeHome> {
     );
     if (go != true || !mounted) return;
     setState(() => _busy = true);
-    final (code, err) = await Challenges.instance.create(mode: mode, cat: cat, level: level, count: count, secs: secs);
+    final (code, err) = await Challenges.instance
+        .create(mode: mode, cat: cats.join(','), books: books.join(','), level: level, count: count, secs: secs);
     if (!mounted) return;
     setState(() => _busy = false);
     if (err != null) {
@@ -470,6 +498,7 @@ class _ChallengeRoomState extends State<ChallengeRoom> {
 
   List<Widget> _results(Challenge c, String? uid) {
     final r = c.ranked;
+    final mine = c.players.any((p) => p.uid == uid);
     final draw = r.length > 1 && r[0].score == r[1].score && r[0].ms == r[1].ms;
     return [
       Card(
@@ -496,6 +525,7 @@ class _ChallengeRoomState extends State<ChallengeRoom> {
               : 'لم يُكمل'),
           trailing: Text('${r[i].score}', style: const TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.bold, fontSize: 20)),
         ),
+      if (mine) _MyMistakes(code: c.code),
       const SizedBox(height: 10),
       if (c.rematch.isNotEmpty)
         FilledButton.icon(
@@ -594,6 +624,7 @@ class _ChallengePlayState extends State<ChallengePlay> {
       _score += 10 + _left ~/ 3;
     } else {
       _wrong++;
+      if (q != null) unawaited(Challenges.instance.markWrong(c.code, q.id));
     }
     HapticFeedback.selectionClick();
     // The first time a reader meets a question counts in his record too.
@@ -855,5 +886,53 @@ class _ChallengeStatsScreenState extends State<ChallengeStatsScreen> {
             ]);
           },
         ),
+      );
+}
+
+
+/// «أخطاؤك في هذا التحدي»: each question the reader got wrong, its right
+/// answer, and the book it came from.
+class _MyMistakes extends StatelessWidget {
+  final String code;
+  const _MyMistakes({required this.code});
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<List<String>>(
+        future: Challenges.instance.wrongOf(code),
+        builder: (context, snap) {
+          final ids = snap.data ?? const <String>[];
+          final qs = [
+            for (final id in ids.toSet()) ...Quiz.instance.all.where((q) => q.id == id),
+          ];
+          if (qs.isEmpty) return const SizedBox.shrink();
+          return Card(
+            margin: const EdgeInsets.only(top: 12),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Row(children: [
+                  const Icon(Icons.fact_check_outlined, color: kGold),
+                  const SizedBox(width: 8),
+                  Text('راجع أخطاءك (${qs.length})',
+                      style: const TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.bold, fontSize: 17)),
+                ]),
+                for (final q in qs) ...[
+                  const Divider(height: 22),
+                  Text(q.text, style: const TextStyle(fontWeight: FontWeight.bold, height: 1.6)),
+                  const SizedBox(height: 6),
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const Icon(Icons.check_circle, color: Color(0xFF2E7D32), size: 18),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(q.correct < q.choices.length ? q.choices[q.correct] : '',
+                          style: const TextStyle(color: Color(0xFF2E7D32), height: 1.6)),
+                    ),
+                  ]),
+                  SourceBookButton(bookId: q.book, strong: true),
+                ],
+              ]),
+            ),
+          );
+        },
       );
 }

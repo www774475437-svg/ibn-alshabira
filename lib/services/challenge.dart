@@ -94,6 +94,26 @@ class Challenges extends ChangeNotifier {
   int perDay = 2;
   bool readPoints = false;
 
+  /// The questions this reader got wrong in each challenge (kept on the phone).
+  final Map<String, List<String>> myWrong = {};
+
+  Future<void> markWrong(String code, String qid) async {
+    (myWrong[code] ??= []).add(qid);
+    try {
+      final p = await SharedPreferences.getInstance();
+      p.setStringList('chWrong_$code', myWrong[code]!);
+    } catch (_) {}
+  }
+
+  Future<List<String>> wrongOf(String code) async {
+    if (myWrong[code] != null) return myWrong[code]!;
+    try {
+      return (await SharedPreferences.getInstance()).getStringList('chWrong_$code') ?? const [];
+    } catch (_) {
+      return const [];
+    }
+  }
+
   // The reader's own counters (quizUsers/{uid}).
   int usedToday = 0;
   int credits = 0;
@@ -158,10 +178,18 @@ class Challenges extends ChangeNotifier {
 
   /// Picks the questions: approved and published only, those the host has
   /// not seen first; if they run out, older ones in a new order.
-  List<String> pick({String cat = '', int level = 0, int count = 5}) {
+  /// [cat] and [books] may hold several ids, separated by commas; empty = all.
+  List<String> pick({String cat = '', String books = '', int level = 0, int count = 5}) {
     final quiz = Quiz.instance;
+    final cs = cat.split(',').where((x) => x.isNotEmpty).toSet();
+    final bs = books.split(',').where((x) => x.isNotEmpty).toSet();
+    bool from(QuizQ q) {
+      if (cs.isEmpty && bs.isEmpty) return true;
+      return cs.contains(q.cat) || bs.contains(q.book);
+    }
+
     final pool = quiz.live
-        .where((q) => q.type != QuizType.order && !q.multi && (cat.isEmpty || q.cat == cat) && (level == 0 || q.level == level))
+        .where((q) => q.type != QuizType.order && !q.multi && from(q) && (level == 0 || q.level == level))
         .toList()
       ..shuffle();
     final fresh = pool.where((q) => !quiz.marks.containsKey(q.id)).toList();
@@ -169,10 +197,11 @@ class Challenges extends ChangeNotifier {
     return [...fresh, ...seen].take(count).map((q) => q.id).toList();
   }
 
-  Future<(String?, String?)> create({required String mode, String cat = '', int level = 0, int count = 5, int secs = 15}) async {
+  Future<(String?, String?)> create(
+      {required String mode, String cat = '', String books = '', int level = 0, int count = 5, int secs = 15}) async {
     final u = Cloud.instance.user;
     if (u == null) return (null, 'سجّل الدخول أولاً لتبدأ تحدّياً.');
-    final qids = pick(cat: cat, level: level, count: count);
+    final qids = pick(cat: cat, books: books, level: level, count: count);
     if (qids.length < 3) return (null, 'لا توجد أسئلة كافية لهذا الاختيار بعد.');
     if (!await _spend()) return (null, 'انتهت تحدّياتك اليوم. اطلب من الشيخ تحدّيات إضافية.');
     final rnd = math.Random();
@@ -191,6 +220,7 @@ class Challenges extends ChangeNotifier {
             'secs': 15,
             'status': 'lobby',
             'cat': cat,
+            'books': books,
             'level': level,
             'lobbyUntil': DateTime.now().millisecondsSinceEpoch + 120000,
             'at': FieldValue.serverTimestamp(),
@@ -261,7 +291,7 @@ class Challenges extends ChangeNotifier {
   Future<(String?, String?)> rematch(Challenge c) async {
     final m = (await _db.doc('challenges/${c.code}').get()).data() ?? {};
     final r = await create(
-        mode: c.mode, cat: '${m['cat'] ?? ''}', level: (m['level'] as num?)?.toInt() ?? 0, count: c.qids.length);
+        mode: c.mode, cat: '${m['cat'] ?? ''}', books: '${m['books'] ?? ''}', level: (m['level'] as num?)?.toInt() ?? 0, count: c.qids.length);
     if (r.$1 != null) {
       try {
         await _db.doc('challenges/${c.code}').update({'rematch': r.$1, 'rematchBy': _name});

@@ -15,6 +15,8 @@ import '../data/models.dart';
 import '../data/repository.dart';
 import '../services/books_store.dart';
 import '../theme.dart';
+import '../services/quiz.dart';
+import 'quiz_screens.dart';
 
 /// A bookmark on a page: its colour has a meaning, and it can carry a note.
 class BookMark {
@@ -144,6 +146,9 @@ class _BookReaderScreenState extends State<BookReaderScreen> {
   @override
   void initState() {
     super.initState();
+    Quiz.instance.load().then((_) {
+      if (mounted) setState(() {});
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) => Repository.instance.setLastBook(widget.book.id));
     ReaderStore.opened(widget.book.id);
     _clock.start();
@@ -570,6 +575,17 @@ class _BookReaderScreenState extends State<BookReaderScreen> {
                           if (!_searching) _searcher.resetTextSearch();
                         }),
                       ),
+                      if (Quiz.instance.ofBook(widget.book.id).isNotEmpty)
+                        IconButton(
+                          tooltip: 'اختبر نفسك في هذا الكتاب',
+                          icon: const Icon(Icons.quiz_outlined),
+                          onPressed: () {
+                            final l = Quiz.instance.ofBook(widget.book.id)..shuffle();
+                            final take = l.take(10).toList();
+                            Navigator.of(context).push(MaterialPageRoute(
+                                builder: (_) => QuestionScreen(q: take.first, queue: take.sublist(1))));
+                          },
+                        ),
                       IconButton(tooltip: 'العلامات والملاحظات', icon: const Icon(Icons.bookmarks_outlined), onPressed: _showMarks),
                       IconButton(tooltip: 'إعدادات القراءة', icon: const Icon(Icons.tune), onPressed: _settings),
                       PopupMenuButton<String>(

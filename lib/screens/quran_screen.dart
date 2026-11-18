@@ -363,8 +363,14 @@ class _QuranScreenState extends State<QuranScreen> {
     if (n != null) _goTo(n);
   }
 
+  /// The mushaf keeps its own fixed size: the app's text size never changes it.
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(textScaler: TextScaler.noScaling),
+        child: Builder(builder: _build),
+      );
+
+  Widget _build(BuildContext context) {
     final q = _q;
     if (q == null) {
       return Scaffold(appBar: AppBar(title: const Text('المصحف')), body: const Center(child: CircularProgressIndicator()));

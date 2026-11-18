@@ -14,6 +14,7 @@ import 'profile_screen.dart';
 import '../services/quiz.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../widgets/source_book.dart';
 
 void _toast(BuildContext context, String text, {bool ok = true}) {
   ScaffoldMessenger.of(context)
@@ -758,6 +759,7 @@ class _QuestionScreenState extends State<QuestionScreen> {
                 ]),
               ),
             ),
+            SourceBookButton(bookId: q.book, strong: !ok),
             if (q.linkUrl.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 10),
@@ -1518,6 +1520,7 @@ class _QuestionEditorState extends State<QuestionEditor> {
   late final _linkTitle = TextEditingController(text: _q.linkTitle);
   late final _linkUrl = TextEditingController(text: _q.linkUrl);
   late final _src = TextEditingController(text: _q.src);
+  late String _book = _q.book;
   late bool _many = _q.corrects.length > 1;
   late final List<TextEditingController> _choices = [
     for (final c in (_q.choices.isEmpty ? ['', ''] : _q.choices)) TextEditingController(text: c)
@@ -1534,6 +1537,7 @@ class _QuestionEditorState extends State<QuestionEditor> {
     ..linkTitle = _linkTitle.text.trim()
     ..linkUrl = _linkUrl.text.trim()
     ..src = _src.text.trim()
+    ..book = _book
     ..choices = _q.type == QuizType.trueFalse ? ['صح', 'خطأ'] : [for (final c in _choices) c.text.trim()];
 
   Future<void> _save({bool asDraft = false}) async {
@@ -1766,6 +1770,21 @@ class _QuestionEditorState extends State<QuestionEditor> {
                 decoration: dec('الشرح بالتفصيل (يظهر بعد الجواب، صحيحاً أو خطأً)')),
             const SizedBox(height: 10),
             TextField(controller: _src, onChanged: (_) => _dirty = true, decoration: dec('المصدر: الكتاب والصفحة (اختياري)')),
+            const SizedBox(height: 10),
+            DropdownButtonFormField<String>(
+              value: Repository.instance.books.any((b) => b.id == _book) ? _book : '',
+              isExpanded: true,
+              decoration: dec('كتاب الشيخ الذي أُخذ منه (يظهر زر «تصفّح الكتاب»)'),
+              items: [
+                const DropdownMenuItem(value: '', child: Text('— بلا كتاب —')),
+                for (final b in Repository.instance.books)
+                  DropdownMenuItem(value: b.id, child: Text(b.title, overflow: TextOverflow.ellipsis)),
+              ],
+              onChanged: (v) => setState(() {
+                _book = v ?? '';
+                _dirty = true;
+              }),
+            ),
             const SizedBox(height: 10),
             DropdownButtonFormField<String>(
               value: Repository.instance.chapters.any((c) => c.id == _q.series) ? _q.series : '',
