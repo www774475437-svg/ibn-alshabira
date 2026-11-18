@@ -3,7 +3,6 @@ import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/repository.dart';
@@ -118,53 +117,37 @@ class Members extends ChangeNotifier {
         }
       } catch (_) {}
     }
+    final checked = p.getInt('membersChecked') ?? 0;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    // The server renews the list every six hours: read it again only then.
     if (!force && at != null && DateTime.now().difference(at!) < _every) return;
+    if (!force && now - checked < const Duration(hours: 1).inMilliseconds) return;
+    await p.setInt('membersChecked', now);
     final u = Cloud.instance.user;
     if (u == null || !Cloud.instance.isAdmin) return;
     loading = true;
     error = null;
     notifyListeners();
     try {
-      final token = await u.getIdToken();
-      final rows = <(String, DateTime?, Map<String, dynamic>)>[];
-      String? page;
-      do {
-        final url = Uri.parse('https://firestore.googleapis.com/v1/projects/ibn-alshabira/databases/(default)/documents/users'
-            '?pageSize=300&mask.fieldPaths=card${page == null ? '' : '&pageToken=${Uri.encodeQueryComponent(page)}'}');
-        final r = await http.get(url, headers: {'Authorization': 'Bearer $token'}).timeout(const Duration(seconds: 40));
-        if (r.statusCode != 200) throw 'HTTP ${r.statusCode}';
-        final m = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
-        for (final d in (m['documents'] as List? ?? const [])) {
-          final doc = Map<String, dynamic>.from(d as Map);
-          final uid = '${doc['name']}'.split('/').last;
-          final fields = Map<String, dynamic>.from(doc['fields'] as Map? ?? const {});
-          final card = fields['card'] == null ? <String, dynamic>{} : Map<String, dynamic>.from(_val(fields['card']) as Map);
-          rows.add((uid, DateTime.tryParse('${doc['createTime']}'), card));
+      // The server puts everyone in one or two documents four times a day.
+      final db = FirebaseFirestore.instance;
+      final meta = (await db.doc('adminData/members_meta').get()).data();
+      if (meta == null) throw 'لم تُجهَّز القائمة بعد، تظهر بعد أول تحديث للخادم';
+      final n = (meta['chunks'] as num?)?.toInt() ?? 0;
+      final all = <Member>[];
+      for (var i = 0; i < n; i++) {
+        final c = (await db.doc('adminData/members_$i').get()).data();
+        final m = jsonDecode('${c?['l'] ?? '{}'}') as Map<String, dynamic>;
+        for (final e in m.entries) {
+          final r = Map<String, dynamic>.from(e.value as Map);
+          DateTime? t(Object? v) => v is num ? DateTime.fromMillisecondsSinceEpoch(v.toInt()) : null;
+          all.add(Member(e.key, (r['s'] as num?)?.toInt() ?? 0, t(r['j']), t(r['v']),
+              Map<String, dynamic>.from(r['c'] as Map? ?? const {})));
         }
-        page = m['nextPageToken'] as String?;
-      } while (page != null);
-      // The order of registering: the account's own date when the reader
-      // sent it, otherwise the day his record was first made.
-      DateTime? joinOf((String, DateTime?, Map<String, dynamic>) r) {
-        final j = r.$3['joined'];
-        if (j is num) return DateTime.fromMillisecondsSinceEpoch(j.toInt());
-        return r.$2;
       }
-
-      rows.sort((a, b) {
-        final x = joinOf(a), y = joinOf(b);
-        if (x == null && y == null) return a.$1.compareTo(b.$1);
-        if (x == null) return 1;
-        if (y == null) return -1;
-        return x.compareTo(y);
-      });
-      list = [
-        for (var i = 0; i < rows.length; i++)
-          Member(rows[i].$1, i + 1, joinOf(rows[i]),
-              rows[i].$3['seen'] is num ? DateTime.fromMillisecondsSinceEpoch((rows[i].$3['seen'] as num).toInt()) : null,
-              rows[i].$3)
-      ];
-      at = DateTime.now();
+      all.sort((a, b) => a.seq.compareTo(b.seq));
+      list = all;
+      at = DateTime.tryParse('${meta['at'] ?? ''}')?.toLocal() ?? DateTime.now();
       await p.setString(
           'membersCache', jsonEncode({'at': at!.millisecondsSinceEpoch, 'l': [for (final m in list) m.toJson()]}));
     } catch (e) {
@@ -177,23 +160,4 @@ class Members extends ChangeNotifier {
   Member? byUid(String uid) => list.where((m) => m.uid == uid).firstOrNull;
 
   int joinedSince(DateTime from) => list.where((m) => m.joined != null && !m.joined!.isBefore(from)).length;
-
-  /// A Firestore REST value as plain Dart.
-  static Object? _val(Object? v) {
-    if (v is! Map) return v;
-    if (v.containsKey('stringValue')) return v['stringValue'];
-    if (v.containsKey('integerValue')) return int.tryParse('${v['integerValue']}') ?? 0;
-    if (v.containsKey('doubleValue')) return (v['doubleValue'] as num).toDouble();
-    if (v.containsKey('booleanValue')) return v['booleanValue'] == true;
-    if (v.containsKey('nullValue')) return null;
-    if (v.containsKey('timestampValue')) return DateTime.tryParse('${v['timestampValue']}')?.millisecondsSinceEpoch;
-    if (v.containsKey('arrayValue')) {
-      return [for (final x in ((v['arrayValue'] as Map)['values'] as List? ?? const [])) _val(x)];
-    }
-    if (v.containsKey('mapValue')) {
-      final f = Map<String, dynamic>.from((v['mapValue'] as Map)['fields'] as Map? ?? const {});
-      return {for (final e in f.entries) e.key: _val(e.value)};
-    }
-    return null;
-  }
 }

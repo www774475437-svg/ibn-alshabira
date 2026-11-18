@@ -16,6 +16,7 @@ import '../data/repository.dart';
 import '../services/books_store.dart';
 import '../theme.dart';
 import '../services/quiz.dart';
+import 'profile_screen.dart' show addQuoteDialog;
 import 'quiz_screens.dart';
 
 /// A bookmark on a page: its colour has a meaning, and it can carry a note.
@@ -574,6 +575,11 @@ class _BookReaderScreenState extends State<BookReaderScreen> {
                           _searching = !_searching;
                           if (!_searching) _searcher.resetTextSearch();
                         }),
+                      ),
+                      IconButton(
+                        tooltip: 'أضف اقتباساً من هذه الصفحة',
+                        icon: const Icon(Icons.format_quote),
+                        onPressed: () => addQuoteDialog(context, text: '', source: '${widget.book.title} (صـ $_page)'),
                       ),
                       if (Quiz.instance.ofBook(widget.book.id).isNotEmpty)
                         IconButton(

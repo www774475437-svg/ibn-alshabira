@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'cloud.dart';
 import 'ai.dart';
 import 'day_log.dart';
+import 'profiles.dart';
 import 'progress.dart';
 import 'site_files.dart';
 
@@ -668,15 +669,19 @@ class Quiz extends ChangeNotifier {
 
   /// Sends the reader's quiz record (score, name, and his answers as one map)
   /// in one write, only when something changed. Called by DayLog.
+  /// Following someone or adding a quote: send the page with the next flush.
+  void profileChanged() => _profileDirty = true;
+
   Future<void> flushProfile() async {
-    // Also once a day (points, badges, readings for the public profile).
+    // The public page goes out at most once in six hours (or after a change
+    // the reader made): points, badges, readings, following, quotes.
     final p = await SharedPreferences.getInstance();
-    final d = DateTime.now();
-    final today = '${d.year}-${d.month}-${d.day}';
-    if (!_profileDirty && p.getString('profileDay') == today) return;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final last = p.getInt('profileAt') ?? 0;
+    if (!_profileDirty && now - last < const Duration(hours: 6).inMilliseconds) return;
     if (Cloud.instance.user == null) return;
     _profileDirty = false;
-    await p.setString('profileDay', today);
+    await p.setInt('profileAt', now);
     await _pushProfile();
   }
 
@@ -691,6 +696,7 @@ class Quiz extends ChangeNotifier {
       if (weekKey(mk.at) == week) w++;
       if (monthKey(mk.at) == month && mk.at.year == now.year) m++;
     }
+    await Profiles.instance.loadLocal();
     try {
       await _db.doc('quizUsers/${u.uid}').set({
         'nick': nick.trim().isEmpty ? 'طالب علم' : nick.trim(),
@@ -704,6 +710,9 @@ class Quiz extends ChangeNotifier {
         'streak': streak,
         'no': askerNo(u.uid),
         ...Progress.public,
+        'fw': Profiles.instance.following.toList(),
+        'qt': Profiles.instance.quotes,
+        'at': FieldValue.serverTimestamp(),
         'm': {for (final e in marks.entries) e.key: [e.value.choice, e.value.ok, e.value.at.millisecondsSinceEpoch]},
       }, SetOptions(merge: true));
     } catch (_) {}

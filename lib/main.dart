@@ -21,6 +21,7 @@ import 'screens/challenge_screens.dart';
 import 'services/notifications.dart';
 import 'services/prayer.dart';
 import 'services/reminders.dart';
+import 'services/profiles.dart';
 import 'services/progress.dart';
 import 'theme.dart';
 
@@ -47,6 +48,7 @@ Future<void> main() async {
     await Reminders.schedule();
     await Reminders.scheduleLessons();
     await Progress.load();
+    await Profiles.instance.load(); // pages of the people one follows; «new follower» notice
     await Prayer.instance.load();
     await Prayer.instance.pushWidget();
   });

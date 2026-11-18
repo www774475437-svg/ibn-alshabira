@@ -1704,12 +1704,13 @@ class Series {
 
 /// A fixed four-digit number for an asker, made from his account id, so the
 /// sheikh can tell askers apart without knowing who they are.
+/// Each reader's public number: six digits, the same on every phone.
 int askerNo(String uid) {
   var h = 7;
   for (final c in uid.codeUnits) {
-    h = (h * 31 + c) % 90000;
+    h = (h * 31 + c) % 900000;
   }
-  return 10000 + h;
+  return 100000 + h;
 }
 
 

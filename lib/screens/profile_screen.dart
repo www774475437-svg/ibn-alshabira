@@ -6,11 +6,13 @@ import '../config.dart';
 import '../data/repository.dart';
 import '../services/challenge.dart';
 import '../services/cloud.dart';
+import '../services/profiles.dart';
 import '../services/progress.dart';
 import '../services/quiz.dart';
 import '../services/site_files.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import 'challenge_screens.dart';
 import 'quiz_screens.dart';
 
 Future<void> openDashboard(BuildContext context) =>
@@ -26,7 +28,6 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  final _search = TextEditingController();
   int _invited = 0;
 
   @override
@@ -35,6 +36,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     Quiz.instance.load();
     Challenges.instance.load();
     Progress.load().then((_) => mounted ? setState(() {}) : null);
+    Profiles.instance.load();
     _loadInvites();
   }
 
@@ -166,29 +168,54 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ),
               ],
-              const _Head('ملف متابع آخر'),
-              Row(children: [
-                Expanded(
-                  child: TextField(
-                    controller: _search,
-                    keyboardType: TextInputType.number,
-                    maxLength: 5,
-                    decoration: const InputDecoration(
-                        counterText: '', hintText: 'رقمه (5 أرقام)', border: OutlineInputBorder(), isDense: true),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                FilledButton(
-                  onPressed: () {
-                    final n = int.tryParse(_search.text.trim());
-                    if (n == null) return;
-                    Navigator.of(context).push(MaterialPageRoute(builder: (_) => PublicProfileScreen(no: n)));
+              if (u != null) ...[
+                const _Head('ملفي والمتابعة'),
+                ListenableBuilder(
+                  listenable: Profiles.instance,
+                  builder: (context, _) {
+                    final pr = Profiles.instance;
+                    final mine = pr.mine;
+                    int n(String k) => (mine?[k] as num?)?.toInt() ?? 0;
+                    return Card(
+                      child: Column(children: [
+                        ListTile(
+                          leading: const Icon(Icons.badge_outlined, color: kGold),
+                          title: Text('رقمي: $no', style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Text(mine == null
+                              ? 'يظهر ملفك للناس خلال 6 ساعات'
+                              : 'متابِعوك ${n('fr')} · تتابع ${pr.following.length}${pr.newFollowers > 0 ? ' · جديد +${pr.newFollowers} 🎉' : ''}'),
+                          trailing: const Icon(Icons.chevron_left),
+                          onTap: () {
+                            pr.seenNewFollowers();
+                            Navigator.of(context).push(MaterialPageRoute(builder: (_) => PublicProfileScreen(no: no!)));
+                          },
+                        ),
+                        const Divider(height: 1),
+                        ListTile(
+                          leading: const Icon(Icons.person_search),
+                          title: const Text('ابحث عن شخص برقمه'),
+                          trailing: const Icon(Icons.chevron_left),
+                          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const FindProfileScreen())),
+                        ),
+                        ListTile(
+                          leading: const Icon(Icons.group_outlined),
+                          title: Text('من أتابعهم (${pr.following.length})'),
+                          trailing: const Icon(Icons.chevron_left),
+                          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const FollowingScreen())),
+                        ),
+                        ListTile(
+                          leading: const Icon(Icons.format_quote),
+                          title: Text('اقتباساتي (${pr.quotes.length})'),
+                          trailing: const Icon(Icons.chevron_left),
+                          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MyQuotesScreen())),
+                        ),
+                      ]),
+                    );
                   },
-                  child: const Text('افتح'),
                 ),
-              ]),
+              ],
               const SizedBox(height: 8),
-              const Text('يتحدّث ملفك للناس مرة في اليوم.', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey, fontSize: 12)),
+              const Text('يتحدّث ملفك للناس كل 6 ساعات.', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey, fontSize: 12)),
             ]),
           );
         },
@@ -206,62 +233,386 @@ class _Head extends StatelessWidget {
       );
 }
 
-/// Another follower's public page, found by his number (one read).
-class PublicProfileScreen extends StatelessWidget {
+String _hint(DateTime? at) {
+  if (at == null) return 'تتحدّث الملفات كل 6 ساعات.';
+  final h = DateTime.now().difference(at).inHours;
+  return 'تتحدّث الملفات كل 6 ساعات · آخر تحديث ${h < 1 ? 'قبل أقل من ساعة' : 'قبل $h ساعة'}';
+}
+
+/// A reader's public page, found by his 6-digit number. It comes from the
+/// file the server makes four times a day: no Firestore read.
+class PublicProfileScreen extends StatefulWidget {
   final int no;
   const PublicProfileScreen({super.key, required this.no});
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: Text('رقم $no')),
-        body: FutureBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          future: FirebaseFirestore.instance.collection('quizUsers').where('no', isEqualTo: no).limit(1).get(),
-          builder: (context, snap) {
-            if (snap.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
-            final docs = snap.data?.docs ?? const [];
-            if (docs.isEmpty) return const EmptyState(icon: Icons.person_search, text: 'لا يوجد متابع بهذا الرقم.');
-            final m = docs.first.data();
-            int n(String k) => (m[k] as num?)?.toInt() ?? 0;
-            final name = m['showName'] == true && '${m['nick'] ?? ''}'.trim().isNotEmpty ? '${m['nick']}'.trim() : 'رقم $no';
-            final badges = [for (final b in (m['badges'] as List? ?? const [])) '$b'];
-            return ListView(padding: const EdgeInsets.all(14), children: [
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(22),
-                  gradient: const LinearGradient(colors: [Color(0xFF0E3B44), Color(0xFF1F5E3B)]),
-                  border: Border.all(color: kGold),
+  State<PublicProfileScreen> createState() => _PublicProfileScreenState();
+}
+
+class _PublicProfileScreenState extends State<PublicProfileScreen> {
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    Profiles.instance.load().then((_) => mounted ? setState(() => _loading = false) : null);
+  }
+
+  Future<void> _challenge() async {
+    final (code, err) = await Challenges.instance.create(mode: 'duel');
+    if (!mounted) return;
+    if (err != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
+      return;
+    }
+    await Share.share('أتحدّاك في أسئلة تطبيق «ابن الشابرة» ⚡\nادخل التحدّي رقم $code:\n${AppConfig.siteUrl}#/c/$code');
+    if (mounted) Navigator.of(context).push(MaterialPageRoute(builder: (_) => ChallengeRoom(code: code!)));
+  }
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: Profiles.instance,
+        builder: (context, _) {
+          final pr = Profiles.instance;
+          final no = '${widget.no}';
+          final m = pr.page(no);
+          final me = pr.myNo == no;
+          return Scaffold(
+            appBar: AppBar(title: Text('الملف $no')),
+            body: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : m == null
+                    ? const EmptyState(
+                        icon: Icons.person_search,
+                        text: 'لا يوجد ملف بهذا الرقم بعد.\nتظهر الملفات بعد أن يفتح صاحبها النسخة الجديدة، وتتحدّث كل 6 ساعات.')
+                    : ProfileView(no: no, m: m, me: me, onChallenge: me ? null : _challenge),
+          );
+        },
+      );
+}
+
+/// The page itself (also shown in «لوحتي» for the reader's own page).
+class ProfileView extends StatelessWidget {
+  final String no;
+  final Map<String, dynamic> m;
+  final bool me;
+  final VoidCallback? onChallenge;
+  const ProfileView({super.key, required this.no, required this.m, this.me = false, this.onChallenge});
+
+  @override
+  Widget build(BuildContext context) {
+    final pr = Profiles.instance;
+    int n(String k) => (m[k] as num?)?.toInt() ?? 0;
+    final name = '${m['n'] ?? ''}'.trim();
+    final badges = [for (final b in (m['b'] as List? ?? const [])) '$b'];
+    final quotes = [for (final q in (m['q'] as List? ?? const [])) Map<String, dynamic>.from(q as Map)];
+    final following = pr.isFollowing(no);
+    Widget box(String label, int v, IconData icon, Color c) => Container(
+          decoration: BoxDecoration(
+              color: c.withValues(alpha: .1), borderRadius: BorderRadius.circular(14), border: Border.all(color: c.withValues(alpha: .4))),
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Icon(icon, color: c, size: 22),
+            Text('$v', style: TextStyle(fontFamily: 'Tajawal', fontSize: 20, fontWeight: FontWeight.bold, color: c)),
+            Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11.5)),
+          ]),
+        );
+    return ListView(padding: const EdgeInsets.all(12), children: [
+      Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(22),
+          gradient: const LinearGradient(colors: [Color(0xFF0E3B44), Color(0xFF1F5E3B)]),
+          border: Border.all(color: kGold),
+        ),
+        child: Column(children: [
+          Text(name.isEmpty ? 'رقم $no' : name,
+              style: const TextStyle(fontFamily: 'Tajawal', color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+          if (name.isNotEmpty) Text('رقم $no', style: const TextStyle(color: kGold)),
+          const SizedBox(height: 8),
+          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Column(children: [
+              Text('${n('fr')}', style: const TextStyle(fontFamily: 'Tajawal', color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+              const Text('متابِعون', style: TextStyle(color: Colors.white70, fontSize: 12)),
+            ]),
+            const SizedBox(width: 30),
+            Column(children: [
+              Text('${n('p')}', style: const TextStyle(fontFamily: 'Tajawal', color: kGold, fontSize: 26, fontWeight: FontWeight.bold)),
+              const Text('نقطة', style: TextStyle(color: Colors.white70, fontSize: 12)),
+            ]),
+            const SizedBox(width: 30),
+            Column(children: [
+              Text('${n('fg')}', style: const TextStyle(fontFamily: 'Tajawal', color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+              const Text('يتابِع', style: TextStyle(color: Colors.white70, fontSize: 12)),
+            ]),
+          ]),
+          if (!me) ...[
+            const SizedBox(height: 12),
+            Row(children: [
+              Expanded(
+                child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                      backgroundColor: following ? Colors.white24 : kGold, foregroundColor: following ? Colors.white : Colors.black),
+                  icon: Icon(following ? Icons.check : Icons.person_add_alt_1),
+                  label: Text(following ? 'تتابعه' : 'تابِع'),
+                  onPressed: Cloud.instance.user == null ? null : () => pr.toggleFollow(no),
                 ),
-                child: Column(children: [
-                  Text(name, style: const TextStyle(fontFamily: 'Tajawal', color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
-                  Text('${n('pts')}', style: const TextStyle(fontFamily: 'Tajawal', color: kGold, fontSize: 38, fontWeight: FontWeight.bold)),
-                  const Text('نقطة', style: TextStyle(color: Colors.white70)),
-                ]),
               ),
-              const SizedBox(height: 10),
-              Card(
-                child: Column(children: [
-                  ListTile(dense: true, leading: const Icon(Icons.menu_book), title: Text('قرأ ${n('reads')} جواباً')),
-                  ListTile(dense: true, leading: const Icon(Icons.local_fire_department), title: Text('${n('days')} أيام متتالية')),
-                  ListTile(dense: true, leading: const Icon(Icons.quiz), title: Text('أصاب ${n('score')} سؤالاً')),
-                  ListTile(
-                      dense: true,
-                      leading: const Icon(Icons.emoji_events),
-                      title: Text('فاز في ${n('chWins')} تحدّياً (${n('chWinsDuel')} فردي، ${n('chWinsGroup')} جماعي)')),
-                  ListTile(dense: true, leading: const Icon(Icons.headphones), title: Text('سمع ${n('listens')} تسجيلاً')),
-                  if (n('hifz') > 0) ListTile(dense: true, leading: const Icon(Icons.psychology), title: Text('حفظ ${n('hifz')} صفحة')),
-                ]),
-              ),
-              if (badges.isNotEmpty) ...[
-                const _Head('أوسمته'),
-                Wrap(spacing: 8, runSpacing: 8, children: [
-                  for (final b in badges) Chip(avatar: const Icon(Icons.verified, color: kGold, size: 18), label: Text(b)),
-                ]),
+              if (onChallenge != null) ...[
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: const BorderSide(color: Colors.white54)),
+                    icon: const Icon(Icons.bolt),
+                    label: const Text('تحدَّه'),
+                    onPressed: Cloud.instance.user == null ? null : onChallenge,
+                  ),
+                ),
               ],
-            ]);
-          },
+            ]),
+          ],
+        ]),
+      ),
+      const SizedBox(height: 10),
+      GridView.count(
+        crossAxisCount: 3,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        mainAxisSpacing: 8,
+        crossAxisSpacing: 8,
+        childAspectRatio: 1.15,
+        children: [
+          box('أيام متتالية', n('d'), Icons.local_fire_department, const Color(0xFFB0602A)),
+          box('أجوبة قرأها', n('rd'), Icons.menu_book, const Color(0xFF0E3B44)),
+          box('أسئلة أصابها', n('r'), Icons.check_circle, const Color(0xFF2E7D32)),
+          box('تحديات لعبها', n('cp'), Icons.bolt, const Color(0xFF7A1F1F)),
+          box('فاز فيها', n('cw'), Icons.emoji_events, const Color(0xFF9C7A1E)),
+          box('تسجيلات سمعها', n('ls'), Icons.headphones, const Color(0xFF3B4A8C)),
+        ],
+      ),
+      if (badges.isNotEmpty) ...[
+        const _Head('الأوسمة'),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          for (final b in badges) Chip(avatar: const Icon(Icons.verified, color: kGold, size: 18), label: Text(b)),
+        ]),
+      ],
+      _Head('الاقتباسات (${quotes.length})'),
+      if (quotes.isEmpty)
+        Text(me ? 'لم تضف اقتباسات بعد. أضفها من صفحة أي جواب أو من داخل الكتب.' : 'لا اقتباسات بعد',
+            style: const TextStyle(color: Colors.grey))
+      else
+        for (final q in quotes) QuoteCard(text: '${q['t']}', source: '${q['s']}'),
+      const SizedBox(height: 12),
+      Text(_hint(pr.at), textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+    ]);
+  }
+}
+
+class QuoteCard extends StatelessWidget {
+  final String text, source;
+  final VoidCallback? onDelete;
+  const QuoteCard({super.key, required this.text, required this.source, this.onDelete});
+
+  @override
+  Widget build(BuildContext context) => Card(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 8, 10),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Icon(Icons.format_quote, color: kGold),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('«$text»', style: const TextStyle(height: 1.8, fontSize: 15.5)),
+                if (source.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(source, style: const TextStyle(color: kGoldChip, fontSize: 12.5)),
+                  ),
+              ]),
+            ),
+            if (onDelete != null) IconButton(icon: const Icon(Icons.delete_outline, size: 20), onPressed: onDelete),
+          ]),
         ),
       );
+}
+
+/// Find a reader by his 6-digit number (three searches a day).
+class FindProfileScreen extends StatefulWidget {
+  const FindProfileScreen({super.key});
+
+  @override
+  State<FindProfileScreen> createState() => _FindProfileScreenState();
+}
+
+class _FindProfileScreenState extends State<FindProfileScreen> {
+  final _c = TextEditingController();
+  int _left = Profiles.searchesPerDay;
+
+  @override
+  void initState() {
+    super.initState();
+    Profiles.instance.searchesLeft().then((v) => mounted ? setState(() => _left = v) : null);
+  }
+
+  Future<void> _go() async {
+    final t = _c.text.trim().split('').map((c) {
+      final i = '٠١٢٣٤٥٦٧٨٩'.indexOf(c);
+      return i >= 0 ? '$i' : c;
+    }).join();
+    final n = int.tryParse(t);
+    if (n == null || t.length != 6) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('اكتب الرقم كاملاً: 6 أرقام')));
+      return;
+    }
+    if (_left <= 0) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('انتهت بحوثك اليوم، عُد غداً إن شاء الله')));
+      return;
+    }
+    await Profiles.instance.useSearch();
+    final left = await Profiles.instance.searchesLeft();
+    if (!mounted) return;
+    setState(() => _left = left);
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => PublicProfileScreen(no: n)));
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: const Text('ابحث عن شخص')),
+        body: ListView(padding: const EdgeInsets.all(16), children: [
+          const Text('اكتب رقمه (6 أرقام)، وهو الرقم الظاهر في «لوحتي» وفي «اسأل الشيخ».', style: TextStyle(height: 1.7)),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _c,
+            keyboardType: TextInputType.number,
+            maxLength: 6,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontFamily: 'Tajawal', fontSize: 26, letterSpacing: 6),
+            decoration: const InputDecoration(counterText: '', hintText: '000000', border: OutlineInputBorder()),
+            onSubmitted: (_) => _go(),
+          ),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
+            icon: const Icon(Icons.person_search),
+            label: const Text('ابحث'),
+            onPressed: _go,
+          ),
+          const SizedBox(height: 10),
+          Text(Cloud.instance.isAdmin ? 'أنت من الإدارة: بحثك بلا حد.' : 'بقي لك اليوم: $_left من ${Profiles.searchesPerDay} بحوث',
+              textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey)),
+        ]),
+      );
+}
+
+/// «من أتابعهم»: the people the reader follows, with a glance at each.
+class FollowingScreen extends StatefulWidget {
+  const FollowingScreen({super.key});
+
+  @override
+  State<FollowingScreen> createState() => _FollowingScreenState();
+}
+
+class _FollowingScreenState extends State<FollowingScreen> {
+  @override
+  void initState() {
+    super.initState();
+    Profiles.instance.load();
+  }
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: Profiles.instance,
+        builder: (context, _) {
+          final pr = Profiles.instance;
+          final l = pr.following.toList()..sort();
+          return Scaffold(
+            appBar: AppBar(title: Text('من أتابعهم (${l.length})')),
+            body: l.isEmpty
+                ? const EmptyState(icon: Icons.group_outlined, text: 'لا تتابع أحداً بعد. ابحث برقم شخص ثم اضغط «تابِع».')
+                : ListView(padding: const EdgeInsets.symmetric(vertical: 8), children: [
+                    for (final no in l)
+                      Builder(builder: (context) {
+                        final m = pr.page(no);
+                        int n(String k) => (m?[k] as num?)?.toInt() ?? 0;
+                        final name = '${m?['n'] ?? ''}'.trim();
+                        return ListTile(
+                          leading: const CircleAvatar(backgroundColor: Color(0xFF0E3B44), child: Icon(Icons.person, color: kGold)),
+                          title: Text(name.isEmpty ? 'رقم $no' : name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Text(m == null
+                              ? 'لم يتحدّث ملفه بعد'
+                              : '🔥 ${n('d')} يوم   📖 ${n('rd')}   🏆 ${n('cw')} من ${n('cp')}   ⭐ ${n('p')}'),
+                          trailing: const Icon(Icons.chevron_left),
+                          onTap: () => Navigator.of(context)
+                              .push(MaterialPageRoute(builder: (_) => PublicProfileScreen(no: int.parse(no)))),
+                        );
+                      }),
+                  ]),
+          );
+        },
+      );
+}
+
+/// «اقتباساتي»: the reader's quotes, with delete.
+class MyQuotesScreen extends StatelessWidget {
+  const MyQuotesScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: Profiles.instance,
+        builder: (context, _) {
+          final q = Profiles.instance.quotes;
+          return Scaffold(
+            appBar: AppBar(title: Text('اقتباساتي (${q.length})')),
+            body: q.isEmpty
+                ? const EmptyState(
+                    icon: Icons.format_quote, text: 'أضف اقتباساً من صفحة أي جواب (الزر ❝ في الأعلى) أو من داخل أي كتاب.')
+                : ListView(padding: const EdgeInsets.all(10), children: [
+                    for (var i = 0; i < q.length; i++)
+                      QuoteCard(text: '${q[i]['t']}', source: '${q[i]['s']}', onDelete: () => Profiles.instance.removeQuote(i)),
+                    const Padding(
+                      padding: EdgeInsets.all(8),
+                      child: Text('تظهر اقتباساتك في ملفك لمن يتابعك، وتتحدّث كل 6 ساعات.',
+                          textAlign: TextAlign.center, style: TextStyle(color: Colors.grey, fontSize: 12)),
+                    ),
+                  ]),
+          );
+        },
+      );
+}
+
+/// Opens a dialog to add a quote (text can be shortened before saving).
+Future<void> addQuoteDialog(BuildContext context, {required String text, required String source}) async {
+  if (Cloud.instance.user == null) {
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('سجّل الدخول أولاً لتحفظ اقتباساتك في ملفك')));
+    return;
+  }
+  final c = TextEditingController(text: text.length > 600 ? text.substring(0, 600) : text);
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (d) => AlertDialog(
+      title: const Text('أضف إلى اقتباساتي'),
+      content: SizedBox(
+        width: 400,
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          const Text('احذف ما لا تريده، واترك الجملة التي تريد اقتباسها (600 حرف على الأكثر).',
+              style: TextStyle(color: Colors.grey, fontSize: 12.5)),
+          const SizedBox(height: 8),
+          TextField(controller: c, maxLines: 8, minLines: 3, maxLength: 600, decoration: const InputDecoration(border: OutlineInputBorder())),
+          Text(source, style: const TextStyle(color: kGoldChip, fontSize: 12.5)),
+        ]),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(d), child: const Text('إلغاء')),
+        FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('أضف')),
+      ],
+    ),
+  );
+  if (ok != true || !context.mounted) return;
+  final err = await Profiles.instance.addQuote(c.text, source);
+  if (context.mounted) {
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(err ?? 'أُضيف إلى اقتباساتك، ويظهر في ملفك خلال 6 ساعات')));
+  }
 }
 
 /// The top three of the quiz on the home page (from the site file).

@@ -6,6 +6,8 @@ service cloud.firestore {
     function isDev() { return verified() && request.auth.token.email == 'www774475437@gmail.com'; }
     function staffPath() { return /databases/$(database)/documents/admins/$(request.auth.token.email); }
     function isAdmin() { return isDev() || (verified() && exists(staffPath())); }
+    // The «stats bot» account the server uses four times a day.
+    function isBot() { return signedIn() && request.auth.uid == '3oqvJwPEiXSohYH7GnqwCH1E7HY2'; }
     function isFullAdmin() {
       return isDev() || (verified() && exists(staffPath()) && get(staffPath()).data.get('role', 'admin') == 'admin');
     }
@@ -126,8 +128,13 @@ service cloud.firestore {
     match /benefits/{id} { allow read: if true; allow write: if isAdmin(); }
     match /users/{uid} {
       allow read, write: if signedIn() && request.auth.uid == uid;
-      // The staff see the list of registered readers («المسجّلون»).
-      allow read: if isAdmin();
+      // The staff and the server read the members' summaries («المسجّلون»).
+      allow read: if isAdmin() || isBot();
+    }
+    // The members list the server makes for the staff (one or two reads).
+    match /adminData/{id} {
+      allow read: if isAdmin() || isBot();
+      allow write: if isBot();
     }
   }
 }

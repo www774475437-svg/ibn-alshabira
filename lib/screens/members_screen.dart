@@ -117,7 +117,7 @@ class _MembersTabState extends State<MembersTab> {
                       ms.error ??
                           (ms.at == null
                               ? 'جارٍ جلب القائمة…'
-                              : 'آخر تحديث ${_ago(ms.at)} — تتحدّث وحدها كل 6 ساعات. بيانات كل شخص تصل من جهازه كل 6 ساعات.'),
+                              : 'آخر تحديث ${_ago(ms.at)} — يجهّزها الخادم كل 6 ساعات، وفتحها قراءة أو قراءتان فقط.'),
                       style: TextStyle(color: ms.error != null ? Colors.red : Colors.grey, fontSize: 12),
                     ),
                   ),

@@ -17,6 +17,7 @@ import 'audio_library.dart';
 import '../services/telegram_out.dart';
 import 'ask_screen.dart';
 import 'favorites_tab.dart';
+import 'profile_screen.dart' show addQuoteDialog;
 import 'quran_screen.dart';
 import 'share_card_screen.dart';
 
@@ -307,6 +308,13 @@ class _FatwaScreenState extends State<FatwaScreen> {
                   )
                 : Text(current.typeLabel),
             actions: [
+              if (!_finding)
+                IconButton(
+                  tooltip: 'أضف إلى اقتباساتي',
+                  icon: const Icon(Icons.format_quote),
+                  onPressed: () => addQuoteDialog(context,
+                      text: current.answer.trim(), source: 'من جواب: ${current.title}'),
+                ),
               IconButton(
                 tooltip: _finding ? 'إغلاق البحث' : 'بحث داخل الجواب',
                 icon: Icon(_finding ? Icons.close : Icons.manage_search),
