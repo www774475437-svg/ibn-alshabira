@@ -43,6 +43,13 @@ class Repository extends ChangeNotifier {
   Set<String> favorites = {};
   ThemeMode themeMode = ThemeMode.system;
   double fontScale = 1.0;
+
+  /// «الوضع السهل»: larger letters and buttons with more room, for elders.
+  bool get easyMode => _prefs.getBool('easyMode') ?? false;
+  void setEasyMode(bool v) {
+    _prefs.setBool('easyMode', v);
+    notifyListeners();
+  }
   bool dailyNotification = true;
   int notifyHour = 8;
   int notifyMinute = 0;
@@ -258,6 +265,7 @@ class Repository extends ChangeNotifier {
     _bundled = [..._bundled, ...fresh];
     fatwas = [...fatwas, ...fresh];
     notifyListeners();
+    onFreshAnswers?.call(fresh);
   }
 
   // ---- «اسأل المكتبة»: ranked search for a question in plain words ------
@@ -346,6 +354,7 @@ class Repository extends ChangeNotifier {
     _bundled = [..._bundled, ...fresh];
     _channelBase = [...freshP, ..._channelBase];
     _buildChannel();
+    if (fresh.isNotEmpty) Future.microtask(() => onFreshAnswers?.call(fresh));
     if (_lastEdits != null) {
       applyRemote(_lastPublished ?? const [], _lastEdits!);
     } else {
@@ -780,6 +789,19 @@ class Repository extends ChangeNotifier {
   int get readThisMonth => readLog[_monthKey(DateTime.now())]?.length ?? 0;
 
   // Kept until the reading log changes (the lists ask for it for every tile).
+  /// New answers that just arrived (for «تابِع باباً»).
+  static void Function(List<Fatwa> fresh)? onFreshAnswers;
+
+  /// Chapters the reader follows: a notification when a new answer comes in one.
+  Set<String> get followedChapters => (_prefs.getStringList('followChapters') ?? const []).toSet();
+  bool follows(String chapter) => followedChapters.contains(chapter);
+  void toggleFollowChapter(String chapter) {
+    final s = followedChapters;
+    s.contains(chapter) ? s.remove(chapter) : s.add(chapter);
+    _prefs.setStringList('followChapters', s.toList());
+    notifyListeners();
+  }
+
   Set<String>? _everRead;
   int _everReadKey = -1;
   Set<String> get everRead {

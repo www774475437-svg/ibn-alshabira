@@ -5,6 +5,7 @@ import '../data/repository.dart';
 import '../services/cloud.dart';
 import '../services/quiz.dart';
 import 'quiz_screens.dart';
+import '../theme.dart';
 import '../widgets/common.dart';
 
 class ChapterScreen extends StatefulWidget {
@@ -38,6 +39,23 @@ class _ChapterScreenState extends State<ChapterScreen> {
       appBar: AppBar(
         title: Text('باب ${widget.chapter.name}'),
         actions: [
+          ListenableBuilder(
+            listenable: repo,
+            builder: (context, _) {
+              final on = repo.follows(widget.chapter.id);
+              return IconButton(
+                tooltip: on ? 'إلغاء متابعة الباب' : 'تابِع الباب: أُخبرك بكل جواب جديد فيه',
+                icon: Icon(on ? Icons.notifications_active : Icons.notifications_none, color: on ? kGold : null),
+                onPressed: () {
+                  repo.toggleFollowChapter(widget.chapter.id);
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text(on
+                          ? 'ألغيت متابعة باب ${widget.chapter.name}'
+                          : 'تابعت باب ${widget.chapter.name}: يصلك إشعار بكل جواب جديد فيه')));
+                },
+              );
+            },
+          ),
           PopupMenuButton<String>(
             tooltip: 'الترتيب',
             icon: const Icon(Icons.sort),

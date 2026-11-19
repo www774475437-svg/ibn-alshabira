@@ -46,6 +46,15 @@ Future<void> main() async {
   final quick = kIsWeb && AppConfig.idFromRoute(Uri.base.fragment) == null;
   await Repository.instance.load(prefs, quick: quick);
   Repository.onSavedListsChanged = () => Cloud.instance.pushUserData();
+  // «تابِع باباً»: a notification for each new answer in a followed chapter.
+  Repository.onFreshAnswers = (fresh) {
+    final repo = Repository.instance;
+    final followed = repo.followedChapters;
+    if (followed.isEmpty) return;
+    for (final f in fresh.where((f) => followed.contains(f.chapter)).take(3)) {
+      OnceNotifications.showNow('جواب جديد في باب ${repo.chapterName(f.chapter)}', f.title);
+    }
+  };
   runApp(const IbnAlshabiraApp());
   Cloud.instance.init();
   // Daily site data first, then the channel itself (new posts within minutes).
@@ -95,6 +104,24 @@ Future<void> main() async {
 }
 
 final appNavKey = GlobalKey<NavigatorState>();
+
+/// «الوضع السهل»: roomier buttons everywhere (the letters grow with the text size).
+class _Easy extends StatelessWidget {
+  final bool on;
+  final Widget child;
+  const _Easy({required this.on, required this.child});
+
+  @override
+  Widget build(BuildContext context) => !on
+      ? child
+      : Theme(
+          data: Theme.of(context).copyWith(
+            visualDensity: const VisualDensity(horizontal: 2, vertical: 2),
+            materialTapTargetSize: MaterialTapTargetSize.padded,
+          ),
+          child: child,
+        );
+}
 
 Future<void> _askRating() async {
   if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
@@ -224,10 +251,12 @@ class IbnAlshabiraApp extends StatelessWidget {
             : (repo.palette == 'paper' ? ThemeMode.light : repo.effectiveThemeMode),
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context).copyWith(
-            textScaler: TextScaler.linear(repo.fontScale),
+            textScaler: TextScaler.linear(repo.fontScale * (repo.easyMode ? 1.2 : 1.0)),
           ),
           // While a recording plays, a slim bar stays at the top of every page.
-          child: ListenableBuilder(
+          child: _Easy(
+            on: repo.easyMode,
+            child: ListenableBuilder(
             listenable: AudioCenter.instance,
             builder: (context, _) => AudioCenter.instance.current == null
                 ? child!
@@ -235,6 +264,7 @@ class IbnAlshabiraApp extends StatelessWidget {
                     const NowPlayingBar(),
                     Expanded(child: MediaQuery.removePadding(context: context, removeTop: true, child: child!)),
                   ]),
+            ),
           ),
         ),
         onGenerateRoute: onGenerateRoute,

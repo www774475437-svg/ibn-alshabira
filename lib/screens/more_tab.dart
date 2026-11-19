@@ -27,6 +27,7 @@ import 'prayer_screen.dart';
 import 'tools_screens.dart';
 import 'profile_screen.dart';
 import 'widgets_screen.dart';
+import 'hijri_screen.dart';
 import '../widgets/sky_card.dart';
 import '../services/cloud.dart';
 
@@ -69,6 +70,14 @@ class MoreTab extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
               child: Row(children: [
+                Expanded(
+                  child: _MiniCard(
+                    icon: Icons.calendar_month_outlined,
+                    title: 'التقويم الهجري',
+                    onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const HijriScreen())),
+                  ),
+                ),
+                if (Cloud.instance.zakatOn || Cloud.instance.isAdmin) const SizedBox(width: 8),
                 if (Cloud.instance.zakatOn || Cloud.instance.isAdmin)
                 Expanded(
                   child: _MiniCard(
@@ -405,6 +414,13 @@ class MoreTab extends StatelessWidget {
                     const DropdownMenuItem(value: 3, child: Text('داكن بعد المغرب')),
                   ],
                 ),
+              ),
+              SwitchListTile(
+                secondary: const _IconBox(Icons.elderly_outlined),
+                title: const Text('الوضع السهل'),
+                subtitle: const Text('خط أكبر وأزرار أوسع، أريح لكبار السن'),
+                value: repo.easyMode,
+                onChanged: repo.setEasyMode,
               ),
               ListTile(
                 leading: const _IconBox(Icons.widgets_outlined),
