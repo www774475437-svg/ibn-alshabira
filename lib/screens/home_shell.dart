@@ -124,7 +124,7 @@ class _HomeShellState extends State<HomeShell> {
             case 'admin':
               return (Icons.admin_panel_settings_outlined, Icons.admin_panel_settings, 'الإدارة', cloud.newQuestions);
             case 'scholars':
-              return (Icons.groups_outlined, Icons.groups_rounded, 'المشايخ', 0);
+              return (Icons.groups_outlined, Icons.groups_rounded, 'المشايخ الثقات', 0);
             default:
               return (Icons.grid_view_outlined, Icons.grid_view_rounded, 'المزيد', 0);
           }
@@ -234,9 +234,11 @@ class _NavItem extends StatelessWidget {
             child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
               icon,
               const SizedBox(height: 2),
-              Text(item.$3,
+              // The whole name, made smaller when it is long («المشايخ الثقات»).
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(item.$3,
                   maxLines: 1,
-                  overflow: TextOverflow.fade,
                   softWrap: false,
                   textScaler: TextScaler.noScaling,
                   style: TextStyle(
@@ -244,6 +246,7 @@ class _NavItem extends StatelessWidget {
                       height: 1.1,
                       color: selected ? on : off,
                       fontWeight: selected ? FontWeight.bold : FontWeight.normal)),
+              ),
             ]),
           ),
         ),

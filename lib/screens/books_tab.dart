@@ -2,6 +2,7 @@ import 'dart:io' show File;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/models.dart';
 import '../data/repository.dart';
@@ -89,7 +90,7 @@ class _BooksTabState extends State<BooksTab> {
                       maxCrossAxisExtent: 200,
                       mainAxisSpacing: 12,
                       crossAxisSpacing: 12,
-                      childAspectRatio: 0.68,
+                      childAspectRatio: 0.62,
                     ),
                     itemCount: books.length,
                     itemBuilder: (context, i) => _BookCard(book: books[i], onTap: () => _open(books[i])),
@@ -165,12 +166,59 @@ class _BookCard extends StatelessWidget {
                         ),
                     ],
                   ),
-                ),
+                                ),
               ),
+              if (!kIsWeb) _BookProgress(bookId: book.id),
             ],
           ),
         );
       },
     );
   }
+}
+
+/// «قرأت 40%» under a book, and «بقي لك 12 صفحة لتختم الكتاب» near the end.
+class _BookProgress extends StatelessWidget {
+  final String bookId;
+  const _BookProgress({required this.bookId});
+
+  static SharedPreferences? _p;
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<SharedPreferences>(
+        future: _p != null ? Future.value(_p) : SharedPreferences.getInstance().then((p) => _p = p),
+        builder: (context, snap) {
+          final p = snap.data;
+          if (p == null) return const SizedBox(height: 4);
+          final pages = p.getInt('book_pages_$bookId') ?? 0;
+          final page = p.getInt('book_page_$bookId') ?? 0;
+          if (pages <= 0 || page <= 1) return const SizedBox(height: 4);
+          final pct = (page / pages).clamp(0.0, 1.0);
+          final left = pages - page;
+          return Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: pct,
+                  minHeight: 5,
+                  color: kGold,
+                  backgroundColor: kGold.withValues(alpha: 0.18),
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                left <= 0
+                    ? 'ختمتَ الكتاب ✓'
+                    : left <= 20
+                        ? 'بقي لك $left صفحة لتختمه'
+                        : 'قرأت ${(pct * 100).round()}%',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 11.5, color: left <= 20 ? kGoldChip : Colors.grey),
+              ),
+            ]),
+          );
+        },
+      );
 }

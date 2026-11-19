@@ -280,6 +280,14 @@ class FatwaTile extends StatelessWidget {
                     const SizedBox(width: 6),
                     const Icon(Icons.bookmark, size: 18, color: kGoldChip),
                   ],
+                  // «قرأته»: answers this reader already opened.
+                  if (repo.everRead.contains(fatwa.id)) ...[
+                    const SizedBox(width: 6),
+                    Tooltip(
+                      message: 'قرأته',
+                      child: Icon(Icons.done_all, size: 17, color: scheme.primary.withValues(alpha: 0.7)),
+                    ),
+                  ],
                 ],
               ),
               const SizedBox(height: 8),

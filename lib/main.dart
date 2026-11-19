@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'widgets/common.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -33,7 +33,7 @@ import 'screens/adhkar_screen.dart';
 import 'screens/quiz_screens.dart' show QuizHomeScreen;
 import 'screens/profile_screen.dart' show DashboardScreen;
 import 'screens/tour_screens.dart' show TourScreen, TourRecordScreen;
-import 'widgets/common.dart' show openFatwa;
+import 'widgets/common.dart' show openFatwa, openUrl;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -64,6 +64,9 @@ Future<void> main() async {
       HomeWidgets.push();
     });
   });
+  // A kind request to rate the app on Google Play: after a week of use,
+  // then after a month, then after two months (three times at most).
+  Future<void>.delayed(const Duration(seconds: 40), _askRating);
   // A tapped home-screen widget opens its page.
   Future<void>.delayed(const Duration(milliseconds: 1500), _openFromWidget);
   DayLog.instance.start();
@@ -92,6 +95,37 @@ Future<void> main() async {
 }
 
 final appNavKey = GlobalKey<NavigatorState>();
+
+Future<void> _askRating() async {
+  if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+  final p = await SharedPreferences.getInstance();
+  final now = DateTime.now().millisecondsSinceEpoch;
+  final first = p.getInt('firstUseAt') ?? now;
+  if (!p.containsKey('firstUseAt')) await p.setInt('firstUseAt', now);
+  final stage = p.getInt('rateStage') ?? 0;
+  const days = [7, 30, 60];
+  if (stage >= days.length || now - first < days[stage] * 86400000) return;
+  final ctx = appNavKey.currentContext;
+  if (ctx == null) return;
+  await p.setInt('rateStage', stage + 1);
+  if (!ctx.mounted) return;
+  final go = await showDialog<bool>(
+    context: ctx,
+    builder: (d) => AlertDialog(
+      icon: const Icon(Icons.star_rounded, size: 44, color: Color(0xFFC9A227)),
+      title: const Text('هل أعجبك التطبيق؟'),
+      content: const Text('تقييمك في جوجل بلاي يساعد غيرك على الوصول إلى أجوبة الشيخ، ولا يأخذ منك إلا دقيقة. جزاك الله خيراً.',
+          textAlign: TextAlign.center, style: TextStyle(height: 1.8)),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('لاحقاً')),
+        FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('قيّم التطبيق')),
+      ],
+    ),
+  );
+  if (go == true && ctx.mounted) {
+    openUrl(ctx, 'https://play.google.com/store/apps/details?id=com.ibnalshabira.ibn_alshabira');
+  }
+}
 
 Future<void> _openFromWidget() async {
   final t = await HomeWidgets.takeLaunch();

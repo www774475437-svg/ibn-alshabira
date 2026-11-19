@@ -460,6 +460,15 @@ class Cloud extends ChangeNotifier {
     };
   }
 
+  /// Views of every answer (from the server's counts file; no extra reads).
+  Future<Map<String, int>> viewCounts() async {
+    try {
+      return {for (final e in (await _viewsFile()).entries) e.key: e.value.isEmpty ? 0 : e.value[0]};
+    } catch (_) {
+      return {};
+    }
+  }
+
   /// Most-read answers: [(id, count)].
   Future<List<(String, int)>> mostRead({int limit = 40}) async {
     if (!ready) return [];

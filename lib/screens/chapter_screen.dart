@@ -17,14 +17,18 @@ class ChapterScreen extends StatefulWidget {
 
 class _ChapterScreenState extends State<ChapterScreen> {
   String _filter = 'all'; // all | fatwa | article | letter
-  String _sort = 'new'; // new | old | alpha
+  String _sort = 'new'; // new | old | popular | short | alpha
   bool _unreadOnly = false;
   String _sub = '';
+  Map<String, int> _views = {};
 
   @override
   void initState() {
     super.initState();
     Quiz.instance.load();
+    Cloud.instance.viewCounts().then((v) {
+      if (mounted) setState(() => _views = v);
+    });
   }
 
   @override
@@ -42,6 +46,8 @@ class _ChapterScreenState extends State<ChapterScreen> {
             itemBuilder: (_) => const [
               PopupMenuItem(value: 'new', child: Text('الأحدث أولاً')),
               PopupMenuItem(value: 'old', child: Text('الأقدم أولاً')),
+              PopupMenuItem(value: 'popular', child: Text('الأكثر قراءة')),
+              PopupMenuItem(value: 'short', child: Text('الأقصر أولاً')),
               PopupMenuItem(value: 'alpha', child: Text('ترتيب أبجدي')),
             ],
           ),
@@ -63,6 +69,11 @@ class _ChapterScreenState extends State<ChapterScreen> {
           if (_unreadOnly) items = items.where((f) => !read.contains(f.id)).toList();
           if (_sort == 'new') {
             items = items.reversed.toList();
+          } else if (_sort == 'popular') {
+            // From the counts file the server makes (no extra reads).
+            items = [...items]..sort((a, b) => (_views[b.id] ?? 0).compareTo(_views[a.id] ?? 0));
+          } else if (_sort == 'short') {
+            items = [...items]..sort((a, b) => a.answer.length.compareTo(b.answer.length));
           } else if (_sort == 'alpha') {
             items = [...items]..sort((a, b) => normalizeArabic(a.title).compareTo(normalizeArabic(b.title)));
           }

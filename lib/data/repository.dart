@@ -779,7 +779,17 @@ class Repository extends ChangeNotifier {
 
   int get readThisMonth => readLog[_monthKey(DateTime.now())]?.length ?? 0;
 
-  Set<String> get everRead => readLog.values.expand((e) => e).toSet();
+  // Kept until the reading log changes (the lists ask for it for every tile).
+  Set<String>? _everRead;
+  int _everReadKey = -1;
+  Set<String> get everRead {
+    final k = readLog.values.fold<int>(readLog.length, (a, b) => a + b.length);
+    if (_everRead == null || k != _everReadKey) {
+      _everRead = readLog.values.expand((e) => e).toSet();
+      _everReadKey = k;
+    }
+    return _everRead!;
+  }
 
   /// A random answer the reader hasn't opened yet (or any, if all read).
   Fatwa? randomUnread() {

@@ -1047,7 +1047,7 @@ class _CloudPanelState extends State<_CloudPanel> {
 String stripTashkeel(String s) =>
     s.replaceAll(RegExp(r'[ؐ-ًؚ-ٰٟۖ-ۭـ]'), '');
 
-/// Quran verses ﴿…﴾ in green with the Amiri font, hadith «…» in gold.
+/// Quran verses ﴿…﴾ in green in the mushaf's Uthmani script, hadith «…» in gold.
 List<TextSpan> highlightSpans(String text, TextStyle base, [String find = '']) {
   final plain = _styledSpans(text);
   final re = findPattern(find);
@@ -1105,7 +1105,8 @@ List<TextSpan> _styledSpans(String text) {
     spans.add(TextSpan(
       text: part,
       style: isVerse
-          ? const TextStyle(color: Color(0xFF2E7D4F), fontFamily: 'Amiri', fontWeight: FontWeight.bold)
+          // Verses in the mushaf's own (Uthmani) script.
+          ? const TextStyle(color: Color(0xFF2E7D4F), fontFamily: 'UthmanicHafs', height: 2.0)
           : const TextStyle(color: kGoldChip, fontWeight: FontWeight.w600),
     ));
     last = m.end;
