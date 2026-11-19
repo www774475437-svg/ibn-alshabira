@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/hijri.dart';
 import '../theme.dart';
+import '../widgets/common.dart' show kGoldChip;
 
 /// «التقويم الهجري»: this Hijri month day by day, and how long is left to
 /// the coming occasions (Ramadan, the two Eids, Arafah, Ashura…).
