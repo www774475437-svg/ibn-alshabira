@@ -26,7 +26,6 @@ import '../widgets/common.dart';
 import '../widgets/source_book.dart';
 import '../services/cloud.dart';
 import 'channel_screen.dart';
-import 'book_reader_screen.dart';
 import 'content_screens.dart';
 import 'chapter_screen.dart';
 import 'audio_library.dart';
