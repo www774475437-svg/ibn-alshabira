@@ -281,6 +281,53 @@ class _FatwaScreenState extends State<FatwaScreen> {
   /// Correct an answer that came with the app (title, chapter, text).
   void _editTitle() => showBundledEdit(context, current);
 
+  Future<void> _menu(String v, bool later) async {
+    final f = current;
+    switch (v) {
+      case 'find':
+        setState(() {
+          _finding = true;
+          _find = '';
+        });
+      case 'later':
+        repo.toggleReadLater(f.id);
+        _toast(later ? 'أُزيل من «اقرأ لاحقاً»' : 'أُضيف إلى «اقرأ لاحقاً»');
+      case 'edit':
+        if (Cloud.instance.isRemote(f.id)) {
+          await Navigator.of(context).push(MaterialPageRoute(builder: (_) => EditAnswerScreen(fatwa: f)));
+        } else {
+          _editTitle();
+        }
+      case 'series':
+        showSeriesSheet(context, f);
+      case 'verify':
+        final was = repo.verifiedIds.contains(f.id);
+        final err = await Cloud.instance.setVerified(f.id, !was, f.title);
+        if (mounted) _toast(err ?? (was ? 'أُلغي التحقق' : 'عُلّم أنه تم التحقق منه ✅'));
+      case 'pin':
+        final was = Cloud.instance.pinned.contains(f.id);
+        final err = await Cloud.instance.togglePin(f.id);
+        if (mounted) _toast(err ?? (was ? 'أُزيل التثبيت' : 'ثُبّت في الرئيسية ✅'));
+      case 'hide':
+        final ok = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('إخفاء هذا المنشور؟'),
+            content: const Text('يختفي من التطبيق والموقع عند الجميع، ولا يُحذف. تعيده من «المزيد ← المنشورات المخفية».'),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+              FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('إخفاء')),
+            ],
+          ),
+        );
+        if (ok != true) return;
+        final err = await Cloud.instance.setHidden(f.id, true, f.title);
+        if (!mounted) return;
+        _toast(err ?? 'أُخفي من التطبيق');
+        if (err == null) Navigator.of(context).maybePop();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
@@ -307,111 +354,70 @@ class _FatwaScreenState extends State<FatwaScreen> {
                     onChanged: (v) => setState(() => _find = v),
                   )
                 : Text(current.typeLabel),
+            // Like WhatsApp: the back arrow alone on the right; on the left only
+            // the quote and save buttons, and «⋮» holding the rest with names.
             actions: [
-              if (!_finding)
+              if (_finding)
+                IconButton(
+                  tooltip: 'إغلاق البحث',
+                  icon: const Icon(Icons.close),
+                  onPressed: () => setState(() {
+                    _finding = false;
+                    _find = '';
+                  }),
+                )
+              else ...[
                 IconButton(
                   tooltip: 'أضف إلى اقتباساتي',
                   icon: const Icon(Icons.format_quote),
                   onPressed: () => addQuoteDialog(context,
                       text: current.answer.trim(), source: 'من جواب: ${current.title}'),
                 ),
-              IconButton(
-                tooltip: _finding ? 'إغلاق البحث' : 'بحث داخل الجواب',
-                icon: Icon(_finding ? Icons.close : Icons.manage_search),
-                onPressed: () => setState(() {
-                  _finding = !_finding;
-                  _find = '';
-                }),
-              ),
-              if (!_finding)
-              ListenableBuilder(
-                listenable: Cloud.instance,
-                builder: (context, _) => Cloud.instance.isAdmin
-                    ? Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (Cloud.instance.isFullAdmin)
-                            IconButton(
-                              tooltip: 'تثبيت في الرئيسية',
-                              icon: Icon(Cloud.instance.pinned.contains(current.id)
-                                  ? Icons.push_pin
-                                  : Icons.push_pin_outlined),
-                              onPressed: () async {
-                                final was = Cloud.instance.pinned.contains(current.id);
-                                final err = await Cloud.instance.togglePin(current.id);
-                                if (mounted) _toast(err ?? (was ? 'أُزيل التثبيت' : 'ثُبّت في الرئيسية ✅'));
-                              },
-                            ),
-                          IconButton(
-                            tooltip: repo.verifiedIds.contains(current.id) ? 'تم التحقق (اضغط للإلغاء)' : 'تحقّقت منه',
-                            icon: Icon(Icons.verified,
-                                color: repo.verifiedIds.contains(current.id) ? Colors.lightBlueAccent : Colors.white38),
-                            onPressed: () async {
-                              final f = current;
-                              final was = repo.verifiedIds.contains(f.id);
-                              final err = await Cloud.instance.setVerified(f.id, !was, f.title);
-                              if (mounted) _toast(err ?? (was ? 'أُلغي التحقق' : 'عُلّم أنه تم التحقق منه ✅'));
-                            },
-                          ),
-                          IconButton(
-                            tooltip: 'إخفاء من التطبيق',
-                            icon: const Icon(Icons.visibility_off_outlined),
-                            onPressed: () async {
-                              final f = current;
-                              final ok = await showDialog<bool>(
-                                context: context,
-                                builder: (ctx) => AlertDialog(
-                                  title: const Text('إخفاء هذا المنشور؟'),
-                                  content: const Text(
-                                      'يختفي من التطبيق والموقع عند الجميع، ولا يُحذف. تعيده من «المزيد ← المنشورات المخفية».'),
-                                  actions: [
-                                    TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
-                                    FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('إخفاء')),
-                                  ],
-                                ),
-                              );
-                              if (ok != true) return;
-                              final err = await Cloud.instance.setHidden(f.id, true, f.title);
-                              if (!mounted) return;
-                              _toast(err ?? 'أُخفي من التطبيق');
-                              if (err == null) Navigator.of(context).maybePop();
-                            },
-                          ),
-                          IconButton(
-                            tooltip: 'إضافة إلى سلسلة',
-                            icon: const Icon(Icons.playlist_add),
-                            onPressed: () => showSeriesSheet(context, current),
-                          ),
-                          IconButton(
-                            tooltip: 'تعديل',
-                            icon: const Icon(Icons.edit),
-                            onPressed: () => Cloud.instance.isRemote(current.id)
-                                ? Navigator.of(context).push(MaterialPageRoute(
-                                    builder: (_) => EditAnswerScreen(fatwa: current)))
-                                : _editTitle(),
-                          ),
+                IconButton(
+                  tooltip: fav ? 'إزالة من المحفوظات' : 'حفظ',
+                  icon: Icon(fav ? Icons.bookmark : Icons.bookmark_border),
+                  onPressed: () {
+                    HapticFeedback.lightImpact();
+                    repo.toggleFavorite(current.id);
+                  },
+                ),
+                ListenableBuilder(
+                  listenable: Cloud.instance,
+                  builder: (context, _) => PopupMenuButton<String>(
+                    tooltip: 'المزيد',
+                    icon: const Icon(Icons.more_vert),
+                    onSelected: (v) => _menu(v, later),
+                    itemBuilder: (_) {
+                      PopupMenuItem<String> item(String v, IconData icon, String text, {Color? color}) => PopupMenuItem(
+                            value: v,
+                            child: Row(children: [
+                              Icon(icon, size: 22, color: color),
+                              const SizedBox(width: 12),
+                              Expanded(child: Text(text)),
+                            ]),
+                          );
+                      final c = Cloud.instance;
+                      final verified = repo.verifiedIds.contains(current.id);
+                      return [
+                        item('find', Icons.manage_search, 'بحث داخل الجواب'),
+                        item('later', later ? Icons.watch_later : Icons.watch_later_outlined,
+                            later ? 'إزالة من «اقرأ لاحقاً»' : 'اقرأ لاحقاً'),
+                        if (c.isAdmin) ...[
+                          const PopupMenuDivider(),
+                          item('edit', Icons.edit, 'تعديل'),
+                          item('series', Icons.playlist_add, 'إضافة إلى سلسلة'),
+                          item('verify', Icons.verified, verified ? 'إلغاء «تم التحقق»' : 'تحقّقت منه',
+                              color: verified ? Colors.lightBlue : null),
+                          if (c.isFullAdmin)
+                            item('pin', c.pinned.contains(current.id) ? Icons.push_pin : Icons.push_pin_outlined,
+                                c.pinned.contains(current.id) ? 'إزالة التثبيت من الرئيسية' : 'تثبيت في الرئيسية'),
+                          item('hide', Icons.visibility_off_outlined, 'إخفاء من التطبيق', color: Colors.red),
                         ],
-                      )
-                    : const SizedBox.shrink(),
-              ),
-              if (!_finding)
-              IconButton(
-                tooltip: later ? 'إزالة من «اقرأ لاحقاً»' : 'اقرأ لاحقاً',
-                icon: Icon(later ? Icons.watch_later : Icons.watch_later_outlined),
-                onPressed: () {
-                  repo.toggleReadLater(current.id);
-                  _toast(later ? 'أُزيل من «اقرأ لاحقاً»' : 'أُضيف إلى «اقرأ لاحقاً»');
-                },
-              ),
-              if (!_finding)
-              IconButton(
-                tooltip: fav ? 'إزالة من المحفوظات' : 'حفظ',
-                icon: Icon(fav ? Icons.bookmark : Icons.bookmark_border),
-                onPressed: () {
-                  HapticFeedback.lightImpact();
-                  repo.toggleFavorite(current.id);
-                },
-              ),
+                      ];
+                    },
+                  ),
+                ),
+              ],
             ],
           ),
           body: Listener(

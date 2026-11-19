@@ -1500,7 +1500,9 @@ class Cloud extends ChangeNotifier {
   }
 
   // ------------------------------------------------------ Ask the sheikh
-  Future<String?> ask(String text, {String chapter = '', String name = ''}) async {
+  Future<String?> ask(String text, {String chapter = '', String name = '', String about = ''}) async {
+    // [about] is not stored (the rules accept only the known fields); the
+    // answer is found again from its title written in the text.
     final u = user;
     if (!ready || u == null) return 'سجّل الدخول أولاً';
     if (!askOpen) return 'استقبال الأسئلة متوقف مؤقتاً';
@@ -1618,6 +1620,29 @@ class Cloud extends ChangeNotifier {
       return null;
     } catch (_) {
       return 'تعذّر الحفظ';
+    }
+  }
+
+  /// A message the sheikh starts himself to one reader (no question before it).
+  Future<String?> messageReader(String uid, String text) async {
+    final t = text.trim();
+    if (t.isEmpty) return 'اكتب الرسالة';
+    try {
+      await _db.collection('questions').add({
+        'uid': uid,
+        'text': '',
+        'chapter': '',
+        'at': FieldValue.serverTimestamp(),
+        'status': 'answered',
+        'reply': t,
+        'published': false,
+        'fromSheikh': true,
+        'replyAt': FieldValue.serverTimestamp(),
+      });
+      _log('رسالة من الشيخ إلى السائل رقم ${askerNo(uid)}', t);
+      return null;
+    } catch (_) {
+      return 'تعذّر الإرسال، تأكد من نشر القواعد الجديدة.';
     }
   }
 

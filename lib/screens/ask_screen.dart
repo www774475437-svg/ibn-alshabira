@@ -56,7 +56,10 @@ class _AskScreenState extends State<AskScreen> {
     }
     setState(() => _sending = true);
     final prefs = await SharedPreferences.getInstance();
-    final err = await Cloud.instance.ask(_text.text, chapter: _chapter, name: prefs.getString('askName') ?? '');
+    final err = await Cloud.instance.ask(_text.text,
+        chapter: _chapter,
+        name: prefs.getString('askName') ?? '',
+        about: _text.text.contains('بخصوص جواب «') ? widget.about?.id ?? '' : '');
     if (!mounted) return;
     setState(() => _sending = false);
     if (err == null) {
@@ -271,7 +274,8 @@ class _QuestionBubble extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // The user's question
+        // The user's question (none when the sheikh wrote first)
+        if (data['fromSheikh'] != true)
         Align(
           alignment: AlignmentDirectional.centerStart,
           child: Container(
@@ -285,7 +289,10 @@ class _QuestionBubble extends StatelessWidget {
                 bottomEnd: Radius.circular(16),
               ),
             ),
-            child: SelectableText('${data['text'] ?? ''}', style: const TextStyle(fontSize: 16, height: 1.7)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              SelectableText('${data['text'] ?? ''}', style: const TextStyle(fontSize: 16, height: 1.7)),
+              AboutAnswerButton(msg: data),
+            ]),
           ),
         ),
         // The sheikh's reply
@@ -314,8 +321,8 @@ class _QuestionBubble extends StatelessWidget {
                 : Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('جواب الشيخ',
-                          style: TextStyle(color: kGoldChip, fontWeight: FontWeight.bold)),
+                      Text(data['fromSheikh'] == true ? 'رسالة من الشيخ' : 'جواب الشيخ',
+                          style: const TextStyle(color: kGoldChip, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 4),
                       SelectableText(reply, style: const TextStyle(fontSize: 16, height: 1.8)),
                       if (ref != null)

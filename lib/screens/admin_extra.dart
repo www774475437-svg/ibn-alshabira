@@ -84,6 +84,7 @@ class AskerChatScreen extends StatelessWidget {
           ),
         ],
       ),
+      bottomNavigationBar: _SheikhComposer(uid: uid),
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: cloud.allQuestions(),
         builder: (context, snap) {
@@ -95,6 +96,7 @@ class AskerChatScreen extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
             children: [
               for (final d in docs) ...[
+                if (d.data()['fromSheikh'] != true)
                 Align(
                   alignment: AlignmentDirectional.centerStart,
                   child: Container(
@@ -108,6 +110,7 @@ class AskerChatScreen extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         SelectableText('${d.data()['text'] ?? ''}', style: const TextStyle(fontSize: 16, height: 1.7)),
+                        AboutAnswerButton(msg: d.data()),
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -166,6 +169,63 @@ class AskerChatScreen extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The sheikh (and staff) write first to a reader, from his page or from
+/// «المسجّلون». It reaches the reader in «اسأل الشيخ» as «رسالة من الشيخ».
+class _SheikhComposer extends StatefulWidget {
+  final String uid;
+  const _SheikhComposer({required this.uid});
+
+  @override
+  State<_SheikhComposer> createState() => _SheikhComposerState();
+}
+
+class _SheikhComposerState extends State<_SheikhComposer> {
+  final _t = TextEditingController();
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _t.dispose();
+    super.dispose();
+  }
+
+  Future<void> _send() async {
+    if (_t.text.trim().isEmpty || _busy) return;
+    setState(() => _busy = true);
+    final err = await Cloud.instance.messageReader(widget.uid, _t.text);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (err == null) _t.clear();
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err ?? 'أُرسلت الرسالة')));
+  }
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(10, 6, 10, 8 + MediaQuery.of(context).viewInsets.bottom),
+          child: Row(children: [
+            Expanded(
+              child: TextField(
+                controller: _t,
+                minLines: 1,
+                maxLines: 5,
+                decoration: const InputDecoration(
+                    hintText: 'اكتب رسالة إليه…', border: OutlineInputBorder(), isDense: true),
+              ),
+            ),
+            const SizedBox(width: 8),
+            IconButton.filled(
+              tooltip: 'إرسال',
+              onPressed: _busy ? null : _send,
+              icon: _busy
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.send),
+            ),
+          ]),
+        ),
+      );
 }
 
 class QuestionsTab extends StatefulWidget {
@@ -307,6 +367,7 @@ class _QuestionsTabState extends State<QuestionsTab> {
                     if (!snap.hasData) return const Center(child: CircularProgressIndicator());
                     if (_filter == 'chats') return _chats(snap.data!.docs);
                     final shown = snap.data!.docs
+                        .where((d) => d.data()['fromSheikh'] != true)
                         .where((d) => _filter == 'starred'
                             ? d.data()['starred'] == true
                             : (d.data()['status'] ?? 'new') == _filter)

@@ -60,6 +60,8 @@ service cloud.firestore {
         && request.resource.data.text is string && request.resource.data.text.size() < 3000
         && request.resource.data.status == 'new' && request.resource.data.reply == ''
         && request.resource.data.published == false;
+      // The sheikh writes first to a reader («راسله»).
+      allow create: if isAdmin() && request.resource.data.fromSheikh == true;
       allow read: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
       allow update: if isAdmin();
       allow delete: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);

@@ -20,7 +20,7 @@ class AppConfig {
   /// The copy published on Google Play: Play updates it, so no APK update notices.
   static const fromPlay = bool.fromEnvironment('PLAY');
 
-  static const version = '4.4.1';
+  static const version = '4.4.2';
 
   /// Short link: channel answers are «…/#/a/<number>».
   static String fatwaLink(String id) =>

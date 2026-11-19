@@ -6,6 +6,7 @@ import '../services/cloud.dart';
 import '../services/members.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import 'admin_extra.dart' show AskerChatScreen, askerLabel;
 
 String _date(DateTime? d) {
   if (d == null) return '—';
@@ -185,7 +186,15 @@ class _MemberTile extends StatelessWidget {
         ].join('\n'),
         style: const TextStyle(fontSize: 12, height: 1.5),
       ),
-      trailing: const Icon(Icons.chevron_left),
+      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+        IconButton(
+          tooltip: 'راسله',
+          icon: const Icon(Icons.chat_bubble_outline, color: Color(0xFF2E7D32)),
+          onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => AskerChatScreen(uid: m.uid, label: askerLabel({'uid': m.uid, 'name': m.name})))),
+        ),
+        const Icon(Icons.chevron_left),
+      ]),
       onTap: () => openMember(context, m.uid),
     );
   }

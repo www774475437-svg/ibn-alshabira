@@ -192,6 +192,53 @@ void openFatwa(BuildContext context, Fatwa fatwa) {
   Navigator.of(context).pushNamed('/fatwa/${Uri.encodeComponent(fatwa.id)}');
 }
 
+/// A question sent «بخصوص جواب «…»»: the answer it is about (by its saved id,
+/// or for older messages by the title written in the text).
+Fatwa? aboutAnswer(Map<String, dynamic> msg) {
+  final repo = Repository.instance;
+  final id = '${msg['about'] ?? ''}';
+  if (id.isNotEmpty) {
+    final f = repo.findById(id);
+    if (f != null) return f;
+  }
+  final t = '${msg['text'] ?? ''}';
+  const head = 'بخصوص جواب «';
+  final i = t.indexOf(head);
+  if (i < 0) return null;
+  final end = t.indexOf('»', i + head.length);
+  if (end < 0) return null;
+  var title = t.substring(i + head.length, end).trim();
+  if (title.isEmpty) return null;
+  final cut = title.endsWith('…') || title.endsWith('...');
+  title = title.replaceAll(RegExp(r'(…|\.\.\.)$'), '').trim();
+  for (final f in repo.fatwas) {
+    final ft = f.title.trim();
+    if (ft == title || (cut && ft.startsWith(title)) || ft.replaceAll(RegExp(r'(…|\.\.\.)$'), '').trim() == title) return f;
+  }
+  return null;
+}
+
+/// The tappable «افتح الجواب» under such a message.
+class AboutAnswerButton extends StatelessWidget {
+  final Map<String, dynamic> msg;
+  const AboutAnswerButton({super.key, required this.msg});
+
+  @override
+  Widget build(BuildContext context) {
+    final f = aboutAnswer(msg);
+    if (f == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: OutlinedButton.icon(
+        style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
+        icon: const Icon(Icons.article_outlined, size: 18),
+        label: Text('افتح الجواب: ${f.title}', maxLines: 1, overflow: TextOverflow.ellipsis),
+        onPressed: () => openFatwa(context, f),
+      ),
+    );
+  }
+}
+
 class FatwaTile extends StatelessWidget {
   final Fatwa fatwa;
   final bool showChapter;
