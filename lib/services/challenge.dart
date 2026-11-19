@@ -820,8 +820,8 @@ class Challenges extends ChangeNotifier {
     try {
       final token = await u.getIdToken();
       final r = await _http
-          .put(Uri.parse('$rtUrl/inv/$no/${c.code}.json?auth=$token'),
-              body: jsonEncode({'by': _name, 'no': askerNo(u.uid), 'mode': c.mode, 'at': {'.sv': 'timestamp'}}))
+          .put(Uri.parse('$rtUrl/inv/$no/$code.json?auth=$token'),
+              body: jsonEncode({'by': _name, 'no': askerNo(u.uid), 'mode': mode, 'at': {'.sv': 'timestamp'}}))
           .timeout(const Duration(seconds: 10));
       return r.statusCode == 200 ? null : 'تعذّر إرسال الدعوة.';
     } catch (_) {
