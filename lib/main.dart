@@ -26,6 +26,8 @@ import 'services/profiles.dart';
 import 'services/progress.dart';
 import 'theme.dart';
 import 'services/home_widgets.dart';
+import 'services/audio_center.dart';
+import 'screens/audio_library.dart' show NowPlayingBar, playerNavKey;
 import 'services/quiz.dart';
 import 'screens/adhkar_screen.dart';
 import 'screens/quiz_screens.dart' show QuizHomeScreen;
@@ -35,6 +37,8 @@ import 'widgets/common.dart' show openFatwa;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await AudioCenter.init();
+  playerNavKey = appNavKey;
   final prefs = await SharedPreferences.getInstance();
   appLogo.value = prefs.getInt('appLogoV2') ?? 0;
   // The site opens at once with the newest answers, then brings the rest
@@ -188,7 +192,16 @@ class IbnAlshabiraApp extends StatelessWidget {
           data: MediaQuery.of(context).copyWith(
             textScaler: TextScaler.linear(repo.fontScale),
           ),
-          child: child!,
+          // While a recording plays, a slim bar stays at the top of every page.
+          child: ListenableBuilder(
+            listenable: AudioCenter.instance,
+            builder: (context, _) => AudioCenter.instance.current == null
+                ? child!
+                : Column(children: [
+                    const NowPlayingBar(),
+                    Expanded(child: MediaQuery.removePadding(context: context, removeTop: true, child: child!)),
+                  ]),
+          ),
         ),
         onGenerateRoute: onGenerateRoute,
         // A shared link to one fatwa opens it directly, with home underneath.

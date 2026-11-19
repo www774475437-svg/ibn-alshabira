@@ -595,3 +595,36 @@ for k, (cls, label) in names.items():
     </application>""", 1)
 manifest.write_text(m, encoding="utf-8")
 print("Info widgets added")
+
+
+# --- Recordings keep playing in the background ------------------------------
+# just_audio_background: the activity must be AudioServiceActivity, and the
+# media service + button receiver are declared (controls on the lock screen).
+for f in glob.glob("android/app/src/main/kotlin/**/MainActivity.kt", recursive=True):
+    k = Path(f).read_text(encoding="utf-8")
+    if "AudioServiceActivity" not in k:
+        k = k.replace("import io.flutter.embedding.android.FlutterActivity",
+                      "import com.ryanheise.audioservice.AudioServiceActivity")
+        k = re.sub(r"class MainActivity\s*:\s*FlutterActivity\(\)", "class MainActivity : AudioServiceActivity()", k)
+        Path(f).write_text(k, encoding="utf-8")
+        print("MainActivity: AudioServiceActivity")
+m = manifest.read_text(encoding="utf-8")
+for perm in ["android.permission.WAKE_LOCK", "android.permission.FOREGROUND_SERVICE",
+             "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"]:
+    if perm not in m:
+        m = m.replace("<application", f'<uses-permission android:name="{perm}"/>\n    <application', 1)
+if "com.ryanheise.audioservice.AudioService" not in m:
+    m = m.replace("</application>", """        <service android:name="com.ryanheise.audioservice.AudioService"
+            android:foregroundServiceType="mediaPlayback" android:exported="true">
+            <intent-filter>
+                <action android:name="android.media.browse.MediaBrowserService"/>
+            </intent-filter>
+        </service>
+        <receiver android:name="com.ryanheise.audioservice.MediaButtonReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON"/>
+            </intent-filter>
+        </receiver>
+    </application>""", 1)
+manifest.write_text(m, encoding="utf-8")
+print("Background audio declared")

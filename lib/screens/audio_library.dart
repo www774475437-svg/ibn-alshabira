@@ -2,15 +2,14 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
-import '../services/progress.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
-import 'package:just_audio/just_audio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config.dart';
 import '../data/models.dart';
 import '../data/repository.dart' show normalizeArabic;
+import '../services/audio_center.dart';
 import '../services/cloud.dart';
 import 'content_screens.dart';
 import '../theme.dart';
@@ -112,8 +111,15 @@ class AudioLibraryScreen extends StatelessWidget {
                   : null,
               onTap: () {
                 if (playable) {
-                  showModalBottomSheet(
-                      context: context, showDragHandle: true, builder: (_) => _Player(lesson: l));
+                  // This lesson, then the next ones of the same series.
+                  final same = [
+                    for (final j in groups[l.group.isEmpty ? 'دروس متفرقة' : l.group] ?? [i])
+                      if (_isAudioFile(items[j].url)) items[j]
+                  ];
+                  final at = same.indexOf(l);
+                  AudioCenter.instance.playQueue(
+                      [for (final x in same) AudioItem(x.title, x.url, by: x.group)], at < 0 ? 0 : at);
+                  PlayerSheet.open(context);
                 } else if (yt != null) {
                   // YouTube lessons play inside the app.
                   Navigator.of(context).push(MaterialPageRoute(
@@ -311,19 +317,26 @@ class Recordings {
   }
 }
 
-void openRecording(BuildContext context, Recording r) {
-  if (r.playable) {
-    showModalBottomSheet(
-      context: context,
-      showDragHandle: true,
-      builder: (_) => _Player(lesson: Lesson(r.title, r.playUrl, r.by), telegram: r.telegram),
-    );
-  } else {
+AudioItem _item(Recording r) => AudioItem(r.title, r.playUrl, by: r.by, telegram: r.telegram);
+
+/// Plays [r]; when [list] is given, the recordings after it follow by themselves.
+void openRecording(BuildContext context, Recording r, {List<Recording>? list}) {
+  if (!r.playable) {
     openUrl(context, r.telegram); // older audio files play in Telegram
+    return;
   }
+  AudioCenter.voiceLink ??= Recordings.voiceLink;
+  final playable = (list ?? [r]).where((x) => x.playable).toList();
+  final at = playable.indexWhere((x) => x.id == r.id);
+  if (at < 0) {
+    AudioCenter.instance.play(_item(r));
+  } else {
+    AudioCenter.instance.playQueue([for (final x in playable) _item(x)], at);
+  }
+  PlayerSheet.open(context);
 }
 
-Widget _recordingTile(BuildContext context, Recording r) => Card(
+Widget _recordingTile(BuildContext context, Recording r, [List<Recording>? list]) => Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
         leading: CircleAvatar(
@@ -336,7 +349,7 @@ Widget _recordingTile(BuildContext context, Recording r) => Card(
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
         ),
-        onTap: () => openRecording(context, r),
+        onTap: () => openRecording(context, r, list: list),
       ),
     );
 
@@ -376,7 +389,7 @@ class _RecordingsState extends State<_Recordings> {
             ),
           ]),
         ),
-        for (final r in _list.take(5)) _recordingTile(context, r),
+        for (final r in _list.take(5)) _recordingTile(context, r, _list),
         FilledButton.tonalIcon(
           icon: const Icon(Icons.library_music_outlined),
           label: Text('كل التسجيلات (${_list.length})'),
@@ -442,7 +455,7 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
                   child: ListView.builder(
                     padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
                     itemCount: shown.length,
-                    itemBuilder: (context, i) => _recordingTile(context, shown[i]),
+                    itemBuilder: (context, i) => _recordingTile(context, shown[i], shown),
                   ),
                 ),
               ],
@@ -451,60 +464,18 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
   }
 }
 
-class _Player extends StatefulWidget {
-  final Lesson lesson;
-  final String telegram; // where to listen if it cannot play here
-  const _Player({required this.lesson, this.telegram = ''});
+/// The full player: opened from a recording, a lesson or the bar at the top.
+class PlayerSheet extends StatelessWidget {
+  const PlayerSheet({super.key});
 
-  @override
-  State<_Player> createState() => _PlayerState();
-}
+  static void open(BuildContext context) => showModalBottomSheet(
+        context: context,
+        showDragHandle: true,
+        isScrollControlled: true,
+        builder: (_) => const PlayerSheet(),
+      );
 
-class _PlayerState extends State<_Player> {
-  final _player = AudioPlayer();
-  String? _error;
-  double _speed = 1.0;
-
-  String get _key => 'audio_pos_${widget.lesson.url.hashCode}';
-
-  @override
-  void initState() {
-    super.initState();
-    _start();
-  }
-
-  Future<void> _start() async {
-    try {
-      var url = widget.lesson.url;
-      if (url.startsWith('tg:')) {
-        final link = await Recordings.voiceLink(int.parse(url.substring(3)));
-        if (link == null) throw Exception('no link');
-        url = link;
-      }
-      await _player.setUrl(url);
-      final prefs = await SharedPreferences.getInstance();
-      final pos = prefs.getInt(_key) ?? 0;
-      if (pos > 0) await _player.seek(Duration(seconds: pos));
-      _player.play();
-      Progress.listened();
-    } catch (_) {
-      if (mounted) setState(() => _error = 'تعذّر تشغيل الملف، تأكد من الاتصال بالإنترنت');
-    }
-  }
-
-  Future<void> _savePos() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_key, _player.position.inSeconds);
-  }
-
-  @override
-  void dispose() {
-    _savePos();
-    _player.dispose();
-    super.dispose();
-  }
-
-  String _fmt(Duration d) {
+  static String fmt(Duration d) {
     final h = d.inHours, m = d.inMinutes % 60, s = d.inSeconds % 60;
     final mm = m.toString().padLeft(2, '0'), ss = s.toString().padLeft(2, '0');
     return h > 0 ? '$h:$mm:$ss' : '$mm:$ss';
@@ -512,97 +483,215 @@ class _PlayerState extends State<_Player> {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(widget.lesson.title,
-                textAlign: TextAlign.center, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 12),
-            if (_error != null)
-              Column(children: [
-                Text(_error!, style: const TextStyle(color: Colors.red)),
-                if (widget.telegram.isNotEmpty)
-                  TextButton.icon(
-                    icon: const Icon(Icons.send_outlined),
-                    label: const Text('استمع في تيليجرام'),
-                    onPressed: () => openUrl(context, widget.telegram),
-                  ),
-              ])
-            else
-              StreamBuilder<Duration>(
-                stream: _player.positionStream,
-                builder: (context, snap) {
-                  final pos = snap.data ?? Duration.zero;
-                  final total = _player.duration ?? Duration.zero;
-                  final max = total.inMilliseconds.toDouble();
-                  return Column(
-                    children: [
+    final a = AudioCenter.instance;
+    return ListenableBuilder(
+      listenable: a,
+      builder: (context, _) {
+        final it = a.current;
+        if (it == null) return const SizedBox(height: 120, child: Center(child: Text('لا يوجد تسجيل يعمل')));
+        final p = a.player;
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Text(it.title,
+                  textAlign: TextAlign.center,
+                  maxLines: 4,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, height: 1.5)),
+              if (a.queue.length > 1)
+                Text('${a.index + 1} من ${a.queue.length}', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+              const SizedBox(height: 10),
+              if (a.error != null)
+                Column(children: [
+                  Text(a.error!, style: const TextStyle(color: Colors.red)),
+                  if (it.telegram.isNotEmpty)
+                    TextButton.icon(
+                      icon: const Icon(Icons.send_outlined),
+                      label: const Text('استمع في تيليجرام'),
+                      onPressed: () => openUrl(context, it.telegram),
+                    ),
+                ])
+              else if (a.loading)
+                const Padding(padding: EdgeInsets.all(18), child: CircularProgressIndicator())
+              else
+                StreamBuilder<Duration>(
+                  stream: p.positionStream,
+                  builder: (context, snap) {
+                    final pos = snap.data ?? Duration.zero;
+                    final total = p.duration ?? Duration.zero;
+                    final max = total.inMilliseconds.toDouble();
+                    return Column(children: [
                       Slider(
                         value: max <= 0 ? 0 : pos.inMilliseconds.clamp(0, max.toInt()).toDouble(),
                         max: max <= 0 ? 1 : max,
-                        onChanged: max <= 0 ? null : (v) => _player.seek(Duration(milliseconds: v.toInt())),
+                        onChanged: max <= 0 ? null : (v) => p.seek(Duration(milliseconds: v.toInt())),
                       ),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [Text(_fmt(pos)), Text(_fmt(total))],
+                        children: [Text(fmt(pos)), Text(fmt(total))],
                       ),
-                    ],
-                  );
-                },
-              ),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                IconButton(
-                  tooltip: 'رجوع 15 ثانية',
-                  iconSize: 32,
-                  icon: const Icon(Icons.replay_10),
-                  onPressed: () => _player.seek(_player.position - const Duration(seconds: 15)),
-                ),
-                StreamBuilder<PlayerState>(
-                  stream: _player.playerStateStream,
-                  builder: (context, snap) {
-                    final playing = snap.data?.playing ?? false;
-                    return IconButton.filled(
-                      iconSize: 44,
-                      icon: Icon(playing ? Icons.pause : Icons.play_arrow),
-                      onPressed: () {
-                        if (playing) {
-                          _player.pause();
-                          _savePos();
-                        } else {
-                          _player.play();
-                        }
-                      },
-                    );
+                    ]);
                   },
                 ),
+              const SizedBox(height: 6),
+              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                 IconButton(
-                  tooltip: 'تقديم 15 ثانية',
-                  iconSize: 32,
-                  icon: const Icon(Icons.forward_10),
-                  onPressed: () => _player.seek(_player.position + const Duration(seconds: 15)),
+                  tooltip: 'السابق',
+                  icon: const Icon(Icons.skip_next), // RTL: «next» arrow points back
+                  onPressed: a.index > 0 ? a.previous : null,
                 ),
-              ],
-            ),
-            TextButton(
-              onPressed: () {
-                const speeds = [1.0, 1.25, 1.5, 2.0, 0.75];
-                final next = speeds[(speeds.indexOf(_speed) + 1) % speeds.length];
-                setState(() => _speed = next);
-                _player.setSpeed(next);
-              },
-              child: Text('السرعة ×$_speed'),
-            ),
-            const Text('يكمل من حيث توقفت عند فتحه مرة أخرى',
-                style: TextStyle(color: Colors.grey, fontSize: 12)),
-          ],
-        ),
-      ),
+                IconButton(tooltip: 'رجوع 15 ثانية', iconSize: 30, icon: const Icon(Icons.replay_10), onPressed: () => a.seekBy(-15)),
+                IconButton.filled(
+                  iconSize: 44,
+                  icon: Icon(a.playing ? Icons.pause : Icons.play_arrow),
+                  onPressed: a.toggle,
+                ),
+                IconButton(tooltip: 'تقديم 15 ثانية', iconSize: 30, icon: const Icon(Icons.forward_10), onPressed: () => a.seekBy(15)),
+                IconButton(
+                  tooltip: 'التالي',
+                  icon: const Icon(Icons.skip_previous),
+                  onPressed: a.hasNext ? a.next : null,
+                ),
+              ]),
+              Wrap(alignment: WrapAlignment.center, spacing: 6, children: [
+                TextButton(onPressed: a.nextSpeed, child: Text('السرعة ×${a.speed}')),
+                if (!kIsWeb) _DownloadButton(item: it),
+                TextButton.icon(
+                  icon: const Icon(Icons.close),
+                  label: const Text('إغلاق'),
+                  onPressed: () {
+                    a.close();
+                    Navigator.of(context).maybePop();
+                  },
+                ),
+              ]),
+              const Text('يكمل من حيث توقفت، ويستمر وأنت خارج التطبيق، ثم يبدأ التالي وحده',
+                  textAlign: TextAlign.center, style: TextStyle(color: Colors.grey, fontSize: 12)),
+            ]),
+          ),
+        );
+      },
     );
   }
 }
+
+class _DownloadButton extends StatefulWidget {
+  final AudioItem item;
+  const _DownloadButton({required this.item});
+
+  @override
+  State<_DownloadButton> createState() => _DownloadButtonState();
+}
+
+class _DownloadButtonState extends State<_DownloadButton> {
+  bool? _have;
+
+  @override
+  void initState() {
+    super.initState();
+    _check();
+  }
+
+  @override
+  void didUpdateWidget(covariant _DownloadButton old) {
+    super.didUpdateWidget(old);
+    if (old.item.url != widget.item.url) _check();
+  }
+
+  Future<void> _check() async {
+    final v = await AudioCenter.instance.isDownloaded(widget.item);
+    if (mounted) setState(() => _have = v);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final a = AudioCenter.instance;
+    if (a.downloading.contains(widget.item.key)) {
+      return const TextButton(onPressed: null, child: Text('جارٍ التنزيل…'));
+    }
+    if (_have == true) {
+      return TextButton.icon(
+        icon: const Icon(Icons.download_done),
+        label: const Text('محفوظ بلا إنترنت'),
+        onPressed: () async {
+          await a.removeDownload(widget.item);
+          _check();
+        },
+      );
+    }
+    return TextButton.icon(
+      icon: const Icon(Icons.download_outlined),
+      label: const Text('نزّله'),
+      onPressed: () async {
+        final err = await a.download(widget.item);
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err ?? 'نُزّل، تسمعه الآن بلا إنترنت')));
+        _check();
+      },
+    );
+  }
+}
+
+/// The slim bar at the top of every page while something plays: read and
+/// listen together; tap it for the player, ✕ to stop.
+class NowPlayingBar extends StatelessWidget {
+  const NowPlayingBar({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final a = AudioCenter.instance;
+    return ListenableBuilder(
+      listenable: a,
+      builder: (context, _) {
+        final it = a.current;
+        if (it == null) return const SizedBox.shrink();
+        return Material(
+          color: const Color(0xFF0E3A40),
+          child: SafeArea(
+            bottom: false,
+            child: InkWell(
+              onTap: () {
+                final ctx = playerNavKey?.currentContext;
+                if (ctx != null) PlayerSheet.open(ctx);
+              },
+              child: SizedBox(
+                height: 44,
+                child: Row(children: [
+                  const SizedBox(width: 12),
+                  Icon(a.playing ? Icons.graphic_eq : Icons.headphones, color: kGold, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(it.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textScaler: TextScaler.noScaling,
+                        style: const TextStyle(color: Colors.white, fontSize: 13.5)),
+                  ),
+                  if (a.loading)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 12),
+                      child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: kGold)),
+                    )
+                  else
+                    IconButton(
+                      // No tooltips here: this bar sits above the pages' overlay.
+                      icon: Icon(a.playing ? Icons.pause : Icons.play_arrow, color: Colors.white),
+                      onPressed: a.toggle,
+                    ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white70, size: 20),
+                    onPressed: a.close,
+                  ),
+                ]),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Set by main.dart: where the bar opens the player.
+GlobalKey<NavigatorState>? playerNavKey;
