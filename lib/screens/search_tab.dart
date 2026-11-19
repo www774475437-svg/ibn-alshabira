@@ -338,20 +338,26 @@ class _EmptySearch extends StatelessWidget {
           if (repo.recentSearches.isNotEmpty) ...[
             Row(
               children: [
-                const Icon(Icons.history, size: 20, color: Colors.grey),
-                const SizedBox(width: 6),
-                const Text('آخر عمليات البحث', style: TextStyle(fontWeight: FontWeight.bold)),
+                const Text('بحثت مؤخراً', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
                 const Spacer(),
-                TextButton(onPressed: repo.clearRecentSearches, child: const Text('مسح')),
+                TextButton(onPressed: repo.clearRecentSearches, child: const Text('مسح الكل')),
               ],
             ),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final q in repo.recentSearches)
-                  InputChip(label: Text(q), onPressed: () => onPick(q), onDeleted: () => repo.removeRecentSearch(q)),
-              ],
+            Card(
+              child: Column(children: [
+                for (var i = 0; i < repo.recentSearches.length && i < 8; i++) ...[
+                  if (i > 0) const Divider(indent: 16, endIndent: 16),
+                  ListTile(
+                    title: Text(repo.recentSearches[i]),
+                    onTap: () => onPick(repo.recentSearches[i]),
+                    trailing: IconButton(
+                      tooltip: 'حذف',
+                      icon: const Icon(Icons.close, size: 20),
+                      onPressed: () => repo.removeRecentSearch(repo.recentSearches[i]),
+                    ),
+                  ),
+                ],
+              ]),
             ),
             const SizedBox(height: 24),
           ],

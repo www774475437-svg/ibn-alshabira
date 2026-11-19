@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config.dart';
+import '../theme.dart';
 
 import '../services/cloud.dart';
 import '../services/net.dart';
@@ -110,42 +111,22 @@ class _HomeShellState extends State<HomeShell> {
           }
         }
 
-        NavigationDestination dest(String id) {
+        (IconData, IconData, String, int) dest(String id) {
           switch (id) {
             case 'home':
-              return const NavigationDestination(
-                  icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'الرئيسية');
+              return (Icons.home_outlined, Icons.home_rounded, 'الرئيسية', 0);
             case 'books':
-              return const NavigationDestination(
-                  icon: Icon(Icons.menu_book_outlined), selectedIcon: Icon(Icons.menu_book), label: 'الكتب');
+              return (Icons.menu_book_outlined, Icons.menu_book_rounded, 'الكتب', 0);
             case 'saved':
-              return const NavigationDestination(
-                  icon: Icon(Icons.bookmark_border), selectedIcon: Icon(Icons.bookmark), label: 'المحفوظات');
+              return (Icons.bookmark_border_rounded, Icons.bookmark_rounded, 'المحفوظات', 0);
             case 'ask':
-              return NavigationDestination(
-                icon: Badge(
-                  isLabelVisible: cloud.unseenReplies > 0,
-                  label: Text('${cloud.unseenReplies}'),
-                  child: const Icon(Icons.forum_outlined),
-                ),
-                selectedIcon: const Icon(Icons.forum),
-                label: 'اسأل الشيخ',
-              );
+              return (Icons.forum_outlined, Icons.forum_rounded, 'اسأل الشيخ', cloud.unseenReplies);
             case 'admin':
-              return NavigationDestination(
-                icon: Badge(
-                  isLabelVisible: cloud.newQuestions > 0,
-                  label: Text('${cloud.newQuestions}'),
-                  child: const Icon(Icons.admin_panel_settings_outlined),
-                ),
-                selectedIcon: const Icon(Icons.admin_panel_settings),
-                label: 'الإدارة',
-              );
+              return (Icons.admin_panel_settings_outlined, Icons.admin_panel_settings, 'الإدارة', cloud.newQuestions);
             case 'scholars':
-              return const NavigationDestination(
-                  icon: Icon(Icons.groups_outlined), selectedIcon: Icon(Icons.groups), label: 'المشايخ الثقات');
+              return (Icons.groups_outlined, Icons.groups_rounded, 'المشايخ', 0);
             default:
-              return const NavigationDestination(icon: Icon(Icons.more_horiz), label: 'المزيد');
+              return (Icons.grid_view_outlined, Icons.grid_view_rounded, 'المزيد', 0);
           }
         }
 
@@ -159,19 +140,41 @@ class _HomeShellState extends State<HomeShell> {
             ),
             const _OfflineBar(),
           ]),
-          bottomNavigationBar: NavigationBarTheme(
-            // Six or seven buttons: smaller labels so every name fits.
-            data: NavigationBarThemeData(
-              labelTextStyle: WidgetStateProperty.resolveWith((states) => TextStyle(
-                    fontSize: ids.length > 6 ? 9.5 : 10.5,
-                    height: 1.2,
-                    fontWeight: states.contains(WidgetState.selected) ? FontWeight.bold : FontWeight.normal,
-                  )),
-            ),
-            child: NavigationBar(
-              selectedIndex: index,
-              onDestinationSelected: (i) => _goTo(ids[i]),
-              destinations: [for (final id in ids) dest(id)],
+          // A floating rounded bar, and the search as its own round button.
+          bottomNavigationBar: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(10, 6, 10, 8),
+              child: Row(children: [
+                Expanded(
+                  child: _Pill(
+                    child: Row(children: [
+                      for (var i = 0; i < ids.length; i++)
+                        Expanded(
+                          child: _NavItem(
+                            item: dest(ids[i]),
+                            selected: i == index,
+                            small: ids.length > 6,
+                            onTap: () => _goTo(ids[i]),
+                          ),
+                        ),
+                    ]),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                _Pill(
+                  round: true,
+                  child: InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SearchTab())),
+                    child: const SizedBox(
+                      width: 58,
+                      height: 58,
+                      child: Icon(Icons.search_rounded, size: 28),
+                    ),
+                  ),
+                ),
+              ]),
             ),
           ),
         );
@@ -180,6 +183,74 @@ class _HomeShellState extends State<HomeShell> {
   }
 }
 
+/// The glass look of the bottom bar and the search button.
+class _Pill extends StatelessWidget {
+  final Widget child;
+  final bool round;
+  const _Pill({required this.child, this.round = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final dark = t.brightness == Brightness.dark;
+    final shape = round
+        ? CircleBorder(side: BorderSide(color: t.colorScheme.onSurface.withValues(alpha: dark ? .16 : .10)))
+        : StadiumBorder(side: BorderSide(color: t.colorScheme.onSurface.withValues(alpha: dark ? .16 : .10)));
+    return Material(
+      color: dark ? const Color(0xFF1C1F24) : t.cardTheme.color ?? Colors.white,
+      elevation: dark ? 0 : 6,
+      shadowColor: Colors.black.withValues(alpha: .18),
+      shape: shape,
+      clipBehavior: Clip.antiAlias,
+      child: child,
+    );
+  }
+}
+
+class _NavItem extends StatelessWidget {
+  final (IconData, IconData, String, int) item;
+  final bool selected, small;
+  final VoidCallback onTap;
+  const _NavItem({required this.item, required this.selected, required this.small, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final dark = t.brightness == Brightness.dark;
+    final on = dark ? kGold : t.colorScheme.primary;
+    final off = t.colorScheme.onSurface.withValues(alpha: .72);
+    Widget icon = Icon(selected ? item.$2 : item.$1, size: small ? 22 : 24, color: selected ? on : off);
+    if (item.$4 > 0) icon = Badge(label: Text('${item.$4}'), child: icon);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 1),
+      child: Material(
+        color: selected ? on.withValues(alpha: dark ? .16 : .12) : Colors.transparent,
+        shape: const StadiumBorder(),
+        child: InkWell(
+          customBorder: const StadiumBorder(),
+          onTap: onTap,
+          child: SizedBox(
+            height: 50,
+            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+              icon,
+              const SizedBox(height: 2),
+              Text(item.$3,
+                  maxLines: 1,
+                  overflow: TextOverflow.fade,
+                  softWrap: false,
+                  textScaler: TextScaler.noScaling,
+                  style: TextStyle(
+                      fontSize: small ? 9.5 : 10.5,
+                      height: 1.1,
+                      color: selected ? on : off,
+                      fontWeight: selected ? FontWeight.bold : FontWeight.normal)),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 /// «أنت بلا إنترنت»: a small strip above the buttons while the internet is off.
 class _OfflineBar extends StatefulWidget {

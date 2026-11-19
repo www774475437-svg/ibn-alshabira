@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -15,6 +16,8 @@ import '../data/models.dart';
 import '../data/repository.dart';
 import '../services/books_store.dart';
 import '../theme.dart';
+import '../widgets/common.dart' show openUrl;
+import '../widgets/source_book.dart' show openBook;
 import '../services/quiz.dart';
 import 'profile_screen.dart' show addQuoteDialog;
 import 'quiz_screens.dart';
@@ -173,6 +176,11 @@ class _BookReaderScreenState extends State<BookReaderScreen> {
   }
 
   Future<void> _load() async {
+    if (kIsWeb) {
+      // The website reads books in Google's viewer (see openBook).
+      setState(() => _error = 'web');
+      return;
+    }
     setState(() => _error = null);
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -629,11 +637,16 @@ class _BookReaderScreenState extends State<BookReaderScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.wifi_off, size: 56, color: Colors.grey),
+                  Icon(_error == 'web' ? Icons.menu_book : Icons.wifi_off, size: 56, color: _error == 'web' ? kGold : Colors.grey),
                   const SizedBox(height: 12),
-                  Text(_error!, textAlign: TextAlign.center),
+                  Text(_error == 'web' ? 'يُقرأ الكتاب في الموقع بعارض جوجل' : _error!, textAlign: TextAlign.center),
                   const SizedBox(height: 12),
-                  FilledButton(onPressed: _load, child: const Text('إعادة المحاولة')),
+                  _error == 'web'
+                      ? FilledButton.icon(
+                          onPressed: () => openUrl(context, widget.book.previewUrl),
+                          icon: const Icon(Icons.open_in_new),
+                          label: const Text('افتح الكتاب'))
+                      : FilledButton(onPressed: _load, child: const Text('إعادة المحاولة')),
                 ],
               ),
             )
@@ -902,8 +915,7 @@ class _ReaderNotebookScreenState extends State<ReaderNotebookScreen> {
             onTap: () {
               final b = books.where((x) => x.id == m.book).firstOrNull;
               if (b != null) {
-                Navigator.of(context)
-                    .push(MaterialPageRoute(builder: (_) => BookReaderScreen(book: b, startPage: m.page)));
+                openBook(context, b, startPage: m.page);
               }
             },
           ),

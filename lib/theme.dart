@@ -43,26 +43,78 @@ ThemeData buildTheme(Brightness brightness, [String fontFamily = '', String pale
       backgroundColor: barColor,
       foregroundColor: dark ? kGold : Colors.white,
       elevation: 0,
+      scrolledUnderElevation: 0,
+      titleTextStyle: TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.w600,
+          color: dark ? kGold : Colors.white,
+          fontFamily: fontFamily.isEmpty ? null : fontFamily),
     ),
+    // Calm rounded look: cards with a thin quiet border, glass-like menus,
+    // rounded fields and chips, and headings a little smaller.
     cardTheme: CardThemeData(
-      elevation: dark ? 0 : (teal ? 1.5 : 0),
-      shadowColor: Colors.black.withValues(alpha: 0.18),
-      color: cardColor,
+      elevation: 0,
+      color: dark ? const Color(0xFF171A1F) : cardColor,
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: BorderSide(color: kGold.withValues(alpha: dark ? 0.35 : (teal ? 0.18 : 0.25))),
+        borderRadius: BorderRadius.circular(22),
+        side: BorderSide(
+            color: dark ? Colors.white.withValues(alpha: .10) : (paper ? kInk : kTealDark).withValues(alpha: .12)),
       ),
     ),
+    popupMenuTheme: PopupMenuThemeData(
+      color: dark ? const Color(0xF0202328) : const Color(0xF7FFFFFF),
+      surfaceTintColor: Colors.transparent,
+      elevation: 10,
+      shadowColor: Colors.black.withValues(alpha: .25),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(24),
+        side: BorderSide(color: (dark ? Colors.white : Colors.black).withValues(alpha: .08)),
+      ),
+      textStyle: TextStyle(fontSize: 15.5, color: dark ? Colors.white : const Color(0xFF1C2B2E)),
+      menuPadding: const EdgeInsets.symmetric(vertical: 8),
+    ),
+    dialogTheme: DialogThemeData(
+      surfaceTintColor: Colors.transparent,
+      backgroundColor: dark ? const Color(0xFF1C1F24) : cardColor,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+    ),
+    bottomSheetTheme: BottomSheetThemeData(
+      surfaceTintColor: Colors.transparent,
+      backgroundColor: dark ? const Color(0xFF1C1F24) : cardColor,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(26))),
+    ),
+    listTileTheme: ListTileThemeData(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      iconColor: dark ? kGold : (teal ? kTeal : brand),
+    ),
+    chipTheme: ChipThemeData(
+      shape: StadiumBorder(side: BorderSide(color: (dark ? Colors.white : Colors.black).withValues(alpha: .12))),
+      side: BorderSide(color: (dark ? Colors.white : Colors.black).withValues(alpha: .12)),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(18)),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(18),
+        borderSide: BorderSide(color: (dark ? Colors.white : Colors.black).withValues(alpha: .16)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(18),
+        borderSide: BorderSide(color: dark ? kGold : (teal ? kTeal : brand), width: 1.6),
+      ),
+    ),
+    dividerTheme: DividerThemeData(color: (dark ? Colors.white : Colors.black).withValues(alpha: .08), space: 1),
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: cardColor,
       indicatorColor: kGold.withValues(alpha: 0.25),
       elevation: 3,
     ),
     filledButtonTheme: FilledButtonThemeData(
-      style: FilledButton.styleFrom(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      ),
+      style: FilledButton.styleFrom(shape: const StadiumBorder(), minimumSize: const Size(64, 46)),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(shape: const StadiumBorder(), minimumSize: const Size(64, 46)),
     ),
     pageTransitionsTheme: const PageTransitionsTheme(
       builders: {TargetPlatform.android: ZoomPageTransitionsBuilder()},

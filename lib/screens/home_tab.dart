@@ -23,6 +23,7 @@ import '../data/models.dart';
 import '../data/repository.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../widgets/source_book.dart';
 import '../services/cloud.dart';
 import 'channel_screen.dart';
 import 'book_reader_screen.dart';
@@ -737,8 +738,7 @@ class _ContinueReading extends StatelessWidget {
             title: const Text('أكمل القراءة', style: TextStyle(fontWeight: FontWeight.bold)),
             subtitle: Text(book.title, maxLines: 1, overflow: TextOverflow.ellipsis),
             trailing: const Icon(Icons.chevron_left),
-            onTap: () => Navigator.of(context)
-                .push(MaterialPageRoute(builder: (_) => BookReaderScreen(book: book))),
+            onTap: () => openBook(context, book),
           ),
         ),
       );
@@ -900,7 +900,7 @@ class _ResumeState extends State<_Resume> {
                   () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const QuranScreen()))),
             if (book != null)
               chip(Icons.menu_book_outlined, withoutSymbols(book.title),
-                  () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => BookReaderScreen(book: book)))),
+                  () => openBook(context, book)),
           ],
         ),
       ),
@@ -1106,8 +1106,7 @@ class _BookRow extends StatelessWidget {
             title: Text(book.title, style: const TextStyle(fontWeight: FontWeight.bold)),
             subtitle: const Text('من كتب الشيخ'),
             trailing: const Icon(Icons.chevron_left),
-            onTap: () =>
-                Navigator.of(context).push(MaterialPageRoute(builder: (_) => BookReaderScreen(book: book))),
+            onTap: () => openBook(context, book),
           ),
         ),
       );

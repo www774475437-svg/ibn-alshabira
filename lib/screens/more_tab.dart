@@ -605,10 +605,10 @@ class _BigCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(18),
             onTap: onTap,
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
               child: Row(
                 children: [
-                  Icon(icon, color: iconColor, size: 34),
+                  Icon(icon, color: iconColor, size: 30),
                   const SizedBox(width: 14),
                   Expanded(
                     child: Column(
@@ -618,7 +618,7 @@ class _BigCard extends StatelessWidget {
                             style: TextStyle(
                                 fontFamily: 'Tajawal',
                                 color: fg,
-                                fontSize: 19,
+                                fontSize: 17,
                                 fontWeight: FontWeight.bold)),
                         const SizedBox(height: 2),
                         Text(subtitle, style: TextStyle(color: fg, fontSize: 13.5)),
@@ -726,7 +726,7 @@ class _ReaderStatsState extends State<_ReaderStats> {
                   Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       const Text('قراءتي هذا الشهر',
-                          style: TextStyle(fontFamily: 'Tajawal', color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                          style: TextStyle(fontFamily: 'Tajawal', color: Colors.white, fontSize: 16.5, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 4),
                       Text(
                         count == 0
