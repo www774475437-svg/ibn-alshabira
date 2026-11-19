@@ -24,6 +24,8 @@ class Profiles extends ChangeNotifier {
   Map<String, Map<String, dynamic>> pages = {};
   DateTime? at;
   Set<String> following = {};
+  /// «قائمة الأصدقاء»: people one follows and challenges often (on the phone only).
+  Set<String> friends = {};
   List<Map<String, dynamic>> quotes = [];
   int newFollowers = 0;
   bool _loaded = false;
@@ -42,6 +44,7 @@ class Profiles extends ChangeNotifier {
     final p = await SharedPreferences.getInstance();
     if (!_loaded) {
       following = (p.getStringList('following') ?? const []).toSet();
+      friends = (p.getStringList('friends') ?? const []).toSet();
       try {
         quotes = [
           for (final q in (jsonDecode(p.getString('myQuotes') ?? '[]') as List)) Map<String, dynamic>.from(q as Map)
@@ -89,6 +92,15 @@ class Profiles extends ChangeNotifier {
 
   void seenNewFollowers() {
     newFollowers = 0;
+    notifyListeners();
+  }
+
+  // ------------------------------------------------------------- friends
+  bool isFriend(String no) => friends.contains(no);
+  Future<void> toggleFriend(String no) async {
+    friends.contains(no) ? friends.remove(no) : friends.add(no);
+    final p = await SharedPreferences.getInstance();
+    await p.setStringList('friends', friends.toList());
     notifyListeners();
   }
 

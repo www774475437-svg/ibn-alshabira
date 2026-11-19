@@ -338,7 +338,7 @@ class ProfileView extends StatelessWidget {
             const SizedBox(width: 30),
             Column(children: [
               Text('${n('p')}', style: const TextStyle(fontFamily: 'Tajawal', color: kGold, fontSize: 26, fontWeight: FontWeight.bold)),
-              const Text('نقطة', style: TextStyle(color: Colors.white70, fontSize: 12)),
+              Text('نقطة · ${Progress.rankOf(n('p'))}', style: const TextStyle(color: Colors.white70, fontSize: 12)),
             ]),
             const SizedBox(width: 30),
             Column(children: [
@@ -536,28 +536,85 @@ class _FollowingScreenState extends State<FollowingScreen> {
         builder: (context, _) {
           final pr = Profiles.instance;
           final l = pr.following.toList()..sort();
-          return Scaffold(
-            appBar: AppBar(title: Text('من أتابعهم (${l.length})')),
-            body: l.isEmpty
-                ? const EmptyState(icon: Icons.group_outlined, text: 'لا تتابع أحداً بعد. ابحث برقم شخص ثم اضغط «تابِع».')
-                : ListView(padding: const EdgeInsets.symmetric(vertical: 8), children: [
-                    for (final no in l)
-                      Builder(builder: (context) {
-                        final m = pr.page(no);
-                        int n(String k) => (m?[k] as num?)?.toInt() ?? 0;
-                        final name = '${m?['n'] ?? ''}'.trim();
-                        return ListTile(
-                          leading: const CircleAvatar(backgroundColor: Color(0xFF0E3B44), child: Icon(Icons.person, color: kGold)),
-                          title: Text(name.isEmpty ? 'رقم $no' : name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                          subtitle: Text(m == null
-                              ? 'لم يتحدّث ملفه بعد'
-                              : '🔥 ${n('d')} يوم   📖 ${n('rd')}   🏆 ${n('cw')} من ${n('cp')}   ⭐ ${n('p')}'),
-                          trailing: const Icon(Icons.chevron_left),
-                          onTap: () => Navigator.of(context)
-                              .push(MaterialPageRoute(builder: (_) => PublicProfileScreen(no: int.parse(no)))),
-                        );
-                      }),
-                  ]),
+          final friends = l.where(pr.isFriend).toList();
+          Widget tile(String no) {
+            final m = pr.page(no);
+            int n(String k) => (m?[k] as num?)?.toInt() ?? 0;
+            final name = '${m?['n'] ?? ''}'.trim();
+            final friend = pr.isFriend(no);
+            return ListTile(
+              leading: const CircleAvatar(backgroundColor: Color(0xFF0E3B44), child: Icon(Icons.person, color: kGold)),
+              title: Text(name.isEmpty ? 'رقم $no' : name, style: const TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: Text(m == null
+                  ? 'لم يتحدّث ملفه بعد'
+                  : '${Progress.rankOf(n('p'))} · 🔥 ${n('d')} يوم   📖 ${n('rd')}   🏆 ${n('cw')} من ${n('cp')}'),
+              trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                IconButton(
+                  tooltip: friend ? 'إزالة من الأصدقاء' : 'أضفه إلى الأصدقاء',
+                  icon: Icon(friend ? Icons.star_rounded : Icons.star_outline_rounded, color: friend ? kGold : null),
+                  onPressed: () => pr.toggleFriend(no),
+                ),
+                if (friend)
+                  IconButton(
+                    tooltip: 'تحدَّه',
+                    icon: const Icon(Icons.bolt, color: kGold),
+                    onPressed: () => Navigator.of(context)
+                        .push(MaterialPageRoute(builder: (_) => PublicProfileScreen(no: int.parse(no)))),
+                  ),
+              ]),
+              onTap: () => Navigator.of(context)
+                  .push(MaterialPageRoute(builder: (_) => PublicProfileScreen(no: int.parse(no)))),
+            );
+          }
+
+          // «سباق القراءة»: this month's reading among the people one follows, and oneself.
+          final mk = '${DateTime.now().year}-${DateTime.now().month}';
+          final race = <(String, String, int, bool)>[
+            for (final no in l)
+              if (pr.page(no) case final Map m)
+                ('${m['n'] ?? ''}'.trim().isEmpty ? 'رقم $no' : '${m['n']}', no, m['mk'] == mk ? (m['rm'] as num? ?? 0).toInt() : 0, false),
+            ('أنت', '', Repository.instance.readThisMonth, true),
+          ]..sort((a, b) => b.$3.compareTo(a.$3));
+
+          return DefaultTabController(
+            length: 3,
+            child: Scaffold(
+              appBar: AppBar(
+                title: Text('من أتابعهم (${l.length})'),
+                bottom: TabBar(tabs: [
+                  const Tab(text: 'الكل'),
+                  Tab(text: 'الأصدقاء (${friends.length})'),
+                  const Tab(text: 'سباق القراءة'),
+                ]),
+              ),
+              body: TabBarView(children: [
+                l.isEmpty
+                    ? const EmptyState(icon: Icons.group_outlined, text: 'لا تتابع أحداً بعد. ابحث برقم شخص ثم اضغط «تابِع».')
+                    : ListView(padding: const EdgeInsets.symmetric(vertical: 8), children: [for (final no in l) tile(no)]),
+                friends.isEmpty
+                    ? const EmptyState(
+                        icon: Icons.star_outline_rounded, text: 'اضغط النجمة بجانب من تتابعه ليصير في أصدقائك، فتتحدّاه بسرعة.')
+                    : ListView(padding: const EdgeInsets.symmetric(vertical: 8), children: [for (final no in friends) tile(no)]),
+                ListView(padding: const EdgeInsets.all(12), children: [
+                  const Text('من قرأ أكثر هذا الشهر بينك وبين من تتابعهم. يتحدّث كل بضع ساعات.',
+                      style: TextStyle(color: Colors.grey, height: 1.6)),
+                  const SizedBox(height: 8),
+                  for (var i = 0; i < race.length; i++)
+                    Card(
+                      color: race[i].$4 ? kGold.withValues(alpha: .14) : null,
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: i < 3 ? kGold : Colors.grey.withValues(alpha: .25),
+                          child: Text('${i + 1}', style: TextStyle(color: i < 3 ? Colors.white : null)),
+                        ),
+                        title: Text(race[i].$1, style: const TextStyle(fontWeight: FontWeight.bold)),
+                        trailing: Text('📖 ${race[i].$3}',
+                            style: const TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.bold, fontSize: 17)),
+                      ),
+                    ),
+                ]),
+              ]),
+            ),
           );
         },
       );

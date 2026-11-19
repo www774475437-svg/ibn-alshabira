@@ -16,6 +16,8 @@ import '../widgets/source_book.dart';
 import 'account_screens.dart';
 import 'quiz_screens.dart' show QuestionEditor;
 import 'tour_screens.dart';
+import 'daily_screen.dart';
+import '../services/progress.dart';
 
 void _say(BuildContext context, String text, {bool ok = true}) {
   ScaffoldMessenger.of(context)
@@ -47,6 +49,7 @@ class _ChallengeHomeState extends State<ChallengeHome> {
     Quiz.instance.load();
     Challenges.instance.load();
     Challenges.instance.checkInvites();
+    Challenges.instance.loadMissed();
     Tour.instance.load();
   }
 
@@ -148,6 +151,24 @@ class _ChallengeHomeState extends State<ChallengeHome> {
     if (mounted) setState(() {});
   }
 
+  /// «تحدَّه الآن»: a new duel (random questions) and an invite back to him.
+  Future<void> _challengeBack(int no, int at) async {
+    setState(() => _busy = true);
+    final (code, err) = await Challenges.instance.create(mode: 'duel');
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (err != null) {
+      _say(context, err, ok: false);
+      return;
+    }
+    final e2 = await Challenges.instance.inviteTo('$no', code!, 'duel');
+    await Challenges.instance.dismissMissed(at);
+    if (!mounted) return;
+    _say(context, e2 ?? 'أُرسلت إليه الدعوة', ok: e2 == null);
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => ChallengeRoom(code: code)));
+    if (mounted) setState(() {});
+  }
+
   Future<void> _join() async {
     final code = _code.text.trim();
     if (code.length < 5) {
@@ -220,6 +241,37 @@ class _ChallengeHomeState extends State<ChallengeHome> {
             ],
           ),
           body: ListView(padding: const EdgeInsets.all(12), children: [
+            // Invites that came while the app was closed.
+            for (final m in ch.missed)
+              Card(
+                color: Colors.orange.withValues(alpha: .12),
+                child: ListTile(
+                  leading: const Icon(Icons.notifications_paused_outlined, color: Colors.orange),
+                  title: Text('فاتك تحدٍّ من ${m.$1}'),
+                  subtitle: const Text('كان التطبيق مغلقاً حين دعاك'),
+                  trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                    if (m.$2 >= 100000)
+                      FilledButton(
+                        onPressed: () => _challengeBack(m.$2, m.$3),
+                        child: const Text('تحدَّه الآن'),
+                      ),
+                    IconButton(icon: const Icon(Icons.close), onPressed: () => ch.dismissMissed(m.$3)),
+                  ]),
+                ),
+              ),
+            // «تحدّي اليوم»: the same five questions for everyone today.
+            Card(
+              color: const Color(0xFF3A2E6B).withValues(alpha: .14),
+              child: ListTile(
+                leading: const Icon(Icons.today, color: Color(0xFF6A5ACD), size: 34),
+                title: const Text('تحدّي اليوم', style: TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.bold)),
+                subtitle: Text(DailyChallenge.playedToday
+                    ? 'لعبته اليوم · ${Progress.daily?['r'] ?? 0} من 5 · شاهد الترتيب'
+                    : 'خمسة أسئلة لكل القرّاء، مرة في اليوم'),
+                trailing: const Icon(Icons.chevron_left),
+                onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const DailyScreen())),
+              ),
+            ),
             if (Tour.instance.on)
               Card(
                 color: kGold.withValues(alpha: .12),

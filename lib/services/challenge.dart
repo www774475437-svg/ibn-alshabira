@@ -810,7 +810,9 @@ class Challenges extends ChangeNotifier {
   // ------------------------------------------------------------ invites
   /// Invites a reader by his six-digit number: a small note in the live
   /// database that his app picks up (with a notification on Android).
-  Future<String?> invite(String no, Challenge c) async {
+  Future<String?> invite(String no, Challenge c) => inviteTo(no, c.code, c.mode);
+
+  Future<String?> inviteTo(String no, String code, String mode) async {
     final u = Cloud.instance.user;
     no = no.trim();
     if (u == null) return 'سجّل الدخول أولاً.';
@@ -819,12 +821,43 @@ class Challenges extends ChangeNotifier {
       final token = await u.getIdToken();
       final r = await _http
           .put(Uri.parse('$rtUrl/inv/$no/${c.code}.json?auth=$token'),
-              body: jsonEncode({'by': _name, 'mode': c.mode, 'at': {'.sv': 'timestamp'}}))
+              body: jsonEncode({'by': _name, 'no': askerNo(u.uid), 'mode': c.mode, 'at': {'.sv': 'timestamp'}}))
           .timeout(const Duration(seconds: 10));
       return r.statusCode == 200 ? null : 'تعذّر إرسال الدعوة.';
     } catch (_) {
       return 'تعذّر إرسال الدعوة، تأكد من الاتصال.';
     }
+  }
+
+  /// Invites that came while the app was closed: (name, number, time).
+  List<(String, int, int)> missed = [];
+
+  Future<void> _addMissed(String by, int no, int at) async {
+    missed = [(by, no, at), ...missed.where((m) => m.$3 != at)].take(10).toList();
+    await _saveMissed();
+    notifyListeners();
+  }
+
+  Future<void> _saveMissed() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setString('missedInv', jsonEncode([for (final m in missed) [m.$1, m.$2, m.$3]]));
+    } catch (_) {}
+  }
+
+  Future<void> loadMissed() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      final l = jsonDecode(p.getString('missedInv') ?? '[]') as List;
+      missed = [for (final x in l) ('${x[0]}', (x[1] as num).toInt(), (x[2] as num).toInt())];
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  Future<void> dismissMissed(int at) async {
+    missed = missed.where((m) => m.$3 != at).toList();
+    await _saveMissed();
+    notifyListeners();
   }
 
   final _http = http.Client();
@@ -862,7 +895,12 @@ class Challenges extends ChangeNotifier {
         final v = e.value is Map ? e.value as Map : const {};
         final at = (v['at'] as num?)?.toInt() ?? 0;
         unawaited(_http.delete(Uri.parse('$rtUrl/inv/$no/$code.json?auth=$token')).catchError((_) => http.Response('', 0)));
-        if (now - at > 150000 || !_seenInv.add(code)) continue; // older than the waiting time
+        if (!_seenInv.add(code)) continue;
+        if (now - at > 150000) {
+          // Too late to join (the app was closed): kept as «فاتك تحدٍّ من فلان».
+          await _addMissed('${v['by'] ?? 'أحد القرّاء'}', (v['no'] as num?)?.toInt() ?? 0, at);
+          continue;
+        }
         onInvite?.call(code, '${v['by'] ?? 'أحد القرّاء'}', '${v['mode'] ?? 'duel'}');
       }
     } catch (_) {

@@ -145,7 +145,7 @@ def public_pages(full):
     except Exception:
         prev, full = {'at': 0, 'p': {}, 'u': {}}, True
     fields = ['nick', 'showName', 'no', 'score', 'pts', 'reads', 'listens', 'hifz', 'days', 'badges',
-              'chPlayed', 'chWinsDuel', 'chWinsGroup', 'fw', 'qt', 'at']
+              'chPlayed', 'chWinsDuel', 'chWinsGroup', 'fw', 'qt', 'at', 'rm', 'mk', 'dc']
     started = dt.datetime.now(dt.timezone.utc)
     if full:
         rows = list_all('quizUsers', fields)
@@ -171,6 +171,9 @@ def public_pages(full):
             'cp': m.get('chPlayed') or 0, 'cw': (m.get('chWinsDuel') or 0) + (m.get('chWinsGroup') or 0),
             'fw': [str(x) for x in (m.get('fw') or [])][:500],
             'q': [{'t': str(q.get('t', ''))[:600], 's': str(q.get('s', ''))[:120], 'at': q.get('at', 0)} for q in qt],
+            # This month's reading («سباق القراءة») and today's «تحدّي اليوم».
+            'rm': m.get('rm') or 0, 'mk': str(m.get('mk') or ''),
+            'dc': m.get('dc') if isinstance(m.get('dc'), dict) else None,
         }
     # Followers: everyone whose list holds the number.
     count = {}
@@ -181,6 +184,20 @@ def public_pages(full):
     for no, p in pages.items():
         p['fr'] = count.get(no, 0)
         p['fg'] = len(set(p['fw']) - {no})
+    # «تحدّي اليوم»: the board of each of the last days, from the results
+    # the phones send with their profile (no extra reads).
+    boards = {}
+    for no, p in pages.items():
+        dc = p.get('dc')
+        if not isinstance(dc, dict) or not dc.get('d'):
+            continue
+        boards.setdefault(str(dc['d']), []).append({
+            'n': p['n'], 'no': int(no), 's': int(dc.get('s') or 0), 'r': int(dc.get('r') or 0), 'ms': int(dc.get('ms') or 0)})
+    days = sorted(boards)[-3:]
+    daily = {'at': int(started.timestamp() * 1000), 'days': {
+        d: sorted(boards[d], key=lambda x: (-x['s'], x['ms'] or 1 << 30))[:50] for d in days}}
+    with open('daily.json', 'w', encoding='utf-8') as f:
+        json.dump(daily, f, ensure_ascii=False, separators=(',', ':'))
     out = {'at': int(started.timestamp() * 1000), 'p': pages, 'u': uids}
     with open('profiles.json', 'w', encoding='utf-8') as f:
         json.dump(out, f, ensure_ascii=False, separators=(',', ':'))

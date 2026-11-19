@@ -105,7 +105,10 @@ class AudioCenter extends ChangeNotifier {
       unawaited(player.play());
       Progress.listened();
       _saver?.cancel();
-      _saver = Timer.periodic(const Duration(seconds: 10), (_) => _savePos());
+      _saver = Timer.periodic(const Duration(seconds: 10), (_) {
+        _savePos();
+        if (playing) Progress.addListen(10);
+      });
     } catch (_) {
       loading = false;
       error = 'تعذّر تشغيل التسجيل، تأكد من الاتصال بالإنترنت';
