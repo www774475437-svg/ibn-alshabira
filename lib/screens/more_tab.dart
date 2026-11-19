@@ -26,6 +26,7 @@ import 'quiz_screens.dart';
 import 'prayer_screen.dart';
 import 'tools_screens.dart';
 import 'profile_screen.dart';
+import 'widgets_screen.dart';
 import '../widgets/sky_card.dart';
 import '../services/cloud.dart';
 
@@ -404,6 +405,13 @@ class MoreTab extends StatelessWidget {
                     const DropdownMenuItem(value: 3, child: Text('داكن بعد المغرب')),
                   ],
                 ),
+              ),
+              ListTile(
+                leading: const _IconBox(Icons.widgets_outlined),
+                title: const Text('ويدجت الشاشة الرئيسية'),
+                subtitle: const Text('جواب اليوم، ذِكر، قراءتي، سؤال اليوم، بطولة الجمعة، المواقيت'),
+                trailing: const Icon(Icons.chevron_left),
+                onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const WidgetsScreen())),
               ),
               SwitchListTile(
                 secondary: const _IconBox(Icons.text_increase),

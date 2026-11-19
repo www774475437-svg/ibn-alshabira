@@ -25,6 +25,13 @@ import 'services/reminders.dart';
 import 'services/profiles.dart';
 import 'services/progress.dart';
 import 'theme.dart';
+import 'services/home_widgets.dart';
+import 'services/quiz.dart';
+import 'screens/adhkar_screen.dart';
+import 'screens/quiz_screens.dart' show QuizHomeScreen;
+import 'screens/profile_screen.dart' show DashboardScreen;
+import 'screens/tour_screens.dart' show TourScreen, TourRecordScreen;
+import 'widgets/common.dart' show openFatwa;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -47,8 +54,14 @@ Future<void> main() async {
     Challenges.instance.onInvite = _showInvite;
     Challenges.instance.startInvites();
     Tour.instance.load();
-    AppLifecycleListener(onResume: Challenges.instance.checkInvites);
+    AppLifecycleListener(onResume: () {
+      Challenges.instance.checkInvites();
+      _openFromWidget();
+      HomeWidgets.push();
+    });
   });
+  // A tapped home-screen widget opens its page.
+  Future<void>.delayed(const Duration(milliseconds: 1500), _openFromWidget);
   DayLog.instance.start();
   // Reminders and the prayer widget, once the settings have loaded.
   Future<void>.delayed(const Duration(seconds: 12), () async {
@@ -58,6 +71,8 @@ Future<void> main() async {
     await Profiles.instance.load(); // pages of the people one follows; «new follower» notice
     await Prayer.instance.load();
     await Prayer.instance.pushWidget();
+    await Quiz.instance.load();
+    await HomeWidgets.push();
   });
   if (quick) Future.delayed(const Duration(milliseconds: 400), Repository.instance.loadRest);
   // Set up the daily notification after the first frame; never blocks startup.
@@ -73,6 +88,27 @@ Future<void> main() async {
 }
 
 final appNavKey = GlobalKey<NavigatorState>();
+
+Future<void> _openFromWidget() async {
+  final t = await HomeWidgets.takeLaunch();
+  final nav = appNavKey.currentState;
+  final ctx = appNavKey.currentContext;
+  if (t == null || nav == null || ctx == null) return;
+  if (t.startsWith('answer:')) {
+    final f = Repository.instance.findById(t.substring(7));
+    if (f != null) openFatwa(ctx, f);
+    return;
+  }
+  final Widget page = switch (t) {
+    'dhikr' => const AdhkarScreen(),
+    'quiz' => const QuizHomeScreen(),
+    'read' => const DashboardScreen(),
+    'tour' => Tour.instance.showCard ? TourScreen(dayKey: Tour.keyOf(Tour.nextStart())) : const TourRecordScreen(),
+    _ => const SizedBox.shrink(),
+  };
+  if (page is SizedBox) return;
+  nav.push(MaterialPageRoute(builder: (_) => page));
+}
 
 void _showInvite(String code, String by, String mode) {
   final what = mode == 'duel' ? 'تحدٍّ فردي' : 'تحدٍّ جماعي';

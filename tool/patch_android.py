@@ -142,8 +142,18 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : {base}() {{
+    // A widget that was tapped: the app opens on its page.
+    private var pendingOpen: String? = null
+
+    override fun onNewIntent(intent: android.content.Intent) {{
+        super.onNewIntent(intent)
+        setIntent(intent)
+        intent.getStringExtra("open")?.let {{ pendingOpen = it }}
+    }}
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {{
         super.configureFlutterEngine(flutterEngine)
+        intent?.getStringExtra("open")?.let {{ pendingOpen = it }}
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "ibn_alshabira/icon").setMethodCallHandler {{ call, result ->
             if (call.method == "set") {{
                 val chosen = (call.arguments as? Int) ?: 0
@@ -172,13 +182,38 @@ class MainActivity : {base}() {{
                 result.success(true)
             }} else if (call.method == "pinWidget") {{
                 var ok = false
+                val cls: Class<*> = when (call.arguments as? String) {{
+                    "answer" -> AnswerWidget::class.java
+                    "dhikr" -> DhikrWidget::class.java
+                    "read" -> ReadWidget::class.java
+                    "quiz" -> QuizWidget::class.java
+                    "tour" -> TourWidget::class.java
+                    else -> PrayerWidget::class.java
+                }}
                 if (android.os.Build.VERSION.SDK_INT >= 26) {{
                     val mgr = android.appwidget.AppWidgetManager.getInstance(this)
                     if (mgr.isRequestPinAppWidgetSupported) {{
-                        ok = mgr.requestPinAppWidget(ComponentName(this, PrayerWidget::class.java), null, null)
+                        ok = mgr.requestPinAppWidget(ComponentName(this, cls), null, null)
                     }}
                 }}
                 result.success(ok)
+            }} else if (call.method == "widgets") {{
+                val a = call.arguments as? Map<*, *>
+                val e = getSharedPreferences("app_widgets", MODE_PRIVATE).edit()
+                a?.forEach {{ (k, v) ->
+                    when (v) {{
+                        is String -> e.putString(k.toString(), v)
+                        is Int -> e.putLong(k.toString(), v.toLong())
+                        is Long -> e.putLong(k.toString(), v)
+                    }}
+                }}
+                e.apply()
+                InfoWidget.refreshAll(this)
+                result.success(true)
+            }} else if (call.method == "takeLaunch") {{
+                val t = pendingOpen
+                pendingOpen = null
+                result.success(t)
             }} else {{
                 result.notImplemented()
             }}
@@ -412,3 +447,151 @@ if "ACCESS_COARSE_LOCATION" not in m:
     m = m.replace("<application", '<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>\n    <application', 1)
 manifest.write_text(m, encoding="utf-8")
 print("Prayer widget added")
+
+
+# --- More home-screen widgets ---------------------------------------------
+# One calm card design in four colours; the app writes their text
+# (MainActivity "widgets") and a tap opens the app on that page.
+for f in glob.glob("android/app/src/main/kotlin/**/MainActivity.kt", recursive=True):
+    pkg = re.search(r"^package\s+(\S+)", Path(f).read_text(encoding="utf-8"), re.M).group(1)
+    Path(f).with_name("InfoWidget.kt").write_text(f"""package {pkg}
+
+import android.app.PendingIntent
+import android.appwidget.AppWidgetManager
+import android.appwidget.AppWidgetProvider
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.os.Build
+import android.os.SystemClock
+import android.view.View
+import android.widget.RemoteViews
+
+abstract class InfoWidget : AppWidgetProvider() {{
+    abstract val key: String
+    abstract val bg: Int
+    abstract val label: String
+    abstract val code: Int
+
+    override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {{
+        for (id in ids) manager.updateAppWidget(id, build(context))
+    }}
+
+    fun build(context: Context): RemoteViews {{
+        val p = context.getSharedPreferences("app_widgets", Context.MODE_PRIVATE)
+        val v = RemoteViews(context.packageName, R.layout.info_widget)
+        v.setInt(R.id.wroot, "setBackgroundResource", bg)
+        v.setTextViewText(R.id.wlabel, p.getString(key + "_label", label) ?: label)
+        v.setTextViewText(R.id.wtitle, p.getString(key + "_title", "افتح التطبيق مرة") ?: "")
+        v.setTextViewText(R.id.wbody, p.getString(key + "_body", "") ?: "")
+        v.setTextViewText(R.id.wfoot, p.getString(key + "_foot", "ابن الشابرة") ?: "")
+        val at = p.getLong(key + "_at", 0L)
+        val now = System.currentTimeMillis()
+        if (at > now) {{
+            v.setViewVisibility(R.id.wcount, View.VISIBLE)
+            v.setChronometer(R.id.wcount, SystemClock.elapsedRealtime() + (at - now), null, true)
+            if (Build.VERSION.SDK_INT >= 24) v.setChronometerCountDown(R.id.wcount, true)
+        }} else {{
+            v.setViewVisibility(R.id.wcount, View.GONE)
+        }}
+        val open = context.packageManager.getLaunchIntentForPackage(context.packageName)
+        if (open != null) {{
+            open.putExtra("open", p.getString(key + "_open", key) ?: key)
+            open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            v.setOnClickPendingIntent(R.id.wroot, PendingIntent.getActivity(context, code, open,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
+        }}
+        return v
+    }}
+
+    companion object {{
+        fun refreshAll(context: Context) {{
+            val mgr = AppWidgetManager.getInstance(context)
+            for (w in listOf(AnswerWidget(), DhikrWidget(), ReadWidget(), QuizWidget(), TourWidget())) {{
+                val ids = mgr.getAppWidgetIds(ComponentName(context, w.javaClass))
+                for (id in ids) mgr.updateAppWidget(id, w.build(context))
+            }}
+        }}
+    }}
+}}
+
+class AnswerWidget : InfoWidget() {{
+    override val key = "answer"; override val bg = R.drawable.w_navy; override val label = "جواب اليوم"; override val code = 31
+}}
+class DhikrWidget : InfoWidget() {{
+    override val key = "dhikr"; override val bg = R.drawable.w_green; override val label = "ذِكر"; override val code = 32
+}}
+class ReadWidget : InfoWidget() {{
+    override val key = "read"; override val bg = R.drawable.w_gold; override val label = "قراءتي هذا الشهر"; override val code = 33
+}}
+class QuizWidget : InfoWidget() {{
+    override val key = "quiz"; override val bg = R.drawable.w_night; override val label = "سؤال اليوم"; override val code = 34
+}}
+class TourWidget : InfoWidget() {{
+    override val key = "tour"; override val bg = R.drawable.w_navy; override val label = "بطولة الجمعة"; override val code = 35
+}}
+""", encoding="utf-8")
+    print("InfoWidget.kt written")
+
+for k, (a, b, c) in {
+    "navy": ("#0B2230", "#16404B", "#2E6B73"),
+    "green": ("#082E22", "#14532D", "#2F7A4D"),
+    "gold": ("#3A2A0C", "#7A5A22", "#C9A54C"),
+    "night": ("#0B1230", "#1B2A5C", "#3A2E6B"),
+}.items():
+    (res_main / "drawable" / f"w_{k}.xml").write_text(f"""<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <corners android:radius="26dp"/>
+    <gradient android:angle="315" android:startColor="{a}" android:centerColor="{b}" android:endColor="{c}" android:type="linear"/>
+</shape>
+""", encoding="utf-8")
+(res_main / "layout" / "info_widget.xml").write_text("""<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/wroot" android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:padding="14dp" android:layoutDirection="rtl"
+    android:background="@drawable/w_navy">
+    <TextView android:id="@+id/wlabel" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="" android:textColor="#E0B35A" android:textSize="12sp" android:textStyle="bold" android:gravity="start"/>
+    <TextView android:id="@+id/wtitle" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:layout_marginTop="4dp" android:text="" android:textColor="#FFFFFF" android:textSize="16sp"
+        android:textStyle="bold" android:maxLines="2" android:ellipsize="end" android:gravity="start"/>
+    <TextView android:id="@+id/wbody" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
+        android:layout_marginTop="4dp" android:text="" android:textColor="#E6FFFFFF" android:textSize="13sp"
+        android:maxLines="4" android:ellipsize="end" android:lineSpacingMultiplier="1.15" android:gravity="start"/>
+    <Chronometer android:id="@+id/wcount" android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:textColor="#E0B35A" android:textSize="22sp" android:textStyle="bold" android:visibility="gone"/>
+    <TextView android:id="@+id/wfoot" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="ابن الشابرة" android:textColor="#AAFFFFFF" android:textSize="11sp" android:gravity="end"/>
+</LinearLayout>
+""", encoding="utf-8")
+names = {"answer": ("AnswerWidget", "جواب اليوم"), "dhikr": ("DhikrWidget", "ذِكر"), "read": ("ReadWidget", "قراءتي هذا الشهر"),
+         "quiz": ("QuizWidget", "سؤال اليوم"), "tour": ("TourWidget", "بطولة الجمعة")}
+st = strings.read_text(encoding="utf-8")
+for k, (cls, label) in names.items():
+    (res_main / "xml" / f"{k}_widget_info.xml").write_text(f"""<?xml version="1.0" encoding="utf-8"?>
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="250dp" android:minHeight="110dp"
+    android:targetCellWidth="4" android:targetCellHeight="2"
+    android:updatePeriodMillis="3600000"
+    android:initialLayout="@layout/info_widget"
+    android:previewLayout="@layout/info_widget"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen"
+    android:description="@string/{k}_widget_desc"/>
+""", encoding="utf-8")
+    if f"{k}_widget_desc" not in st:
+        st = st.replace("</resources>", f'    <string name="{k}_widget_desc">{label}</string>\n</resources>')
+strings.write_text(st, encoding="utf-8")
+m = manifest.read_text(encoding="utf-8")
+for k, (cls, label) in names.items():
+    if f'.{cls}"' in m:
+        continue
+    m = m.replace("</application>", f"""        <receiver android:name=".{cls}" android:exported="false" android:label="{label}">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/{k}_widget_info"/>
+        </receiver>
+    </application>""", 1)
+manifest.write_text(m, encoding="utf-8")
+print("Info widgets added")
