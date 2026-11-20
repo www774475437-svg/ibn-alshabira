@@ -332,9 +332,6 @@ class AdminScreen extends StatelessWidget {
               title: Text(full ? 'لوحة الإدارة' : 'لوحة المحرّر'),
               bottom: TabBar(
                 isScrollable: true,
-                labelColor: kGold,
-                unselectedLabelColor: Colors.white70,
-                indicatorColor: kGold,
                 tabs: [for (final t in tabs) t.$1],
               ),
             ),

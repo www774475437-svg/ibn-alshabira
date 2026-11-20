@@ -206,6 +206,22 @@ class _BookReaderScreenState extends State<BookReaderScreen> {
     }
   }
 
+  /// Deletes the copy kept on the phone and downloads the book again.
+  Future<void> _redownload() async {
+    try {
+      await BooksStore.delete(widget.book);
+    } catch (_) {}
+    if (!mounted) return;
+    setState(() {
+      _file = null;
+      _progress = 0;
+      _page = 1;
+    });
+    final p = await SharedPreferences.getInstance();
+    await p.remove(_pageKey);
+    _load();
+  }
+
   Future<void> _savePrefs() async {
     final p = await SharedPreferences.getInstance();
     await p.setInt('reader_paper', _paper.index);
@@ -646,7 +662,14 @@ class _BookReaderScreenState extends State<BookReaderScreen> {
                           onPressed: () => openUrl(context, widget.book.previewUrl),
                           icon: const Icon(Icons.open_in_new),
                           label: const Text('افتح الكتاب'))
-                      : FilledButton(onPressed: _load, child: const Text('إعادة المحاولة')),
+                      : Wrap(alignment: WrapAlignment.center, spacing: 10, runSpacing: 10, children: [
+                          FilledButton.icon(
+                              onPressed: _load, icon: const Icon(Icons.refresh), label: const Text('إعادة المحاولة')),
+                          OutlinedButton.icon(
+                              onPressed: () => openUrl(context, widget.book.previewUrl),
+                              icon: const Icon(Icons.open_in_new),
+                              label: const Text('اقرأه بعارض جوجل')),
+                        ]),
                 ],
               ),
             )
@@ -690,9 +713,16 @@ class _BookReaderScreenState extends State<BookReaderScreen> {
                             params: PdfViewerParams(
                               backgroundColor: _paper == _Paper.night ? const Color(0xFFEAEAEA) : _bg,
                               pagePaintCallbacks: [_searcher.pageTextMatchPaintCallback],
+                              // A damaged copy on the phone: download it again, or read it in Google's viewer.
+                              errorBannerBuilder: (context, error, stackTrace, documentRef) => _BrokenBook(
+                                onRetry: _redownload,
+                                onViewer: () => openUrl(context, widget.book.previewUrl),
+                              ),
                               onViewerReady: (document, controller) {
                                 _doc = document;
                                 if (mounted) setState(() => _pages = document.pages.length);
+                                // A saved place beyond the end (the book was replaced): start from the first page.
+                                if (_page > document.pages.length) controller.goToPage(pageNumber: 1);
                                 SharedPreferences.getInstance().then(
                                     (p) => p.setInt('book_pages_${widget.book.id}', document.pages.length));
                               },
@@ -922,4 +952,29 @@ class _ReaderNotebookScreenState extends State<ReaderNotebookScreen> {
       ]),
     );
   }
+}
+
+
+/// Shown when the book file cannot be opened.
+class _BrokenBook extends StatelessWidget {
+  final VoidCallback onRetry, onViewer;
+  const _BrokenBook({required this.onRetry, required this.onViewer});
+
+  @override
+  Widget build(BuildContext context) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Icon(Icons.menu_book_outlined, size: 56, color: kGold),
+            const SizedBox(height: 12),
+            const Text('تعذّر فتح نسخة الكتاب المحفوظة في جهازك', textAlign: TextAlign.center),
+            const SizedBox(height: 14),
+            Wrap(alignment: WrapAlignment.center, spacing: 10, runSpacing: 10, children: [
+              FilledButton.icon(onPressed: onRetry, icon: const Icon(Icons.download), label: const Text('نزّله من جديد')),
+              OutlinedButton.icon(
+                  onPressed: onViewer, icon: const Icon(Icons.open_in_new), label: const Text('اقرأه بعارض جوجل')),
+            ]),
+          ]),
+        ),
+      );
 }

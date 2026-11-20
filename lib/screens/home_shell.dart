@@ -1,5 +1,9 @@
+import 'dart:math' as math;
+import 'dart:ui' as ui;
+
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config.dart';
@@ -24,11 +28,47 @@ class HomeShell extends StatefulWidget {
   State<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends State<HomeShell> {
+class _HomeShellState extends State<HomeShell> with TickerProviderStateMixin {
   String _tab = 'home';
+  String _from = 'home';
   final Set<String> _opened = {'home'};
+  bool _collapsed = false;
+  int _lastScroll = 0;
+  late final AnimationController _slide =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 520), value: 1);
 
-  void _goTo(String id) => setState(() => _tab = id);
+  void _goTo(String id) {
+    HapticFeedback.selectionClick();
+    if (_collapsed) setState(() => _collapsed = false);
+    if (id == _tab) return;
+    setState(() {
+      _from = _tab;
+      _tab = id;
+    });
+    _slide.forward(from: 0);
+  }
+
+  @override
+  void dispose() {
+    _slide.dispose();
+    super.dispose();
+  }
+
+  /// Reading down a page shrinks the bar to one circle; a quick flick up
+  /// brings it back (as in «منتقيات الشعر»).
+  bool _onScroll(ScrollNotification n) {
+    if (n.metrics.axis != Axis.vertical || n.depth != 0 || n is! ScrollUpdateNotification) return false;
+    final d = n.scrollDelta ?? 0;
+    final now = DateTime.now().microsecondsSinceEpoch;
+    final dt = (now - _lastScroll) / 1000.0;
+    _lastScroll = now;
+    if (d > 1.5 && !_collapsed && n.metrics.pixels > 60) {
+      setState(() => _collapsed = true);
+    } else if (_collapsed && (n.metrics.pixels < 10 || (d < 0 && dt > 0 && dt < 80 && d / dt < -1.6))) {
+      setState(() => _collapsed = false);
+    }
+    return false;
+  }
 
   @override
   void initState() {
@@ -130,79 +170,195 @@ class _HomeShellState extends State<HomeShell> {
           }
         }
 
+        final keyboard = MediaQuery.viewInsetsOf(context).bottom > 0;
+        final bottom = MediaQuery.paddingOf(context).bottom;
+        const barH = 66.0;
+        final from = ids.indexOf(_from) < 0 ? index : ids.indexOf(_from);
         return Scaffold(
-          body: Column(children: [
-            Expanded(
-              child: IndexedStack(
-                index: index,
-                children: [for (final id in ids) KeyedSubtree(key: ValueKey(id), child: page(id))],
+          body: Stack(children: [
+            Positioned.fill(
+              child: NotificationListener<ScrollNotification>(
+                onNotification: _onScroll,
+                child: AnimatedPadding(
+                  duration: const Duration(milliseconds: 260),
+                  curve: Curves.easeOut,
+                  // pages end above the bar, so it never covers their last lines
+                  padding: EdgeInsets.only(bottom: keyboard ? 0 : barH + 14 + bottom),
+                  child: Column(children: [
+                    Expanded(
+                      child: IndexedStack(
+                        index: index,
+                        children: [for (final id in ids) KeyedSubtree(key: ValueKey(id), child: page(id))],
+                      ),
+                    ),
+                    const _OfflineBar(),
+                  ]),
+                ),
               ),
             ),
-            const _OfflineBar(),
-          ]),
-          // A floating rounded bar, and the search as its own round button.
-          bottomNavigationBar: SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(10, 6, 10, 8),
-              child: Row(children: [
-                Expanded(
-                  child: _Pill(
-                    child: Row(children: [
-                      for (var i = 0; i < ids.length; i++)
-                        Expanded(
-                          child: _NavItem(
-                            item: dest(ids[i]),
-                            selected: i == index,
-                            small: ids.length > 6,
-                            onTap: () => _goTo(ids[i]),
+            Positioned(
+              left: 12,
+              right: 12,
+              bottom: 10 + bottom,
+              height: barH,
+              child: AnimatedSlide(
+                duration: const Duration(milliseconds: 280),
+                curve: Curves.easeOutCubic,
+                offset: keyboard ? const Offset(0, 2) : Offset.zero,
+                child: IgnorePointer(
+                  ignoring: keyboard,
+                  child: LayoutBuilder(builder: (context, box) {
+                    final full = box.maxWidth - barH - 10;
+                    return Stack(children: [
+                      // The round search button keeps its place.
+                      PositionedDirectional(
+                        end: 0,
+                        child: _Glass(
+                          width: barH,
+                          height: barH,
+                          child: InkWell(
+                            customBorder: const CircleBorder(),
+                            onTap: () {
+                              HapticFeedback.selectionClick();
+                              Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SearchTab()));
+                            },
+                            child: Center(child: Icon(Icons.search_rounded, size: 30, color: Pal.ink(context))),
                           ),
                         ),
-                    ]),
-                  ),
+                      ),
+                      // The bar: full, or shrunk to one circle while reading down a page.
+                      PositionedDirectional(
+                        start: 0,
+                        child: TweenAnimationBuilder<double>(
+                          tween: Tween(end: _collapsed ? 0.0 : 1.0),
+                          duration: const Duration(milliseconds: 460),
+                          curve: Curves.easeOutBack,
+                          builder: (context, t, _) {
+                            final w = barH + (full - barH) * t;
+                            final open = t.clamp(0.0, 1.0);
+                            final cur = dest(ids[index]);
+                            return _Glass(
+                              width: w < barH ? barH : w,
+                              height: barH,
+                              child: Stack(children: [
+                                if (open > 0.02)
+                                  Opacity(
+                                    opacity: Curves.easeIn.transform(open),
+                                    child: OverflowBox(
+                                      alignment: AlignmentDirectional.centerStart,
+                                      minWidth: full,
+                                      maxWidth: full,
+                                      child: AnimatedBuilder(
+                                        animation: _slide,
+                                        builder: (context, _) => _items(context, full, barH, ids, index, from, dest),
+                                      ),
+                                    ),
+                                  ),
+                                if (open < 0.98)
+                                  Opacity(
+                                    opacity: 1 - open,
+                                    child: GestureDetector(
+                                      behavior: HitTestBehavior.opaque,
+                                      onTap: () => _goTo(_tab),
+                                      child: Center(
+                                        child: Transform.scale(
+                                          scale: 1.15 - 0.15 * open,
+                                          child: Icon(cur.$2, color: Pal.accent(context), size: 28),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ]),
+                            );
+                          },
+                        ),
+                      ),
+                    ]);
+                  }),
                 ),
-                const SizedBox(width: 8),
-                _Pill(
-                  round: true,
-                  child: InkWell(
-                    customBorder: const CircleBorder(),
-                    onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SearchTab())),
-                    child: const SizedBox(
-                      width: 58,
-                      height: 58,
-                      child: Icon(Icons.search_rounded, size: 28),
-                    ),
-                  ),
-                ),
-              ]),
+              ),
             ),
-          ),
+          ]),
         );
       },
     );
   }
+
+  /// The tabs with the pill that slides, stretches like liquid, then settles.
+  Widget _items(BuildContext context, double full, double barH, List<String> ids, int index, int from,
+      (IconData, IconData, String, int) Function(String) dest) {
+    const pad = 5.0;
+    final item = (full - pad * 2) / ids.length;
+    final t = _slide.value;
+    final pos = from + (index - from) * Curves.easeOutBack.transform(t);
+    final stretch = math.sin(math.pi * t) * item * 0.38 * (index - from).abs().clamp(0, 1);
+    final squash = 1 - math.sin(math.pi * t) * 0.14;
+    final pillH = barH - pad * 2;
+    return Stack(children: [
+      PositionedDirectional(
+        start: pad + pos * item - stretch / 2,
+        top: pad + (pillH * (1 - squash)) / 2,
+        width: item + stretch,
+        height: pillH * squash,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: Pal.soft(context),
+            borderRadius: BorderRadius.circular(32),
+            boxShadow: [
+              BoxShadow(color: Pal.accent(context).withValues(alpha: 0.18 * math.sin(math.pi * t)), blurRadius: 16)
+            ],
+          ),
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.all(pad),
+        child: Row(children: [
+          for (var i = 0; i < ids.length; i++)
+            Expanded(
+              child: _NavItem(
+                item: dest(ids[i]),
+                selected: i == index,
+                small: ids.length > 6,
+                onTap: () => _goTo(ids[i]),
+              ),
+            ),
+        ]),
+      ),
+    ]);
+  }
 }
 
-/// The glass look of the bottom bar and the search button.
-class _Pill extends StatelessWidget {
+/// Frosted-glass capsule (the bar and the search circle).
+class _Glass extends StatelessWidget {
+  final double width, height;
   final Widget child;
-  final bool round;
-  const _Pill({required this.child, this.round = false});
+  const _Glass({required this.width, required this.height, required this.child});
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    final dark = t.brightness == Brightness.dark;
-    final shape = round
-        ? CircleBorder(side: BorderSide(color: t.colorScheme.onSurface.withValues(alpha: dark ? .16 : .10)))
-        : StadiumBorder(side: BorderSide(color: t.colorScheme.onSurface.withValues(alpha: dark ? .16 : .10)));
-    return Material(
-      color: dark ? const Color(0xFF1C1F24) : t.cardTheme.color ?? Colors.white,
-      elevation: dark ? 0 : 6,
-      shadowColor: Colors.black.withValues(alpha: .18),
-      shape: shape,
-      clipBehavior: Clip.antiAlias,
-      child: child,
+    final dark = Pal.dark(context);
+    final r = BorderRadius.circular(height / 2 + 4);
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        borderRadius: r,
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: dark ? .35 : .14), blurRadius: 24, offset: const Offset(0, 8))],
+      ),
+      child: ClipRRect(
+        borderRadius: r,
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+          child: Container(
+            decoration: BoxDecoration(
+              color: (dark ? const Color(0xFF22272D) : Colors.white).withValues(alpha: dark ? .88 : .86),
+              borderRadius: r,
+              border: Border.all(color: Pal.line(context).withValues(alpha: .8)),
+            ),
+            child: Material(type: MaterialType.transparency, child: child),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -215,42 +371,38 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    final dark = t.brightness == Brightness.dark;
-    final on = dark ? kGold : t.colorScheme.primary;
-    final off = t.colorScheme.onSurface.withValues(alpha: .72);
-    Widget icon = Icon(selected ? item.$2 : item.$1, size: small ? 22 : 24, color: selected ? on : off);
+    final color = selected ? Pal.accent(context) : Pal.ink(context).withValues(alpha: .78);
+    Widget icon = AnimatedScale(
+      scale: selected ? 1.16 : 1,
+      duration: const Duration(milliseconds: 420),
+      curve: Curves.easeOutBack,
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 220),
+        child: Icon(selected ? item.$2 : item.$1, key: ValueKey(selected), color: color, size: small ? 23 : 25),
+      ),
+    );
     if (item.$4 > 0) icon = Badge(label: Text('${item.$4}'), child: icon);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 1),
-      child: Material(
-        color: selected ? on.withValues(alpha: dark ? .16 : .12) : Colors.transparent,
-        shape: const StadiumBorder(),
-        child: InkWell(
-          customBorder: const StadiumBorder(),
-          onTap: onTap,
-          child: SizedBox(
-            height: 50,
-            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-              icon,
-              const SizedBox(height: 2),
-              // The whole name, made smaller when it is long («المشايخ الثقات»).
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(item.$3,
-                  maxLines: 1,
-                  softWrap: false,
-                  textScaler: TextScaler.noScaling,
-                  style: TextStyle(
-                      fontSize: small ? 9.5 : 10.5,
-                      height: 1.1,
-                      color: selected ? on : off,
-                      fontWeight: selected ? FontWeight.bold : FontWeight.normal)),
-              ),
-            ]),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        icon,
+        const SizedBox(height: 2),
+        // The whole name, made smaller when it is long («المشايخ الثقات»).
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: AnimatedDefaultTextStyle(
+            duration: const Duration(milliseconds: 220),
+            style: TextStyle(
+                fontFamily: kUiFont,
+                fontSize: small ? 10 : 11.5,
+                height: 1.1,
+                fontWeight: FontWeight.w700,
+                color: color),
+            child: Text(item.$3, maxLines: 1, softWrap: false, textScaler: TextScaler.noScaling),
           ),
         ),
-      ),
+      ]),
     );
   }
 }

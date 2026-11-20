@@ -340,16 +340,16 @@ class _FatwaScreenState extends State<FatwaScreen> {
             title: _finding
                 ? TextField(
                     autofocus: true,
-                    style: const TextStyle(color: Colors.white),
-                    cursorColor: Colors.white,
                     decoration: InputDecoration(
                       hintText: 'ابحث داخل الجواب',
-                      hintStyle: const TextStyle(color: Colors.white60),
+                      filled: false,
                       border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
                       suffixText: _find.trim().length < 2
                           ? null
                           : '${countMatches('${current.title}\n${current.question}\n${current.answer}', _find)} موضع',
-                      suffixStyle: const TextStyle(color: Colors.white70, fontSize: 13),
+                      suffixStyle: const TextStyle(fontSize: 13),
                     ),
                     onChanged: (v) => setState(() => _find = v),
                   )

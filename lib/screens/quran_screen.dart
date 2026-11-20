@@ -825,9 +825,6 @@ class _IndexScreen extends StatelessWidget {
         appBar: AppBar(
           title: const Text('فهرس المصحف'),
           bottom: const TabBar(
-            labelColor: Color(0xFFC9A54C),
-            unselectedLabelColor: Colors.white70,
-            indicatorColor: Color(0xFFC9A54C),
             tabs: [Tab(text: 'السور'), Tab(text: 'الأجزاء')],
           ),
         ),
@@ -897,10 +894,8 @@ class _SearchScreenState extends State<_SearchScreen> {
       appBar: AppBar(
         title: TextField(
           autofocus: true,
-          style: const TextStyle(color: Colors.white),
-          cursorColor: Colors.white,
           decoration: const InputDecoration(
-              hintText: 'ابحث في المصحف', hintStyle: TextStyle(color: Colors.white60), border: InputBorder.none),
+              hintText: 'ابحث في المصحف', filled: false, border: InputBorder.none, enabledBorder: InputBorder.none, focusedBorder: InputBorder.none),
           onChanged: _run,
         ),
       ),

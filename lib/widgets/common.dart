@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../data/hijri.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
+import '../theme.dart';
 
 /// Icons the staff can give to any chapter.
 const chapterIcons = <String, IconData>{
@@ -251,12 +252,11 @@ class FatwaTile extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final preview = fatwa.question.isNotEmpty ? fatwa.question : fatwa.answer;
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
         onTap: () => openFatwa(context, fatwa),
         child: Padding(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -292,7 +292,7 @@ class FatwaTile extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(fatwa.title,
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  style: const TextStyle(fontSize: 16.5, fontWeight: FontWeight.bold, height: 1.5)),
               const SizedBox(height: 4),
               Text(preview,
                   maxLines: 2,
@@ -322,12 +322,15 @@ class _Chip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(20),
       ),
-      child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: color)),
+      child: Text(text,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontFamily: kUiFont, fontSize: 12, fontWeight: FontWeight.w700, color: color)),
     );
   }
 }
@@ -346,9 +349,14 @@ class EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 56, color: c),
-            const SizedBox(height: 12),
-            Text(text, textAlign: TextAlign.center, style: TextStyle(color: c, fontSize: 15)),
+            Container(
+              width: 86,
+              height: 86,
+              decoration: BoxDecoration(color: Pal.soft(context), shape: BoxShape.circle),
+              child: Icon(icon, size: 40, color: Pal.accent(context)),
+            ),
+            const SizedBox(height: 16),
+            Text(text, textAlign: TextAlign.center, style: TextStyle(fontFamily: kUiFont, color: c, fontSize: 16, height: 1.6)),
           ],
         ),
       ),

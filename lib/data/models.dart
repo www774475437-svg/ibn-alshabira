@@ -115,6 +115,12 @@ class Book {
   String get downloadUrl =>
       'https://drive.usercontent.google.com/download?id=$id&export=download&confirm=t';
 
+  /// The links tried in turn when the app downloads the book.
+  List<String> get downloadUrls => [
+        downloadUrl,
+        'https://drive.google.com/uc?export=download&id=$id&confirm=t',
+      ];
+
   /// On the website, books open in Google's viewer.
   String get previewUrl => 'https://drive.google.com/file/d/$id/view';
 }

@@ -19,9 +19,6 @@ class FavoritesTab extends StatelessWidget {
         appBar: AppBar(
           title: const Text('المحفوظات'),
           bottom: const TabBar(
-            labelColor: Color(0xFFC9A54C),
-            unselectedLabelColor: Colors.white70,
-            indicatorColor: Color(0xFFC9A54C),
             tabs: [
               Tab(icon: Icon(Icons.bookmark), text: 'المحفوظات'),
               Tab(icon: Icon(Icons.watch_later), text: 'اقرأ لاحقاً'),

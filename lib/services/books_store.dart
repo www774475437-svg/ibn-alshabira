@@ -26,28 +26,50 @@ class BooksStore {
   }
 
   /// Downloads the book (reporting progress 0..1, or -1 if size unknown).
+  /// Tries Drive's direct link, then its older download link, so one
+  /// change on Google's side does not stop the books.
   static Future<File> download(Book b, void Function(double) onProgress) async {
     final f = await _fileFor(b);
+    Object? last;
+    for (final url in b.downloadUrls) {
+      try {
+        return await _downloadFrom(url, f, onProgress);
+      } catch (e) {
+        last = e;
+        debugPrint('Book download failed from $url: $e');
+      }
+    }
+    throw Exception('$last');
+  }
+
+  static Future<File> _downloadFrom(String url, File f, void Function(double) onProgress) async {
     final tmp = File('${f.path}.part');
     final client = http.Client();
     try {
-      final res = await client.send(http.Request('GET', Uri.parse(b.downloadUrl)));
+      final req = http.Request('GET', Uri.parse(url))
+        ..headers['User-Agent'] = 'Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36';
+      final res = await client.send(req).timeout(const Duration(seconds: 30));
       if (res.statusCode != 200) throw Exception('HTTP ${res.statusCode}');
       final total = res.contentLength ?? 0;
       var got = 0;
+      if (await tmp.exists()) await tmp.delete();
       final sink = tmp.openWrite();
-      await for (final chunk in res.stream) {
-        sink.add(chunk);
-        got += chunk.length;
-        onProgress(total > 0 ? got / total : -1);
+      try {
+        await for (final chunk in res.stream.timeout(const Duration(seconds: 60))) {
+          sink.add(chunk);
+          got += chunk.length;
+          onProgress(total > 0 ? got / total : -1);
+        }
+      } finally {
+        await sink.close();
       }
-      await sink.close();
       // Must be a real PDF (not an error page)
       final head = await tmp.openRead(0, 4).first;
       if (String.fromCharCodes(head) != '%PDF') {
         await tmp.delete();
         throw Exception('not a pdf');
       }
+      if (await f.exists()) await f.delete();
       await tmp.rename(f.path);
       return f;
     } finally {
