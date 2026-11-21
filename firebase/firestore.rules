@@ -139,6 +139,11 @@ service cloud.firestore {
       allow create, delete: if isFullAdmin();
     }
     match /benefits/{id} { allow read: if true; allow write: if isAdmin(); }
+    // «كتب ينصح بها الشيخ»: the staff write; readers get them from the server file.
+    match /recBooks/{id} {
+      allow read: if isAdmin() || isBot();
+      allow write: if isAdmin();
+    }
     match /users/{uid} {
       allow read, write: if signedIn() && request.auth.uid == uid;
       // The staff and the server read the members' summaries («المسجّلون»).

@@ -33,6 +33,24 @@ class HijriScreen extends StatelessWidget {
     return null;
   }
 
+  /// The coming occasions, nearest first: (name, day, days left).
+  static List<(String, DateTime, int)> coming() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return [
+      for (final o in _occasions)
+        if (_next(o.$1, o.$2) case final DateTime at) (o.$3, at, at.difference(today).inDays),
+    ]..sort((a, b) => a.$3.compareTo(b.$3));
+  }
+
+  /// «1 رمضان 1448 هـ  ·  18/2/2027 م»
+  static String bothDates(DateTime d) {
+    final h = Hijri.from(d);
+    return '${h.day} ${Hijri.months[h.month - 1]} ${h.year} هـ  ·  ${d.day}/${d.month}/${d.year} م';
+  }
+
+  static String left(int n) => n == 0 ? 'اليوم' : n == 1 ? 'غداً' : n == 2 ? 'بعد يومين' : 'بعد $n يوماً';
+
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
@@ -46,10 +64,7 @@ class HijriScreen extends StatelessWidget {
       if (x.month != h.month) break;
       days.add((d, x));
     }
-    final coming = [
-      for (final o in _occasions)
-        if (_next(o.$1, o.$2) case final DateTime at) (o.$3, at, at.difference(today).inDays),
-    ]..sort((a, b) => a.$3.compareTo(b.$3));
+    final coming = HijriScreen.coming();
     const wd = ['الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت', 'الأحد'];
     return Scaffold(
       appBar: AppBar(title: const Text('التقويم الهجري')),
@@ -78,8 +93,8 @@ class HijriScreen extends StatelessWidget {
             child: ListTile(
               leading: const Icon(Icons.event_available, color: kGold),
               title: Text(c.$1, style: const TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: Text('${c.$2.day}/${c.$2.month}/${c.$2.year} م'),
-              trailing: Text(c.$3 == 0 ? 'اليوم' : c.$3 == 1 ? 'غداً' : 'بعد ${c.$3} يوماً',
+              subtitle: Text(bothDates(c.$2)),
+              trailing: Text(left(c.$3),
                   style: const TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.bold, color: kGoldChip)),
             ),
           ),
@@ -118,6 +133,54 @@ class HijriScreen extends StatelessWidget {
         const Text('الأيام المظلّلة هي الأيام البيض (13، 14، 15). التقويم محسوب في الجوال، وقد يختلف يوماً عن رؤية الهلال.',
             style: TextStyle(color: Colors.grey, height: 1.7, fontSize: 12.5)),
       ]),
+    );
+  }
+}
+
+
+/// A small card on the home page: the nearest occasion with its two dates
+/// and how many days are left. Tapping it opens the calendar.
+class OccasionCard extends StatelessWidget {
+  const OccasionCard({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final list = HijriScreen.coming();
+    if (list.isEmpty) return const SizedBox.shrink();
+    final c = list.first;
+    return Card(
+      margin: const EdgeInsets.fromLTRB(14, 10, 14, 4),
+      child: InkWell(
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const HijriScreen())),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(children: [
+            Container(
+              width: 62,
+              height: 62,
+              decoration: BoxDecoration(color: kGold.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(18)),
+              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                Text(c.$3 == 0 ? '🌙' : '${c.$3}',
+                    style: const TextStyle(fontFamily: kUiFont, fontSize: 22, fontWeight: FontWeight.bold, color: kGoldChip)),
+                if (c.$3 > 0) const Text('يوماً', style: TextStyle(fontFamily: kUiFont, fontSize: 11, color: kGoldChip)),
+              ]),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(c.$3 == 0 ? 'اليوم: ${c.$1}' : 'بقي على ${c.$1}',
+                    style: const TextStyle(fontFamily: kUiFont, fontSize: 16.5, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 3),
+                Text(HijriScreen.bothDates(c.$2), style: TextStyle(fontSize: 13, color: Pal.muted(context))),
+                if (list.length > 1)
+                  Text('ثم ${list[1].$1} ${HijriScreen.left(list[1].$3)}',
+                      style: TextStyle(fontSize: 12.5, color: Pal.muted(context))),
+              ]),
+            ),
+            Icon(Icons.chevron_left_rounded, color: Pal.muted(context)),
+          ]),
+        ),
+      ),
     );
   }
 }

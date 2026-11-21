@@ -13,6 +13,8 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import 'ask_screen.dart';
 import 'audio_library.dart';
+import 'my_benefits.dart' show MyBenefitsScreen;
+import 'recommended_books.dart';
 import 'channel_screen.dart';
 import 'account_screens.dart';
 import 'accounts_screen.dart';
@@ -155,6 +157,22 @@ class MoreTab extends StatelessWidget {
                 onTap: () => Navigator.of(context)
                     .push(MaterialPageRoute(builder: (_) => const MyReadingScreen())),
               ),
+              ListTile(
+                leading: const _IconBox(Icons.auto_awesome_outlined),
+                title: const Text('فوائدي المحفوظة'),
+                subtitle: const Text('الجمل التي حفظتها من الكتب والأجوبة'),
+                trailing: const Icon(Icons.chevron_left),
+                onTap: () => Navigator.of(context)
+                    .push(MaterialPageRoute(builder: (_) => const MyBenefitsScreen())),
+              ),
+              ListTile(
+                leading: const _IconBox(Icons.bookmarks_outlined),
+                title: const Text('علاماتي الصوتية'),
+                subtitle: const Text('دقائق حفظتها من الدروس، ترجع إليها بضغطة'),
+                trailing: const Icon(Icons.chevron_left),
+                onTap: () => Navigator.of(context)
+                    .push(MaterialPageRoute(builder: (_) => const AudioMarksScreen())),
+              ),
               ListenableBuilder(
                 listenable: Cloud.instance,
                 builder: (context, _) {
@@ -244,6 +262,14 @@ class MoreTab extends StatelessWidget {
                 trailing: const Icon(Icons.chevron_left),
                 onTap: () => Navigator.of(context)
                     .push(MaterialPageRoute(builder: (_) => const AudioLibraryScreen())),
+              ),
+              ListTile(
+                leading: const _IconBox(Icons.local_library_outlined),
+                title: const Text('كتب ينصح بها الشيخ'),
+                subtitle: const Text('كتب مختارة لطلبة العلم'),
+                trailing: const Icon(Icons.chevron_left),
+                onTap: () => Navigator.of(context)
+                    .push(MaterialPageRoute(builder: (_) => const RecommendedBooksScreen())),
               ),
               ListTile(
                 leading: const _IconBox(Icons.play_circle_outline),

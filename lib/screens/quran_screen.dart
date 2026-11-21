@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../services/audio_center.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 
@@ -507,6 +508,8 @@ class _MushafPageState extends State<_MushafPage> {
                   textAlign: TextAlign.center,
                   style: const TextStyle(fontFamily: 'UthmanicHafs', fontSize: 22, height: 2.0)),
               const SizedBox(height: 12),
+              _Listen(q: q, index: index),
+              const SizedBox(height: 12),
               _Tafsir(surah: s, verse: v),
               const SizedBox(height: 12),
               const Text('علامة ملوّنة', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -736,7 +739,8 @@ class _SurahHeader extends StatelessWidget {
   }
 }
 
-/// التفسير الميسر for one verse, fetched when asked (needs internet).
+/// The tafsirs of one verse, fetched when asked (needs internet):
+/// الميسر، السعدي، ابن كثير. The reader's last choice is remembered.
 class _Tafsir extends StatefulWidget {
   final int surah, verse;
   const _Tafsir({required this.surah, required this.verse});
@@ -746,70 +750,185 @@ class _Tafsir extends StatefulWidget {
 }
 
 class _TafsirState extends State<_Tafsir> {
+  static const _books = [
+    ('muyassar', 'التفسير الميسر'),
+    ('saadi', 'تفسير السعدي'),
+    ('kathir', 'تفسير ابن كثير'),
+  ];
   static final _cache = <String, String>{};
+  String? _which;
   String? _text;
   bool _loading = false;
   String? _error;
 
-  String get _key => '${widget.surah}:${widget.verse}';
+  String _url(String w) => switch (w) {
+        'saadi' =>
+          'https://cdn.jsdelivr.net/gh/spa5k/tafsir_api@main/tafsir/ar-tafseer-al-saddi/${widget.surah}/${widget.verse}.json',
+        'kathir' =>
+          'https://cdn.jsdelivr.net/gh/spa5k/tafsir_api@main/tafsir/ar-tafsir-ibn-kathir/${widget.surah}/${widget.verse}.json',
+        _ =>
+          'https://cdn.jsdelivr.net/gh/fawazahmed0/quran-api@1/editions/ara-kingfahadquranc/${widget.surah}/${widget.verse}.json',
+      };
 
-  Future<void> _load() async {
-    if (_cache[_key] != null) {
-      setState(() => _text = _cache[_key]);
-      return;
-    }
+  static String _clean(String t) => t
+      .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
+      .replaceAll(RegExp(r'<[^>]+>'), '')
+      .replaceAll('&nbsp;', ' ')
+      .replaceAll(RegExp(r'\n{3,}'), '\n\n')
+      .trim();
+
+  Future<void> _load(String w) async {
+    final key = '$w:${widget.surah}:${widget.verse}';
+    SharedPreferences.getInstance().then((p) => p.setString('tafsir_book', w));
     setState(() {
-      _loading = true;
+      _which = w;
       _error = null;
+      _text = _cache[key];
+      _loading = _text == null;
     });
+    if (_text != null) return;
     try {
-      final res = await http
-          .get(Uri.parse(
-              'https://cdn.jsdelivr.net/gh/fawazahmed0/quran-api@1/editions/ara-kingfahadquranc/${widget.surah}/${widget.verse}.json'))
-          .timeout(const Duration(seconds: 12));
-      final t = '${(jsonDecode(utf8.decode(res.bodyBytes)) as Map)['text'] ?? ''}';
+      final res = await http.get(Uri.parse(_url(w))).timeout(const Duration(seconds: 15));
+      final t = _clean('${(jsonDecode(utf8.decode(res.bodyBytes)) as Map)['text'] ?? ''}');
       if (res.statusCode != 200 || t.isEmpty) throw Exception();
-      _cache[_key] = t;
-      if (mounted) setState(() => _text = t);
+      _cache[key] = t;
+      if (mounted && _which == w) setState(() => _text = t);
     } catch (_) {
-      if (mounted) setState(() => _error = 'تعذّر جلب التفسير، تأكد من الاتصال بالإنترنت');
+      if (mounted && _which == w) setState(() => _error = 'تعذّر جلب التفسير، تأكد من الاتصال بالإنترنت');
     }
-    if (mounted) setState(() => _loading = false);
+    if (mounted && _which == w) setState(() => _loading = false);
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_text != null) {
-      return Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(color: kGold.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(12)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('التفسير الميسر', style: TextStyle(fontWeight: FontWeight.bold, color: kGoldChip)),
-            const SizedBox(height: 4),
-            SelectableText(_text!, style: const TextStyle(height: 1.9, fontSize: 16)),
-          ],
-        ),
-      );
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        FilledButton.tonalIcon(
-          icon: _loading
-              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-              : const Icon(Icons.menu_book_outlined),
-          label: const Text('التفسير الميسر'),
-          onPressed: _loading ? null : _load,
-        ),
-        if (_error != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 6),
-            child: Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.red)),
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Wrap(alignment: WrapAlignment.center, spacing: 8, runSpacing: 8, children: [
+        for (final b in _books)
+          ChoiceChip(
+            label: Text(b.$2),
+            selected: _which == b.$1,
+            onSelected: (_) => _load(b.$1),
           ),
-      ],
-    );
+      ]),
+      if (_loading)
+        const Padding(padding: EdgeInsets.all(14), child: Center(child: CircularProgressIndicator())),
+      if (_error != null)
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.red)),
+        ),
+      if (_text != null && !_loading)
+        Container(
+          margin: const EdgeInsets.only(top: 10),
+          padding: const EdgeInsets.all(12),
+          constraints: const BoxConstraints(maxHeight: 360),
+          decoration: BoxDecoration(color: kGold.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(14)),
+          child: SingleChildScrollView(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(_books.firstWhere((b) => b.$1 == _which).$2,
+                  style: const TextStyle(fontWeight: FontWeight.bold, color: kGoldChip)),
+              const SizedBox(height: 4),
+              SelectableText(_text!, style: const TextStyle(height: 1.9, fontSize: 16)),
+            ]),
+          ),
+        ),
+    ]);
+  }
+}
+
+/// Reciters of the Mushaf (verse by verse from everyayah.com, streamed —
+/// nothing is added to the app's size).
+const quranReciters = [
+  ('Alafasy_128kbps', 'مشاري العفاسي'),
+  ('Abdul_Basit_Murattal_192kbps', 'عبد الباسط عبد الصمد'),
+  ('Husary_128kbps', 'محمود خليل الحصري'),
+  ('Minshawy_Murattal_128kbps', 'محمد صديق المنشاوي'),
+  ('Muhammad_Ayyoub_128kbps', 'محمد أيوب'),
+  ('Abdurrahmaan_As-Sudais_192kbps', 'عبد الرحمن السديس'),
+  ('Saood_ash-Shuraym_128kbps', 'سعود الشريم'),
+  ('MaherAlMuaiqly128kbps', 'ماهر المعيقلي'),
+  ('Ghamadi_40kbps', 'سعد الغامدي'),
+  ('Yasser_Ad-Dussary_128kbps', 'ياسر الدوسري'),
+];
+
+/// «استمع»: this verse to the end of the sura, with the chosen reciter.
+class _Listen extends StatefulWidget {
+  final QuranData q;
+  final int index;
+  const _Listen({required this.q, required this.index});
+
+  @override
+  State<_Listen> createState() => _ListenState();
+}
+
+class _ListenState extends State<_Listen> {
+  String _reciter = quranReciters.first.$1;
+
+  @override
+  void initState() {
+    super.initState();
+    SharedPreferences.getInstance().then((p) {
+      final r = p.getString('quran_reciter');
+      if (r != null && quranReciters.any((x) => x.$1 == r) && mounted) setState(() => _reciter = r);
+    });
+  }
+
+  String get _name => quranReciters.firstWhere((x) => x.$1 == _reciter).$2;
+
+  void _play() {
+    final q = widget.q;
+    final (s, _) = q.at(widget.index);
+    final items = <AudioItem>[];
+    for (var i = widget.index; i < q.verses.length; i++) {
+      final (ss, vv) = q.at(i);
+      if (ss != s) break;
+      final file = '${ss.toString().padLeft(3, '0')}${vv.toString().padLeft(3, '0')}';
+      items.add(AudioItem('${q.names[s - 1]} · الآية ${QuranData.digits(vv)}',
+          'https://everyayah.com/data/$_reciter/$file.mp3', by: _name));
+    }
+    AudioCenter.instance.playQueue(items, 0);
+    Navigator.of(context).maybePop();
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('يقرأ $_name حتى آخر السورة')));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(children: [
+      Expanded(
+        child: FilledButton.icon(onPressed: _play, icon: const Icon(Icons.play_arrow_rounded), label: const Text('استمع')),
+      ),
+      const SizedBox(width: 10),
+      Expanded(
+        child: OutlinedButton(
+          onPressed: () async {
+            final r = await showModalBottomSheet<String>(
+              context: context,
+              builder: (c) => SafeArea(
+                child: ListView(shrinkWrap: true, children: [
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 6),
+                    child: Text('اختر القارئ',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontFamily: kUiFont, fontSize: 18, fontWeight: FontWeight.bold)),
+                  ),
+                  for (final x in quranReciters)
+                    ListTile(
+                      leading: Icon(x.$1 == _reciter ? Icons.radio_button_checked : Icons.radio_button_off,
+                          color: kGoldChip),
+                      title: Text(x.$2),
+                      onTap: () => Navigator.pop(c, x.$1),
+                    ),
+                ]),
+              ),
+            );
+            if (r == null) return;
+            setState(() => _reciter = r);
+            (await SharedPreferences.getInstance()).setString('quran_reciter', r);
+          },
+          child: Text(_name, maxLines: 1, overflow: TextOverflow.ellipsis),
+        ),
+      ),
+    ]);
   }
 }
 

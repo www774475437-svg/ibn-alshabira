@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'my_benefits.dart' show benefitSheet;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:pdfrx/pdfrx.dart';
@@ -204,6 +205,86 @@ class _BookReaderScreenState extends State<BookReaderScreen> {
     } catch (_) {
       if (mounted) setState(() => _error = 'تعذّر تحميل الكتاب، تأكد من الاتصال بالإنترنت');
     }
+  }
+
+  /// The words of one page (empty if the PDF keeps no text).
+  Future<String> _pageText(int page) async {
+    try {
+      final dynamic pg = _doc!.pages[page - 1];
+      final dynamic t = await pg.loadText();
+      return '${t?.fullText ?? ''}'.trim();
+    } catch (_) {
+      return '';
+    }
+  }
+
+  /// «فائدة»: the text of this page, to keep a sentence of it or share it as a picture.
+  Future<void> _benefit() async {
+    final text = _doc == null ? '' : await _pageText(_page);
+    if (!mounted) return;
+    await benefitSheet(context, text: text, source: '${widget.book.title} (صـ $_page)');
+  }
+
+  /// Every place the searched word appears: page number and a line around it.
+  Future<void> _matchesList() async {
+    final items = <(int, int, String)>[]; // (index, page, line)
+    for (var i = 0; i < _searcher.matches.length && i < 300; i++) {
+      final dynamic m = _searcher.matches[i];
+      var page = 0;
+      var line = '';
+      try {
+        page = (m.pageNumber as num).toInt();
+        final String full = '${m.pageText.fullText}';
+        final int a = (m.start as num).toInt(), b = (m.end as num).toInt();
+        final from = (a - 40).clamp(0, full.length), to = (b + 40).clamp(0, full.length);
+        line = full.substring(from, to).replaceAll(RegExp(r'\s+'), ' ').trim();
+      } catch (_) {}
+      items.add((i, page, line));
+    }
+    if (!mounted) return;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheet) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: .6,
+        maxChildSize: .92,
+        builder: (context, scroll) => Column(children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 0, 18, 8),
+            child: Text('مواضع البحث (${_searcher.matches.length})',
+                style: const TextStyle(fontFamily: kUiFont, fontSize: 18, fontWeight: FontWeight.bold)),
+          ),
+          Expanded(
+            child: ListView.builder(
+              controller: scroll,
+              itemCount: items.length,
+              itemBuilder: (context, k) {
+                final it = items[k];
+                return ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: kGold.withValues(alpha: .18),
+                    child: Text(it.$2 > 0 ? '${it.$2}' : '${k + 1}',
+                        style: const TextStyle(fontFamily: kUiFont, fontSize: 13, fontWeight: FontWeight.bold)),
+                  ),
+                  title: Text(it.$3.isEmpty ? 'الموضع ${k + 1}' : '…${it.$3}…',
+                      maxLines: 2, overflow: TextOverflow.ellipsis),
+                  subtitle: it.$2 > 0 ? Text('صفحة ${it.$2}') : null,
+                  onTap: () {
+                    Navigator.pop(sheet);
+                    try {
+                      (_searcher as dynamic).goToMatchOfIndex(it.$1);
+                    } catch (_) {
+                      if (it.$2 > 0) _controller.goToPage(pageNumber: it.$2);
+                    }
+                  },
+                );
+              },
+            ),
+          ),
+        ]),
+      ),
+    );
   }
 
   /// Deletes the copy kept on the phone and downloads the book again.
@@ -601,9 +682,9 @@ class _BookReaderScreenState extends State<BookReaderScreen> {
                         }),
                       ),
                       IconButton(
-                        tooltip: 'أضف اقتباساً من هذه الصفحة',
-                        icon: const Icon(Icons.format_quote),
-                        onPressed: () => addQuoteDialog(context, text: '', source: '${widget.book.title} (صـ $_page)'),
+                        tooltip: 'فائدة من هذه الصفحة: احفظها أو اصنع منها صورة',
+                        icon: const Icon(Icons.auto_awesome_outlined),
+                        onPressed: _benefit,
                       ),
                       if (Quiz.instance.ofBook(widget.book.id).isNotEmpty)
                         IconButton(
@@ -768,6 +849,12 @@ class _BookReaderScreenState extends State<BookReaderScreen> {
                                     '${(_searcher.currentIndex ?? 0) + 1} من ${_searcher.matches.length}',
                                     textAlign: TextAlign.center,
                                     style: const TextStyle(color: Colors.white)),
+                              ),
+                              TextButton.icon(
+                                style: TextButton.styleFrom(foregroundColor: kGold),
+                                onPressed: _matchesList,
+                                icon: const Icon(Icons.list_rounded, size: 20),
+                                label: const Text('كل المواضع'),
                               ),
                               IconButton(
                                   color: Colors.white,

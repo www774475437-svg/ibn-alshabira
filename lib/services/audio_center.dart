@@ -85,7 +85,8 @@ class AudioCenter extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       speed = prefs.getDouble('audio_speed') ?? 1.0;
       final local = await _localFile(it);
-      final tag = MediaItem(id: it.url, title: it.title, artist: 'الشيخ قايد بن غانم الشابرة', album: 'ابن الشابرة');
+      final tag = MediaItem(
+          id: it.url, title: it.title, artist: it.by.isEmpty ? 'الشيخ قايد بن غانم الشابرة' : it.by, album: 'ابن الشابرة');
       if (local != null) {
         await player.setAudioSource(AudioSource.file(local, tag: tag));
       } else {
@@ -125,6 +126,41 @@ class AudioCenter extends ChangeNotifier {
       unawaited(player.play());
     }
     notifyListeners();
+  }
+
+  // ---- Sleep timer (only when the listener chooses it)
+  Timer? _sleep;
+  DateTime? sleepAt;
+
+  /// Stops playing after [minutes]; 0 cancels the timer.
+  void setSleep(int minutes) {
+    _sleep?.cancel();
+    sleepAt = null;
+    if (minutes > 0) {
+      sleepAt = DateTime.now().add(Duration(minutes: minutes));
+      _sleep = Timer(Duration(minutes: minutes), () async {
+        sleepAt = null;
+        if (playing) {
+          await player.pause();
+          await _savePos();
+        }
+        notifyListeners();
+      });
+    }
+    notifyListeners();
+  }
+
+  /// Plays [item] from second [sec] (an audio bookmark).
+  Future<void> playAt(AudioItem item, int sec) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('audio_pos_${item.key}', sec + 2);
+    if (current?.url == item.url) {
+      await player.seek(Duration(seconds: sec));
+      if (!playing) unawaited(player.play());
+      notifyListeners();
+      return;
+    }
+    await play(item);
   }
 
   Future<void> seekBy(int seconds) async {

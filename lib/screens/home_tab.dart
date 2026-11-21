@@ -7,6 +7,8 @@ import 'prayer_screen.dart';
 import 'tools_screens.dart';
 import 'profile_screen.dart';
 import 'compose_screen.dart';
+import 'latest_screen.dart';
+import 'hijri_screen.dart' show OccasionCard;
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -198,6 +200,7 @@ class _HomeTabState extends State<HomeTab> {
             ),
           // The newest answers and recordings, side by side.
           SliverToBoxAdapter(child: _LatestBoard(recordings: _recs)),
+          const SliverToBoxAdapter(child: OccasionCard()),
           // Back to where the reader stopped.
           const SliverToBoxAdapter(child: _Resume()),
           // The chapters, as a row that moves right and left.
@@ -514,7 +517,7 @@ class _Header extends StatelessWidget {
                   style: TextStyle(
                       fontFamily: 'Tajawal', color: ink, fontSize: 29, fontWeight: FontWeight.bold, height: 1.5)),
               const SizedBox(height: 8),
-              Text('أجوبة ومقالات وكتب، مرتّبة على الأبواب، مع البحث بالموضوع.',
+              Text('أجوبة، ومقالات، وكتب، وصوتيات، ومرئيات، مرتّبة على الأبواب مع إمكانية البحث.',
                   style: TextStyle(color: soft, fontSize: 15, height: 1.7)),
               const SizedBox(height: 18),
               Material(
@@ -1458,8 +1461,11 @@ class _LatestBoard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+          InkWell(
+            onTap: () => Navigator.of(context)
+                .push(MaterialPageRoute(builder: (_) => LatestScreen(recordings: recordings))),
+            child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
             child: Row(children: [
               const Icon(Icons.campaign_rounded, color: kGold, size: 24),
               const SizedBox(width: 8),
@@ -1471,7 +1477,12 @@ class _LatestBoard extends StatelessWidget {
                 decoration: BoxDecoration(color: kGold, borderRadius: BorderRadius.circular(20)),
                 child: const Text('جديد', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Colors.black)),
               ),
+              const Spacer(),
+              const Text('عرض الكل',
+                  style: TextStyle(fontFamily: 'Tajawal', fontSize: 14, fontWeight: FontWeight.bold, color: kGold)),
+              const Icon(Icons.chevron_left_rounded, color: kGold),
             ]),
+          ),
           ),
           const SizedBox(height: 10),
           _AutoRow(

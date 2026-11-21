@@ -323,6 +323,20 @@ def tours():
     print(f'tours: ready {ready}, record {len(hist)}')
 
 
+def recbooks():
+    """recbooks.json: «كتب ينصح بها الشيخ», written by the staff in the app;
+    readers get them from this file (no Firestore reads)."""
+    out = []
+    for i, _, m in list_all('recBooks', ['t', 'a', 'n', 'd', 'u', 'o']):
+        out.append({'id': i, 't': str(m.get('t') or '')[:200], 'a': str(m.get('a') or '')[:120],
+                    'n': str(m.get('n') or '')[:1500], 'd': str(m.get('d') or '')[:120],
+                    'u': str(m.get('u') or '')[:500], 'o': int(m.get('o') or 0)})
+    out.sort(key=lambda b: (b['o'], b['t']))
+    with open('recbooks.json', 'w', encoding='utf-8') as f:
+        json.dump({'l': out}, f, ensure_ascii=False, separators=(',', ':'))
+    print(f'recommended books: {len(out)}')
+
+
 def main():
     full = os.environ.get('FULL') == '1' or dt.datetime.now(dt.timezone.utc).hour < 6
     try:
@@ -336,6 +350,10 @@ def main():
             print('tours failed:', e.code, e.read().decode()[:400])
         except Exception as e:
             print('tours failed:', e)
+        try:
+            recbooks()
+        except Exception as e:
+            print('recommended books failed:', e)
         if os.environ.get('TOURS_ONLY') == '1':
             print('reads:', READS)
             return

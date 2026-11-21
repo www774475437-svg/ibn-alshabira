@@ -859,6 +859,8 @@ class Repository extends ChangeNotifier {
         'palette': palette,
         'fontScale': fontScale,
         'readingScale': readingScale,
+        'myBenefits': myBenefits,
+        'audioMarks': audioMarks,
       });
 
   /// Returns false if the text isn't a valid backup.
@@ -875,6 +877,7 @@ class Repository extends ChangeNotifier {
       palette = (m['palette'] ?? palette) as String;
       fontScale = ((m['fontScale'] ?? fontScale) as num).toDouble();
       readingScale = ((m['readingScale'] ?? readingScale) as num).toDouble();
+      mergePersonal(m['myBenefits'] as List?, m['audioMarks'] as List?);
       _prefs.setStringList('favorites', favorites.toList());
       _prefs.setStringList('readLater', readLater.toList());
       _prefs.setStringList('recentSearches', recentSearches);
@@ -888,6 +891,61 @@ class Repository extends ChangeNotifier {
     } catch (_) {
       return false;
     }
+  }
+
+  // ---- «فوائدي المحفوظة» and audio bookmarks (kept on the phone, backed up
+  // with the saved lists in the same account document — no extra reads).
+  List<Map<String, dynamic>> _jsonList(String key) {
+    try {
+      return [for (final e in jsonDecode(_prefs.getString(key) ?? '[]') as List) Map<String, dynamic>.from(e as Map)];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// {t: text, s: source, at: millis}
+  List<Map<String, dynamic>> get myBenefits => _jsonList('myBenefits');
+
+  /// {u: play link, title: recording, sec: position, note, at}
+  List<Map<String, dynamic>> get audioMarks => _jsonList('audioMarks');
+
+  void _saveList(String key, List<Map<String, dynamic>> l) {
+    _prefs.setString(key, jsonEncode(l));
+    notifyListeners();
+    onSavedListsChanged?.call();
+  }
+
+  void addBenefit(String text, String source) {
+    final t = text.trim();
+    if (t.isEmpty) return;
+    _saveList('myBenefits', [
+      {'t': t.length > 1200 ? t.substring(0, 1200) : t, 's': source, 'at': DateTime.now().millisecondsSinceEpoch},
+      ...myBenefits,
+    ]);
+  }
+
+  void removeBenefit(int at) => _saveList('myBenefits', myBenefits.where((b) => b['at'] != at).toList());
+
+  void addAudioMark(String url, String title, int sec, String note) => _saveList('audioMarks', [
+        {'u': url, 'title': title, 'sec': sec, 'note': note.trim(), 'at': DateTime.now().millisecondsSinceEpoch},
+        ...audioMarks,
+      ]);
+
+  void removeAudioMark(int at) => _saveList('audioMarks', audioMarks.where((b) => b['at'] != at).toList());
+
+  /// Joins the lists from the account with the ones on this phone (by time).
+  void mergePersonal(List? benefits, List? marks) {
+    List<Map<String, dynamic>> join(List<Map<String, dynamic>> mine, List? theirs) {
+      final out = {for (final e in mine) '${e['at']}': e};
+      for (final e in theirs ?? const []) {
+        if (e is Map) out.putIfAbsent('${e['at']}', () => Map<String, dynamic>.from(e));
+      }
+      return out.values.toList()..sort((a, b) => ((b['at'] ?? 0) as num).compareTo((a['at'] ?? 0) as num));
+    }
+
+    _prefs.setString('myBenefits', jsonEncode(join(myBenefits, benefits)));
+    _prefs.setString('audioMarks', jsonEncode(join(audioMarks, marks)));
+    notifyListeners();
   }
 
   bool isReadLater(String id) => readLater.contains(id);

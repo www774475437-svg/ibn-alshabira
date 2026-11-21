@@ -396,7 +396,13 @@ class Cloud extends ChangeNotifier {
       final favs = {...repo.favorites, ...((data['favorites'] ?? []) as List).map((e) => '$e')};
       final later = {...repo.readLater, ...((data['readLater'] ?? []) as List).map((e) => '$e')};
       repo.replaceSavedLists(favs, later);
-      await doc.set({'favorites': favs.toList(), 'readLater': later.toList()}, SetOptions(merge: true));
+      repo.mergePersonal(data['myBenefits'] as List?, data['audioMarks'] as List?);
+      await doc.set({
+        'favorites': favs.toList(),
+        'readLater': later.toList(),
+        'myBenefits': repo.myBenefits,
+        'audioMarks': repo.audioMarks,
+      }, SetOptions(merge: true));
     } catch (e) {
       debugPrint('sync failed: $e');
     }
@@ -411,6 +417,8 @@ class Cloud extends ChangeNotifier {
       await _db.doc('users/${u.uid}').set({
         'favorites': repo.favorites.toList(),
         'readLater': repo.readLater.toList(),
+        'myBenefits': repo.myBenefits,
+        'audioMarks': repo.audioMarks,
       }, SetOptions(merge: true));
     } catch (_) {}
   }

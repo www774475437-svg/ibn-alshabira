@@ -8,7 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config.dart';
 import '../data/models.dart';
-import '../data/repository.dart' show normalizeArabic;
+import '../data/repository.dart' show normalizeArabic, Repository;
 import '../services/audio_center.dart';
 import '../services/cloud.dart';
 import 'content_screens.dart';
@@ -556,6 +556,18 @@ class PlayerSheet extends StatelessWidget {
               ]),
               Wrap(alignment: WrapAlignment.center, spacing: 6, children: [
                 TextButton(onPressed: a.nextSpeed, child: Text('السرعة ×${a.speed}')),
+                TextButton.icon(
+                  icon: Icon(a.sleepAt == null ? Icons.bedtime_outlined : Icons.bedtime),
+                  label: Text(a.sleepAt == null
+                      ? 'مؤقت النوم'
+                      : 'يتوقف بعد ${a.sleepAt!.difference(DateTime.now()).inMinutes + 1} د'),
+                  onPressed: () => _sleepMenu(context, a),
+                ),
+                TextButton.icon(
+                  icon: const Icon(Icons.bookmark_add_outlined),
+                  label: const Text('علامة هنا'),
+                  onPressed: () => _addAudioMark(context, a),
+                ),
                 if (!kIsWeb) _DownloadButton(item: it),
                 TextButton.icon(
                   icon: const Icon(Icons.close),
@@ -695,3 +707,127 @@ class NowPlayingBar extends StatelessWidget {
 
 /// Set by main.dart: where the bar opens the player.
 GlobalKey<NavigatorState>? playerNavKey;
+
+
+/// «مؤقت النوم»: off unless the listener picks a time.
+void _sleepMenu(BuildContext context, AudioCenter a) {
+  showModalBottomSheet(
+    context: context,
+    builder: (c) => SafeArea(
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        const Padding(
+          padding: EdgeInsets.only(bottom: 6),
+          child: Text('أوقف الصوت بعد', style: TextStyle(fontFamily: kUiFont, fontSize: 18, fontWeight: FontWeight.bold)),
+        ),
+        for (final m in const [15, 30, 45, 60])
+          ListTile(
+            leading: const Icon(Icons.bedtime_outlined),
+            title: Text('$m دقيقة'),
+            onTap: () {
+              a.setSleep(m);
+              Navigator.pop(c);
+            },
+          ),
+        if (a.sleepAt != null)
+          ListTile(
+            leading: const Icon(Icons.close),
+            title: const Text('إلغاء المؤقت'),
+            onTap: () {
+              a.setSleep(0);
+              Navigator.pop(c);
+            },
+          ),
+      ]),
+    ),
+  );
+}
+
+String _clock(int sec) {
+  final h = sec ~/ 3600, m = (sec % 3600) ~/ 60, s = sec % 60;
+  String two(int v) => v.toString().padLeft(2, '0');
+  return h > 0 ? '$h:${two(m)}:${two(s)}' : '${two(m)}:${two(s)}';
+}
+
+/// Saves this minute of the lesson with a short title or note.
+Future<void> _addAudioMark(BuildContext context, AudioCenter a) async {
+  final it = a.current;
+  if (it == null) return;
+  final sec = a.player.position.inSeconds;
+  final c = TextEditingController();
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (d) => AlertDialog(
+      title: Text('علامة عند ${_clock(sec)}'),
+      content: TextField(
+        controller: c,
+        autofocus: true,
+        maxLength: 120,
+        decoration: const InputDecoration(hintText: 'عنوان أو ملاحظة قصيرة (اختياري)'),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(d), child: const Text('إلغاء')),
+        FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('احفظ')),
+      ],
+    ),
+  );
+  if (ok != true) return;
+  Repository.instance.addAudioMark(it.url, it.title, sec, c.text);
+  if (context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('حُفظت العلامة في «علاماتي الصوتية»')));
+  }
+}
+
+/// «علاماتي الصوتية»: the minutes saved from lessons, back with one tap.
+class AudioMarksScreen extends StatelessWidget {
+  const AudioMarksScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('علاماتي الصوتية')),
+      body: ListenableBuilder(
+        listenable: Repository.instance,
+        builder: (context, _) {
+          final list = Repository.instance.audioMarks;
+          if (list.isEmpty) {
+            return const EmptyState(
+                icon: Icons.bookmark_border_rounded,
+                text: 'لا علامات بعد.\nأثناء الاستماع اضغط «علامة هنا» لتحفظ الدقيقة وترجع إليها.');
+          }
+          return ListView.builder(
+            padding: const EdgeInsets.only(top: 6, bottom: 24),
+            itemCount: list.length,
+            itemBuilder: (context, i) {
+              final m = list[i];
+              final sec = ((m['sec'] ?? 0) as num).toInt();
+              final at = ((m['at'] ?? 0) as num).toInt();
+              final note = '${m['note'] ?? ''}';
+              return Card(
+                margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                child: ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  leading: CircleAvatar(
+                    backgroundColor: Pal.soft(context),
+                    child: Icon(Icons.play_arrow_rounded, color: Pal.accent(context)),
+                  ),
+                  title: Text(note.isEmpty ? '${m['title']}' : note, maxLines: 2, overflow: TextOverflow.ellipsis),
+                  subtitle: Text('${note.isEmpty ? '' : '${m['title']}  ·  '}${_clock(sec)}',
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  trailing: IconButton(
+                    tooltip: 'حذف',
+                    icon: const Icon(Icons.delete_outline),
+                    onPressed: () => Repository.instance.removeAudioMark(at),
+                  ),
+                  onTap: () {
+                    AudioCenter.instance.playAt(AudioItem('${m['title']}', '${m['u']}'), sec);
+                    PlayerSheet.open(context);
+                  },
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
