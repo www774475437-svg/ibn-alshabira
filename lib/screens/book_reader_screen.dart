@@ -20,7 +20,6 @@ import '../theme.dart';
 import '../widgets/common.dart' show openUrl;
 import '../widgets/source_book.dart' show openBook;
 import '../services/quiz.dart';
-import 'profile_screen.dart' show addQuoteDialog;
 import 'quiz_screens.dart';
 
 /// A bookmark on a page: its colour has a meaning, and it can carry a note.
