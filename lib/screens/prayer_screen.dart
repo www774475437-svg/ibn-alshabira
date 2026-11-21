@@ -188,8 +188,92 @@ class _PrayerScreenState extends State<PrayerScreen> {
             value: pr.hanafi,
             onChanged: (v) => pr.setMethod(pr.method, asrHanafi: v),
           ),
+          ListTile(
+            leading: const Icon(Icons.tune),
+            title: const Text('تعديل الأوقات بالدقائق'),
+            subtitle: Text(pr.hasOffsets
+                ? [
+                    for (var i = 0; i < 6; i++)
+                      if (pr.offsets[i] != 0) '${Prayer.names[i]} ${pr.offsets[i] > 0 ? '+' : '−'}${pr.offsets[i].abs()}'
+                  ].join('، ')
+                : 'إذا كانت أوقات بلدك تخالف التقويم المحسوب'),
+            trailing: const Icon(Icons.chevron_left),
+            onTap: () => showModalBottomSheet<void>(
+              context: context,
+              isScrollControlled: true,
+              showDragHandle: true,
+              builder: (_) => const _Offsets(),
+            ),
+          ),
         ]),
       );
+}
+
+/// Plus/minus minutes for each prayer. Saved on the phone only, and used
+/// everywhere the times show (this page, the home card, the widget).
+class _Offsets extends StatelessWidget {
+  const _Offsets();
+
+  @override
+  Widget build(BuildContext context) {
+    final pr = Prayer.instance;
+    return ListenableBuilder(
+      listenable: pr,
+      builder: (context, _) {
+        final today = pr.timesOf(DateTime.now());
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Text('تعديل الأوقات بالدقائق', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 4),
+              Text('زِد أو أنقص دقائق كل صلاة حتى تطابق أوقات بلدك',
+                  style: Theme.of(context).textTheme.bodySmall, textAlign: TextAlign.center),
+              const SizedBox(height: 8),
+              for (var i = 0; i < 6; i++)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(children: [
+                    SizedBox(
+                      width: 72,
+                      child: Text(Prayer.names[i], style: const TextStyle(fontWeight: FontWeight.w700)),
+                    ),
+                    if (today != null)
+                      Text(_PrayerSkyCardTime.fmt(today[i]), style: Theme.of(context).textTheme.bodySmall),
+                    const Spacer(),
+                    IconButton.filledTonal(
+                      tooltip: 'أنقص دقيقة',
+                      onPressed: pr.offsets[i] <= -60 ? null : () => pr.setOffset(i, pr.offsets[i] - 1),
+                      icon: const Icon(Icons.remove),
+                    ),
+                    SizedBox(
+                      width: 52,
+                      child: Text(
+                        pr.offsets[i] == 0 ? '0' : '${pr.offsets[i] > 0 ? '+' : '−'}${pr.offsets[i].abs()}',
+                        textAlign: TextAlign.center,
+                        textDirection: TextDirection.ltr,
+                        style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    IconButton.filledTonal(
+                      tooltip: 'زد دقيقة',
+                      onPressed: pr.offsets[i] >= 60 ? null : () => pr.setOffset(i, pr.offsets[i] + 1),
+                      icon: const Icon(Icons.add),
+                    ),
+                  ]),
+                ),
+              const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: pr.hasOffsets ? () => pr.setOffset(-1, 0) : null,
+                icon: const Icon(Icons.restart_alt),
+                label: const Text('إرجاع الكل إلى صفر'),
+              ),
+            ]),
+          ),
+        );
+      },
+    );
+  }
 }
 
 class _PrayerSkyCardTime {

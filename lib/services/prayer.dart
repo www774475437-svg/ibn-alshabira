@@ -91,6 +91,11 @@ class Prayer extends ChangeNotifier {
   bool hanafi = false;
   bool loaded = false;
 
+  /// The reader's own minutes added to (or taken from) each of the six times,
+  /// for towns whose real times differ from the calculated calendar.
+  List<int> offsets = List.filled(6, 0);
+  bool get hasOffsets => offsets.any((m) => m != 0);
+
   bool get hasPlace => lat != null && lng != null;
 
   Future<void> load() async {
@@ -101,6 +106,8 @@ class Prayer extends ChangeNotifier {
     place = p.getString('prPlace') ?? '';
     method = p.getString('prMethod') ?? 'mwl';
     hanafi = p.getBool('prHanafi') ?? false;
+    final o = (p.getString('prOffsets') ?? '').split(',').map((e) => int.tryParse(e) ?? 0).toList();
+    offsets = [for (var i = 0; i < 6; i++) i < o.length ? o[i].clamp(-60, 60) : 0];
     loaded = true;
     notifyListeners();
   }
@@ -112,6 +119,7 @@ class Prayer extends ChangeNotifier {
     await p.setString('prPlace', place);
     await p.setString('prMethod', method);
     await p.setBool('prHanafi', hanafi);
+    await p.setString('prOffsets', offsets.join(','));
     await pushWidget();
     notifyListeners();
   }
@@ -122,6 +130,16 @@ class Prayer extends ChangeNotifier {
     lng = c.$3;
     final p = await SharedPreferences.getInstance();
     await p.setBool('prByGps', false);
+    await _save();
+  }
+
+  /// Changes one prayer's minutes (index into [names]); [i] = -1 resets all.
+  Future<void> setOffset(int i, int minutes) async {
+    if (i < 0) {
+      offsets = List.filled(6, 0);
+    } else {
+      offsets[i] = minutes.clamp(-60, 60);
+    }
     await _save();
   }
 
@@ -189,7 +207,8 @@ class Prayer extends ChangeNotifier {
   List<DateTime>? timesOf(DateTime day) {
     if (!hasPlace) return null;
     final m = methods[method] ?? methods['mwl']!;
-    return compute(day, lat!, lng!, fajrAngle: m.$2, isha: m.$3, ishaMinutes: m.$4, asrFactor: hanafi ? 2 : 1);
+    final l = compute(day, lat!, lng!, fajrAngle: m.$2, isha: m.$3, ishaMinutes: m.$4, asrFactor: hanafi ? 2 : 1);
+    return [for (var i = 0; i < 6; i++) l[i].add(Duration(minutes: offsets[i]))];
   }
 
   /// The next prayer from now (index into [names], skipping the sunrise
