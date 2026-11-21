@@ -395,7 +395,7 @@ class _HomeTabState extends State<HomeTab> {
                 40 => _Promo(
                     icon: Icons.spa_outlined,
                     title: 'الأذكار',
-                    subtitle: 'حصن المسلم كاملاً، وعدّاد التسبيح',
+                    subtitle: 'مختصر الأذكار للشيخ، وعدّاد التسبيح',
                     colors: const [Color(0xFF2E7D32), Color(0xFF1B5E20)],
                     onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AdhkarScreen())),
                   ),

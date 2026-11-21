@@ -39,7 +39,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with SingleTickerPr
     (
       Icons.auto_stories_outlined,
       'المصحف والأذكار',
-      'مصحف المدينة كاملاً وأذكار «حصن المسلم»، يعملان بلا إنترنت.',
+      'مصحف المدينة كاملاً و«مختصر الأذكار» للشيخ، يعملان بلا إنترنت.',
     ),
   ];
 

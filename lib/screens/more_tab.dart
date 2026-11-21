@@ -64,7 +64,7 @@ class MoreTab extends StatelessWidget {
             _BigCard(
               icon: Icons.spa_outlined,
               title: 'الأذكار',
-              subtitle: 'حصن المسلم كاملاً، وعدّاد التسبيح',
+              subtitle: 'مختصر الأذكار للشيخ، وعدّاد التسبيح',
               color: const Color(0xFF2E7D32),
               onTap: () =>
                   Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AdhkarScreen())),

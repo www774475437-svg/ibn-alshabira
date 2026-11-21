@@ -34,7 +34,7 @@ Future<List<_Category>> _load() => _adhkar ??= () async {
       ];
     }();
 
-/// الأذكار: the chapters of «حصن المسلم» in the book's order, offline.
+/// الأذكار: «مختصر الأذكار» of الشيخ قايد بن غانم الشابرة, in its order, offline.
 class AdhkarScreen extends StatefulWidget {
   const AdhkarScreen({super.key});
 
@@ -101,13 +101,18 @@ class _AdhkarScreenState extends State<AdhkarScreen> {
               .then((_) {
             if (mounted) setState(() {});
           });
-          _Category? at(int i) => i < all.length ? all[i] : null;
+          _Category? at(String name) {
+            for (final c in all) {
+              if (c.name.startsWith(name)) return c;
+            }
+            return null;
+          }
           // The four everyday chapters, as big squares on top.
           final squares = <(String, IconData, List<Color>, _Category?, String)>[
-            ('أذكار الصباح', Icons.wb_sunny_outlined, const [Color(0xFFF2A93B), Color(0xFFE2762A)], at(0), 'morning'),
-            ('أذكار المساء', Icons.nights_stay_outlined, const [Color(0xFF3F4C8C), Color(0xFF232B57)], at(0), 'evening'),
-            ('أذكار النوم', Icons.bedtime_outlined, const [Color(0xFF5B4B9A), Color(0xFF342A63)], at(1), 'sleep'),
-            ('أذكار بعد الصلاة', Icons.mosque_outlined, const [Color(0xFF2E8B57), Color(0xFF1B5E3A)], at(26), 'salah'),
+            ('أذكار الصباح', Icons.wb_sunny_outlined, const [Color(0xFFF2A93B), Color(0xFFE2762A)], at('أذكار الصباح'), 'morning'),
+            ('أذكار المساء', Icons.nights_stay_outlined, const [Color(0xFF3F4C8C), Color(0xFF232B57)], at('أذكار المساء'), 'evening'),
+            ('أذكار النوم', Icons.bedtime_outlined, const [Color(0xFF5B4B9A), Color(0xFF342A63)], at('أذكار النوم'), 'sleep'),
+            ('أذكار بعد الصلاة', Icons.mosque_outlined, const [Color(0xFF2E8B57), Color(0xFF1B5E3A)], at('أذكار بعد السلام'), 'salah'),
           ];
           return CustomScrollView(
             slivers: [
@@ -236,7 +241,7 @@ class _AdhkarScreenState extends State<AdhkarScreen> {
               const SliverToBoxAdapter(
                 child: Padding(
                   padding: EdgeInsets.all(12),
-                  child: Text('من كتاب «حصن المسلم» بترتيبه',
+                  child: Text('من «مختصر الأذكار» للشيخ قايد بن غانم الشابرة',
                       textAlign: TextAlign.center, style: TextStyle(color: Colors.grey, fontSize: 12)),
                 ),
               ),
