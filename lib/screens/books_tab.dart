@@ -1,4 +1,5 @@
 import 'dart:io' show File;
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -11,6 +12,7 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import 'book_reader_screen.dart';
 import 'reading_plan.dart';
+import 'recommended_books.dart';
 
 /// The sheikh's books (from his Google Drive folder). Inside the app a book
 /// is downloaded and read here, without showing any outside link.
@@ -65,6 +67,7 @@ class _BooksTabState extends State<BooksTab> {
           ? const EmptyState(icon: Icons.menu_book_outlined, text: 'ستُضاف كتب الشيخ هنا قريباً بإذن الله.')
           : CustomScrollView(
               slivers: [
+                const SliverToBoxAdapter(child: _RecommendedBanner()),
                 if (!kIsWeb)
                   SliverToBoxAdapter(
                     child: ReadingPlanCard(onOpen: _open, onChanged: () => setState(() {})),
@@ -221,4 +224,153 @@ class _BookProgress extends StatelessWidget {
           );
         },
       );
+}
+
+
+/// The banner at the top of the books tab that opens «كتب ينصح بها الشيخ»:
+/// a deep night-teal panel with a gold frame, a starry pattern, a lamp glow
+/// and a shelf of book spines.
+class _RecommendedBanner extends StatelessWidget {
+  const _RecommendedBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(22),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => Navigator.of(context)
+              .push(MaterialPageRoute(builder: (_) => const RecommendedBooksScreen())),
+          child: Ink(
+            height: 150,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(22),
+              gradient: const LinearGradient(
+                begin: Alignment.topRight,
+                end: Alignment.bottomLeft,
+                colors: [Color(0xFF0B3A40), Color(0xFF0F4E55), Color(0xFF082A2F)],
+                stops: [0, .55, 1],
+              ),
+              border: Border.all(color: const Color(0xFFC9A253), width: 1.2),
+              boxShadow: const [BoxShadow(color: Color(0x40082A2F), blurRadius: 16, offset: Offset(0, 6))],
+            ),
+            child: Stack(children: [
+              const Positioned.fill(child: CustomPaint(painter: _BannerArt())),
+              Positioned.fill(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: const Color(0x33C9A253),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: const Color(0x99C9A253)),
+                      ),
+                      child: const Text('لطالب العلم',
+                          style: TextStyle(color: Color(0xFFF1D592), fontSize: 11.5, fontWeight: FontWeight.w700)),
+                    ),
+                    const SizedBox(height: 10),
+                    const Text('كتب ينصح بها الشيخ',
+                        style: TextStyle(
+                          color: Color(0xFFF7E7BE),
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          height: 1.2,
+                          shadows: [Shadow(color: Color(0x88000000), blurRadius: 6, offset: Offset(0, 2))],
+                        )),
+                    const SizedBox(height: 4),
+                    const Text('مختارات يوصي بقراءتها مع نبذة عن كل كتاب',
+                        style: TextStyle(color: Color(0xCCE6F0EE), fontSize: 12.5)),
+                    const Spacer(),
+                    Row(children: const [
+                      Text('تصفّح القائمة',
+                          style: TextStyle(color: Color(0xFFF1D592), fontSize: 13, fontWeight: FontWeight.w700)),
+                      SizedBox(width: 4),
+                      Icon(Icons.arrow_back_rounded, size: 18, color: Color(0xFFF1D592)),
+                    ]),
+                  ]),
+                ),
+              ),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BannerArt extends CustomPainter {
+  const _BannerArt();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // The art sits on the left (the end in Arabic), the text on the right.
+    final h = size.height;
+    double x(double v) => v - 10;
+
+    // Lamp glow.
+    final glow = Paint()
+      ..shader = RadialGradient(colors: const [Color(0x55F1D592), Color(0x00F1D592)])
+          .createShader(Rect.fromCircle(center: Offset(x(70), h * .38), radius: 110));
+    canvas.drawCircle(Offset(x(70), h * .38), 110, glow);
+
+    // Eight-point stars scattered lightly.
+    final star = Paint()..color = const Color(0x2EF1D592);
+    void drawStar(Offset c, double r) {
+      final p = Path();
+      for (var i = 0; i < 16; i++) {
+        final a = i * 3.14159265 / 8;
+        final rr = i.isEven ? r : r * .45;
+        final o = c + Offset(rr * _cos(a), rr * _sin(a));
+        i == 0 ? p.moveTo(o.dx, o.dy) : p.lineTo(o.dx, o.dy);
+      }
+      canvas.drawPath(p..close(), star);
+    }
+
+    for (final s in const [(30.0, 22.0, 6.0), (120.0, 18.0, 4.0), (150.0, 40.0, 4.0), (60.0, 30.0, 3.5), (95.0, 60.0, 3.0)]) {
+      drawStar(Offset(x(s.$1), s.$2), s.$3);
+    }
+
+    // Shelf.
+    final shelfY = h - 26;
+    canvas.drawRRect(
+        RRect.fromRectAndRadius(Rect.fromLTRB(x(18), shelfY, x(170), shelfY + 5),
+            const Radius.circular(2)),
+        Paint()..color = const Color(0xFFB8863B));
+
+    // Book spines standing on the shelf.
+    const books = [
+      (24.0, 16.0, 62.0, Color(0xFF8C2F2B)),
+      (42.0, 14.0, 74.0, Color(0xFFE9DDBF)),
+      (58.0, 18.0, 56.0, Color(0xFF1F6A60)),
+      (78.0, 13.0, 80.0, Color(0xFFC9A253)),
+      (93.0, 17.0, 66.0, Color(0xFF3E4F86)),
+      (112.0, 15.0, 72.0, Color(0xFF6B3E26)),
+    ];
+    for (final b in books) {
+      final rect = Rect.fromLTRB(x(b.$1), shelfY - b.$3, x(b.$1 + b.$2), shelfY);
+      canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(2.5)), Paint()..color = b.$4);
+      final band = Paint()..color = const Color(0xAAF1D592);
+      canvas.drawRect(Rect.fromLTWH(rect.left + 2, rect.top + 8, rect.width - 4, 2), band);
+      canvas.drawRect(Rect.fromLTWH(rect.left + 2, rect.bottom - 12, rect.width - 4, 2), band);
+    }
+    // One book leaning on the last.
+    canvas.save();
+    canvas.translate(x(142), shelfY);
+    canvas.rotate(-.32);
+    final lean = Rect.fromLTWH(-2, -64, 16, 64);
+    canvas.drawRRect(RRect.fromRectAndRadius(lean, const Radius.circular(2.5)), Paint()..color = const Color(0xFF2B5D8A));
+    canvas.drawRect(Rect.fromLTWH(lean.left + 2, lean.top + 8, lean.width - 4, 2), Paint()..color = const Color(0xAAF1D592));
+    canvas.restore();
+  }
+
+  static double _cos(double a) => math.cos(a);
+  static double _sin(double a) => math.sin(a);
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
