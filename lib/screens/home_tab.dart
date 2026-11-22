@@ -124,6 +124,8 @@ class _HomeTabState extends State<HomeTab> {
           SliverToBoxAdapter(child: _Header(onOpenSearch: onOpenSearch, onOpenMore: widget.onOpenMore)),
           const SliverToBoxAdapter(child: HomeAnnouncement(place: 'top')),
           const SliverToBoxAdapter(child: LiveBanner()),
+          // The channel's newest posts, first and in their own colour.
+          if (repo.channel.isNotEmpty) SliverToBoxAdapter(child: _ChannelPanel(posts: repo.channel)),
           // The search in the trusted scholars' books, with the AI.
           SliverToBoxAdapter(
             child: Padding(
@@ -310,53 +312,6 @@ class _HomeTabState extends State<HomeTab> {
           const SliverToBoxAdapter(child: _GroupTitle('الأسئلة', Icons.quiz_outlined)),
           const SliverToBoxAdapter(child: TourHomeCard()),
           const SliverToBoxAdapter(child: QuizHomeStrip()),
-          if (repo.channel.isNotEmpty) ...[
-            SliverToBoxAdapter(
-              child: _SectionTitle('أحدث منشورات القناة',
-                  action: 'الكل',
-                  onAction: () => Navigator.of(context)
-                      .push(MaterialPageRoute(builder: (_) => const ChannelScreen()))),
-            ),
-            SliverToBoxAdapter(
-              child: SizedBox(
-                height: 150,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  itemCount: repo.channel.length < 8 ? repo.channel.length : 8,
-                  separatorBuilder: (_, __) => const SizedBox(width: 10),
-                  itemBuilder: (context, i) {
-                    final p = repo.channel[i];
-                    return SizedBox(
-                      width: 250,
-                      child: Card(
-                        margin: EdgeInsets.zero,
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(18),
-                          onTap: () => openChannelPost(context, p),
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(friendlyDate(p.date), style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                                const SizedBox(height: 6),
-                                Expanded(
-                                  child: Text(withShortLinks(p.text),
-                                      maxLines: 4, overflow: TextOverflow.ellipsis, style: const TextStyle(height: 1.7)),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ),
-          ],
-
           const SliverToBoxAdapter(child: HomeAnnouncement(place: 'bottom')),
 
           // ------------------------------------------------ تصفّح المكتبة
@@ -1705,4 +1660,146 @@ class _QuranPromo extends StatelessWidget {
           );
         },
       );
+}
+
+
+/// «أحدث منشورات القناة» at the top of the home page: a deep blue panel
+/// (unlike the rest of the page) with large cards that move right and left,
+/// and a last card that opens all the posts.
+class _ChannelPanel extends StatelessWidget {
+  final List<ChannelPost> posts;
+  const _ChannelPanel({required this.posts});
+
+  static const _gold = Color(0xFFF1D592);
+
+  void _all(BuildContext context) =>
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ChannelScreen()));
+
+  @override
+  Widget build(BuildContext context) {
+    final n = posts.length < 15 ? posts.length : 15;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(22),
+          gradient: const LinearGradient(
+            begin: Alignment.topRight,
+            end: Alignment.bottomLeft,
+            colors: [Color(0xFF16305A), Color(0xFF1E4580), Color(0xFF122849)],
+            stops: [0, .55, 1],
+          ),
+          border: Border.all(color: const Color(0x99C9A253)),
+          boxShadow: const [BoxShadow(color: Color(0x33122849), blurRadius: 14, offset: Offset(0, 6))],
+        ),
+        padding: const EdgeInsets.only(top: 14, bottom: 14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(color: const Color(0x2EF1D592), borderRadius: BorderRadius.circular(12)),
+                child: const Icon(Icons.campaign_outlined, color: _gold, size: 22),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('أحدث منشورات القناة',
+                      style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
+                  Text('جديد الشيخ أولاً بأول',
+                      style: TextStyle(color: Color(0xB3FFFFFF), fontSize: 12.5)),
+                ]),
+              ),
+              TextButton(
+                onPressed: () => _all(context),
+                style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFF16305A),
+                  backgroundColor: _gold,
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  shape: const StadiumBorder(),
+                ),
+                child: const Text('المزيد', style: TextStyle(fontWeight: FontWeight.w800)),
+              ),
+            ]),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 232,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              itemCount: n + 1,
+              separatorBuilder: (_, __) => const SizedBox(width: 10),
+              itemBuilder: (context, i) {
+                if (i == n) {
+                  return SizedBox(
+                    width: 150,
+                    child: Material(
+                      color: const Color(0x1FFFFFFF),
+                      borderRadius: BorderRadius.circular(18),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(18),
+                        onTap: () => _all(context),
+                        child: const Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                          Icon(Icons.arrow_back_rounded, color: _gold, size: 34),
+                          SizedBox(height: 8),
+                          Text('تصفّح كل\nالمنشورات',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, height: 1.5)),
+                        ]),
+                      ),
+                    ),
+                  );
+                }
+                final p = posts[i];
+                return SizedBox(
+                  width: 290,
+                  child: Material(
+                    color: const Color(0xFFFBF7EC),
+                    borderRadius: BorderRadius.circular(18),
+                    clipBehavior: Clip.antiAlias,
+                    child: InkWell(
+                      onTap: () => openChannelPost(context, p),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Row(children: [
+                            if (i == 0)
+                              Container(
+                                margin: const EdgeInsetsDirectional.only(end: 8),
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                    color: const Color(0xFF1E4580), borderRadius: BorderRadius.circular(10)),
+                                child: const Text('جديد',
+                                    style: TextStyle(color: _gold, fontSize: 11, fontWeight: FontWeight.w800)),
+                              ),
+                            Text(friendlyDate(p.date),
+                                style: const TextStyle(color: Color(0xFF8A7A55), fontSize: 12)),
+                          ]),
+                          const SizedBox(height: 8),
+                          Expanded(
+                            child: Text(withShortLinks(p.text),
+                                maxLines: 6,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(color: Color(0xFF1D2A2C), fontSize: 14.5, height: 1.75)),
+                          ),
+                          const Align(
+                            alignment: AlignmentDirectional.centerEnd,
+                            child: Text('اقرأ ←',
+                                style: TextStyle(color: Color(0xFF1E4580), fontSize: 12.5, fontWeight: FontWeight.w800)),
+                          ),
+                        ]),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
 }

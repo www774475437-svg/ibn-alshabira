@@ -2487,7 +2487,7 @@ class _AiSuggestionsScreenState extends State<AiSuggestionsScreen> {
               const SizedBox(height: 12),
               FilledButton.icon(
                 style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
-                icon: const Icon(Icons.auto_awesome),
+                icon: const Icon(Icons.lightbulb),
                 label: const Text('ابدأ'),
                 onPressed: () => Navigator.pop(c, true),
               ),
@@ -2564,7 +2564,7 @@ class _AiSuggestionsScreenState extends State<AiSuggestionsScreen> {
           : ListView(padding: const EdgeInsets.all(12), children: [
               FilledButton.icon(
                 style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(54)),
-                icon: const Icon(Icons.auto_awesome),
+                icon: const Icon(Icons.lightbulb),
                 label: Text(_busy ? 'يكتب… $_made من $_want' : 'ابدأ الاقتراح'),
                 onPressed: _busy ? null : _start,
               ),

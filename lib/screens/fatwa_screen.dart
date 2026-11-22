@@ -1338,7 +1338,7 @@ class _SummaryLineState extends State<_SummaryLine> {
                 child: TextButton.icon(
                   icon: _busy
                       ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Icon(Icons.auto_awesome, size: 18),
+                      : const Icon(Icons.lightbulb, size: 18),
                   label: const Text('اقترح خلاصة (يراها المشرفون فقط حتى تعتمدها)'),
                   onPressed: _busy ? null : _suggest,
                 ),

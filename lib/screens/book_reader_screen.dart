@@ -682,7 +682,7 @@ class _BookReaderScreenState extends State<BookReaderScreen> {
                       ),
                       IconButton(
                         tooltip: 'فائدة من هذه الصفحة: احفظها أو اصنع منها صورة',
-                        icon: const Icon(Icons.auto_awesome_outlined),
+                        icon: const Icon(Icons.lightbulb_outline),
                         onPressed: _benefit,
                       ),
                       if (Quiz.instance.ofBook(widget.book.id).isNotEmpty)

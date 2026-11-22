@@ -249,7 +249,7 @@ class _SearchTabState extends State<SearchTab> {
                       ),
                     ),
                   FilterChip(
-                    avatar: const Icon(Icons.auto_awesome, size: 16),
+                    avatar: const Icon(Icons.lightbulb, size: 16),
                     label: const Text('بحث بالمعنى'),
                     selected: _byMeaning,
                     onSelected: (v) => setState(() => _byMeaning = v),

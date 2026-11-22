@@ -158,7 +158,7 @@ class MoreTab extends StatelessWidget {
                     .push(MaterialPageRoute(builder: (_) => const MyReadingScreen())),
               ),
               ListTile(
-                leading: const _IconBox(Icons.auto_awesome_outlined),
+                leading: const _IconBox(Icons.lightbulb_outline),
                 title: const Text('فوائدي المحفوظة'),
                 subtitle: const Text('الجمل التي حفظتها من الكتب والأجوبة'),
                 trailing: const Icon(Icons.chevron_left),
@@ -204,7 +204,7 @@ class MoreTab extends StatelessWidget {
               _Section(children: [
                 if (Cloud.instance.isFullAdmin) ...[
                   SwitchListTile(
-                    secondary: const _IconBox(Icons.auto_awesome_outlined),
+                    secondary: const _IconBox(Icons.lightbulb_outline),
                     title: const Text('الذكاء الاصطناعي في بحث كتب الثقات'),
                     subtitle: const Text('يقسّم السؤال إلى مسائله'),
                     value: Cloud.instance.aiEnabled,

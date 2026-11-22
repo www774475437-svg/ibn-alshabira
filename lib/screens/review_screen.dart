@@ -339,7 +339,7 @@ class _AiSortButtonState extends State<AiSortButton> {
           final busy = Cloud.instance.aiSorting;
           return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             OutlinedButton.icon(
-              icon: Icon(busy ? Icons.stop_circle_outlined : Icons.auto_awesome, color: kGold),
+              icon: Icon(busy ? Icons.stop_circle_outlined : Icons.lightbulb, color: kGold),
               label: Text(busy ? 'يرتّب… $_done من $_total — اضغط للإيقاف' : 'رتّب بالذكاء الاصطناعي'),
               onPressed: busy ? Cloud.instance.stopAiSort : _go,
             ),
