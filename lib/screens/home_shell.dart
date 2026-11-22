@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config.dart';
 import '../theme.dart';
+import '../widgets/common.dart';
 
 import '../services/cloud.dart';
 import '../services/net.dart';
@@ -168,6 +169,32 @@ class _HomeShellState extends State<HomeShell> with TickerProviderStateMixin {
             default:
               return (Icons.grid_view_outlined, Icons.grid_view_rounded, 'المزيد', 0);
           }
+        }
+
+        // Laptops and wide screens: a side panel instead of the bottom bar.
+        if (MediaQuery.sizeOf(context).width >= 900) {
+          return Scaffold(
+            body: Row(children: [
+              _SideBar(
+                ids: ids,
+                index: index,
+                dest: dest,
+                onTap: _goTo,
+                onSearch: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SearchTab())),
+              ),
+              Expanded(
+                child: Column(children: [
+                  Expanded(
+                    child: IndexedStack(
+                      index: index,
+                      children: [for (final id in ids) KeyedSubtree(key: ValueKey(id), child: page(id))],
+                    ),
+                  ),
+                  const _OfflineBar(),
+                ]),
+              ),
+            ]),
+          );
         }
 
         final keyboard = MediaQuery.viewInsetsOf(context).bottom > 0;
@@ -449,4 +476,140 @@ class _OfflineBarState extends State<_OfflineBar> {
                 ),
         ),
       );
+}
+
+
+/// The side panel on laptops: the name and logo, a search field, the tabs
+/// with a gold mark on the open one, and the app download on the website.
+class _SideBar extends StatelessWidget {
+  final List<String> ids;
+  final int index;
+  final (IconData, IconData, String, int) Function(String) dest;
+  final void Function(String) onTap;
+  final VoidCallback onSearch;
+  const _SideBar(
+      {required this.ids, required this.index, required this.dest, required this.onTap, required this.onSearch});
+
+  static const _gold = Color(0xFFF1D592);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 264,
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF0E3B42), Color(0xFF0A2C31)],
+        ),
+        border: BorderDirectional(end: BorderSide(color: Color(0x66C9A253))),
+      ),
+      child: SafeArea(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 24, 18, 18),
+            child: Row(children: [
+              Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFC9A253), width: 1.2),
+                  image: const DecorationImage(image: AssetImage('assets/icon/icon.png'), fit: BoxFit.cover),
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('ابن الشابرة',
+                      style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)),
+                  Text('الشيخ قايد بن غانم الشابرة',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: _gold, fontSize: 12)),
+                ]),
+              ),
+            ]),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Material(
+              color: const Color(0x1AFFFFFF),
+              borderRadius: BorderRadius.circular(14),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: onSearch,
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  child: Row(children: [
+                    Icon(Icons.search_rounded, color: Color(0xCCFFFFFF), size: 22),
+                    SizedBox(width: 10),
+                    Text('ابحث في المكتبة…', style: TextStyle(color: Color(0x99FFFFFF), fontSize: 14)),
+                  ]),
+                ),
+              ),
+            ),
+          ),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(18, 18, 18, 6),
+            child: Divider(color: Color(0x33C9A253), height: 1),
+          ),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              children: [
+                for (var i = 0; i < ids.length; i++) _item(context, dest(ids[i]), i == index, () => onTap(ids[i])),
+              ],
+            ),
+          ),
+          if (kIsWeb)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 6, 14, 18),
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: _gold,
+                  foregroundColor: const Color(0xFF0E3B42),
+                  minimumSize: const Size.fromHeight(46),
+                  shape: const StadiumBorder(),
+                ),
+                onPressed: () => openUrl(context, AppConfig.apkUrl),
+                icon: const Icon(Icons.android),
+                label: const Text('حمّل التطبيق لأندرويد', style: TextStyle(fontWeight: FontWeight.w800)),
+              ),
+            ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _item(BuildContext context, (IconData, IconData, String, int) d, bool selected, VoidCallback tap) {
+    Widget icon = Icon(selected ? d.$2 : d.$1, color: selected ? const Color(0xFF0E3B42) : const Color(0xD9FFFFFF), size: 23);
+    if (d.$4 > 0) icon = Badge(label: Text('${d.$4}'), child: icon);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Material(
+        color: selected ? _gold : Colors.transparent,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          hoverColor: const Color(0x14FFFFFF),
+          onTap: tap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(children: [
+              icon,
+              const SizedBox(width: 14),
+              Text(d.$3,
+                  style: TextStyle(
+                    fontFamily: kUiFont,
+                    color: selected ? const Color(0xFF0E3B42) : Colors.white,
+                    fontSize: 15.5,
+                    fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                  )),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
 }

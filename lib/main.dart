@@ -254,7 +254,8 @@ class IbnAlshabiraApp extends StatelessWidget {
             textScaler: TextScaler.linear(repo.fontScale * (repo.easyMode ? 1.2 : 1.0)),
           ),
           // While a recording plays, a slim bar stays at the top of every page.
-          child: _Easy(
+          child: _WideFrame(
+            child: _Easy(
             on: repo.easyMode,
             child: ListenableBuilder(
             listenable: AudioCenter.instance,
@@ -265,6 +266,7 @@ class IbnAlshabiraApp extends StatelessWidget {
                     Expanded(child: MediaQuery.removePadding(context: context, removeTop: true, child: child!)),
                   ]),
             ),
+          ),
           ),
         ),
         onGenerateRoute: onGenerateRoute,
@@ -307,6 +309,50 @@ class IbnAlshabiraApp extends StatelessWidget {
             ),
           ];
         },
+      ),
+    );
+  }
+}
+
+
+/// On big screens (a laptop or a large monitor) the app sits in the middle,
+/// at a comfortable width, on a deep teal background with a soft glow,
+/// instead of stretching from edge to edge.
+class _WideFrame extends StatelessWidget {
+  final Widget child;
+  const _WideFrame({required this.child});
+
+  static const _max = 1360.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    if (size.width <= _max + 40) return child;
+    final h = size.height > 980 ? size.height - 48 : size.height;
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: RadialGradient(
+          center: Alignment(0, -0.6),
+          radius: 1.2,
+          colors: [Color(0xFF175560), Color(0xFF0B3036), Color(0xFF061E22)],
+          stops: [0, .55, 1],
+        ),
+      ),
+      child: Center(
+        child: Container(
+          width: _max,
+          height: h,
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(h < size.height ? 22 : 0),
+            border: Border.all(color: const Color(0x66C9A253)),
+            boxShadow: const [BoxShadow(color: Color(0x80000000), blurRadius: 40, offset: Offset(0, 16))],
+          ),
+          child: MediaQuery(
+            data: MediaQuery.of(context).copyWith(size: Size(_max, h)),
+            child: child,
+          ),
+        ),
       ),
     );
   }
