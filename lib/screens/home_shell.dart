@@ -345,7 +345,7 @@ class _HomeShellState extends State<HomeShell> with TickerProviderStateMixin {
               child: _NavItem(
                 item: dest(ids[i]),
                 selected: i == index,
-                small: ids.length > 6,
+                small: ids.length > 5,
                 onTap: () => _goTo(ids[i]),
               ),
             ),
@@ -416,7 +416,9 @@ class _NavItem extends StatelessWidget {
         icon,
         const SizedBox(height: 2),
         // The whole name, made smaller when it is long («المشايخ الثقات»).
-        FittedBox(
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 3),
+          child: FittedBox(
           fit: BoxFit.scaleDown,
           child: AnimatedDefaultTextStyle(
             duration: const Duration(milliseconds: 220),
@@ -426,8 +428,10 @@ class _NavItem extends StatelessWidget {
                 height: 1.1,
                 fontWeight: FontWeight.w700,
                 color: color),
-            child: Text(item.$3, maxLines: 1, softWrap: false, textScaler: TextScaler.noScaling),
+            child: Text(item.$3 == 'المشايخ الثقات' ? 'المشايخ' : item.$3,
+                maxLines: 1, softWrap: false, textScaler: TextScaler.noScaling),
           ),
+        ),
         ),
       ]),
     );
