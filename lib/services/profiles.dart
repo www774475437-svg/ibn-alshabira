@@ -84,7 +84,7 @@ class Profiles extends ChangeNotifier {
       await p.setInt('followersSeen', now);
       await OnceNotifications.showNow(
           newFollowers == 1 ? 'حصلت على متابع جديد 🎉' : 'حصلت على $newFollowers متابعين جدد 🎉',
-          'صار عدد متابعيك $now. افتح «لوحتي» لترى ملفك.');
+          'صار عدد متابعيك $now. افتح «صفحتي» لترى ملفك.');
     } else if (now < before) {
       await p.setInt('followersSeen', now);
     }

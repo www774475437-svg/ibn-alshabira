@@ -46,7 +46,7 @@ class MoreTab extends StatelessWidget {
         builder: (context, _) => ListView(
           padding: const EdgeInsets.symmetric(vertical: 8),
           children: [
-            _ReaderStats(count: repo.readThisMonth),
+            const MyPageCard(),
             _BigCard(
               icon: Icons.auto_stories_outlined,
               title: 'المصحف',
@@ -149,48 +149,6 @@ class MoreTab extends StatelessWidget {
             ),
             const _Group('الحساب'),
             _Section(children: [
-              ListTile(
-                leading: const _IconBox(Icons.insights_outlined),
-                title: const Text('قراءتي'),
-                subtitle: const Text('كم قرأت، وكم بقي في كل باب'),
-                trailing: const Icon(Icons.chevron_left),
-                onTap: () => Navigator.of(context)
-                    .push(MaterialPageRoute(builder: (_) => const MyReadingScreen())),
-              ),
-              ListTile(
-                leading: const _IconBox(Icons.lightbulb_outline),
-                title: const Text('فوائدي المحفوظة'),
-                subtitle: const Text('الجمل التي حفظتها من الكتب والأجوبة'),
-                trailing: const Icon(Icons.chevron_left),
-                onTap: () => Navigator.of(context)
-                    .push(MaterialPageRoute(builder: (_) => const MyBenefitsScreen())),
-              ),
-              ListTile(
-                leading: const _IconBox(Icons.bookmarks_outlined),
-                title: const Text('علاماتي الصوتية'),
-                subtitle: const Text('دقائق حفظتها من الدروس، ترجع إليها بضغطة'),
-                trailing: const Icon(Icons.chevron_left),
-                onTap: () => Navigator.of(context)
-                    .push(MaterialPageRoute(builder: (_) => const AudioMarksScreen())),
-              ),
-              ListenableBuilder(
-                listenable: Cloud.instance,
-                builder: (context, _) {
-                  final u = Cloud.instance.user;
-                  return ListTile(
-                    leading: Badge(
-                      isLabelVisible: Cloud.instance.newQuestions > 0,
-                      label: Text('${Cloud.instance.newQuestions}'),
-                      child: const _IconBox(Icons.account_circle_outlined),
-                    ),
-                    title: Text(u == null ? 'تسجيل الدخول أو إنشاء حساب' : (u.displayName ?? 'حسابي')),
-                    subtitle: u == null ? null : Text(Cloud.instance.isAdmin ? (Cloud.instance.isFullAdmin ? 'مشرف · لوحة الإدارة' : 'محرّر · لوحة المحرّر') : (u.email ?? '')),
-                    trailing: const Icon(Icons.chevron_left),
-                    onTap: () => Navigator.of(context).push(MaterialPageRoute(
-                        builder: (_) => const AccountScreen())),
-                  );
-                },
-              ),
               ListTile(
                 leading: const _IconBox(Icons.trending_up),
                 title: const Text('الأكثر قراءة'),
@@ -684,16 +642,16 @@ class _BigCard extends StatelessWidget {
       );
 }
 
-/// What the reader read this month, with his monthly goal, and the way to «لوحتي».
-class _ReaderStats extends StatefulWidget {
+/// What the reader read this month, with his monthly goal (shown in «صفحتي»).
+class ReaderStats extends StatefulWidget {
   final int count;
-  const _ReaderStats({required this.count});
+  const ReaderStats({super.key, required this.count});
 
   @override
-  State<_ReaderStats> createState() => _ReaderStatsState();
+  State<ReaderStats> createState() => _ReaderStatsState();
 }
 
-class _ReaderStatsState extends State<_ReaderStats> {
+class _ReaderStatsState extends State<ReaderStats> {
   int _goal = 30;
 
   @override
@@ -789,22 +747,6 @@ class _ReaderStatsState extends State<_ReaderStats> {
                       const Text('اضغط لتغيير الهدف', style: TextStyle(color: Colors.white60, fontSize: 11.5)),
                     ]),
                   ),
-                ]),
-              ),
-            ),
-            InkWell(
-              onTap: () => openDashboard(context),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-                color: Colors.black.withValues(alpha: .18),
-                child: const Row(children: [
-                  Icon(Icons.dashboard_outlined, color: Colors.white, size: 20),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text('لوحتي: نقاطي وأوسمتي وملفي',
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                  ),
-                  Icon(Icons.chevron_left, color: Colors.white),
                 ]),
               ),
             ),

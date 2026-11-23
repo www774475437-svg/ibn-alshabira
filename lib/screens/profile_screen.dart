@@ -15,11 +15,18 @@ import '../widgets/common.dart';
 import 'challenge_screens.dart';
 import '../services/tour.dart';
 import 'quiz_screens.dart';
+import 'account_screens.dart';
+import 'ask_screen.dart';
+import 'audio_library.dart' show AudioMarksScreen;
+import 'extra_screens.dart' show MyReadingScreen;
+import 'favorites_tab.dart';
+import 'more_tab.dart' show ReaderStats;
+import 'my_benefits.dart' show MyBenefitsScreen;
 
 Future<void> openDashboard(BuildContext context) =>
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => const DashboardScreen()));
 
-/// «لوحتي»: everything about the reader on one page — his number, points,
+/// «صفحتي»: everything about the reader on one page — his number, points,
 /// reading, questions, challenges, listening, memorizing and badges.
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -59,7 +66,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           final badges = Progress.badges;
           final earned = badges.where((b) => b.$4).toList();
           return Scaffold(
-            appBar: AppBar(title: const Text('لوحتي')),
+            appBar: AppBar(title: const Text('صفحتي')),
             body: ListView(padding: const EdgeInsets.all(12), children: [
               Container(
                 padding: const EdgeInsets.all(16),
@@ -69,6 +76,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   border: Border.all(color: kGold),
                 ),
                 child: Column(children: [
+                  CircleAvatar(
+                    radius: 38,
+                    backgroundColor: kGold,
+                    child: CircleAvatar(
+                      radius: 35,
+                      backgroundColor: const Color(0xFF0E3B44),
+                      backgroundImage: u?.photoURL != null ? NetworkImage(u!.photoURL!) : null,
+                      child: u?.photoURL == null ? const Icon(Icons.person, size: 40, color: kGold) : null,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   Text(
                       u == null
                           ? 'زائر'
@@ -83,19 +101,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const Text('نقطة', style: TextStyle(color: Colors.white70)),
                   const SizedBox(height: 6),
                   Text('${quiz.levelTitle} · ${earned.length} أوسمة', style: const TextStyle(color: Colors.white)),
-                  const SizedBox(height: 10),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                    decoration: BoxDecoration(color: kGold.withValues(alpha: .22), borderRadius: BorderRadius.circular(14)),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      const Icon(Icons.auto_stories, color: kGold, size: 18),
-                      const SizedBox(width: 6),
-                      Text('قرأتَ هذا الشهر: ${Repository.instance.readThisMonth}',
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                    ]),
-                  ),
                 ]),
               ),
+              const SizedBox(height: 12),
+              const _MyThings(),
+              ReaderStats(count: Repository.instance.readThisMonth),
               const SizedBox(height: 10),
               if (u == null)
                 const Card(
@@ -292,7 +302,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
       );
 }
 
-/// The page itself (also shown in «لوحتي» for the reader's own page).
+/// The page itself (also shown in «صفحتي» for the reader's own page).
 class ProfileView extends StatelessWidget {
   final String no;
   final Map<String, dynamic> m;
@@ -490,7 +500,7 @@ class _FindProfileScreenState extends State<FindProfileScreen> {
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: const Text('ابحث عن شخص')),
         body: ListView(padding: const EdgeInsets.all(16), children: [
-          const Text('اكتب رقمه (6 أرقام)، وهو الرقم الظاهر في «لوحتي» وفي «اسأل الشيخ».', style: TextStyle(height: 1.7)),
+          const Text('اكتب رقمه (6 أرقام)، وهو الرقم الظاهر في «صفحتي» وفي «اسأل الشيخ».', style: TextStyle(height: 1.7)),
           const SizedBox(height: 12),
           TextField(
             controller: _c,
@@ -792,6 +802,126 @@ class _LeadersHomeCardState extends State<LeadersHomeCard> {
                       Row(crossAxisAlignment: CrossAxisAlignment.end, children: [step(2), step(1), step(3)]),
                     ]),
                   ),
+                ),
+              ),
+            ),
+          );
+        },
+      );
+}
+
+
+/// «أشيائي»: everything the reader keeps, as large tiles in one place.
+class _MyThings extends StatelessWidget {
+  const _MyThings();
+
+  @override
+  Widget build(BuildContext context) {
+    void go(Widget w) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => w));
+    final items = <(IconData, String, Color, VoidCallback)>[
+      (Icons.insights_outlined, 'قراءتي', const Color(0xFF1F5E3B), () => go(const MyReadingScreen())),
+      (Icons.bookmark_rounded, 'محفوظاتي', const Color(0xFF8E6B1E), () => go(const FavoritesTab())),
+      (Icons.lightbulb_outline, 'فوائدي', const Color(0xFF0E3B44), () => go(const MyBenefitsScreen())),
+      (Icons.bookmarks_outlined, 'علاماتي الصوتية', const Color(0xFF3B4A8C), () => go(const AudioMarksScreen())),
+      (Icons.contact_support_outlined, 'أسئلتي للشيخ', const Color(0xFF6B3E26), () => go(const AskScreen())),
+      (Icons.manage_accounts_outlined, 'حسابي', const Color(0xFF455A64), () => go(const AccountScreen())),
+    ];
+    return GridView.count(
+      crossAxisCount: MediaQuery.sizeOf(context).width > 700 ? 6 : 3,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      mainAxisSpacing: 8,
+      crossAxisSpacing: 8,
+      childAspectRatio: 1.05,
+      children: [
+        for (final it in items)
+          Material(
+            color: it.$3,
+            borderRadius: BorderRadius.circular(18),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(18),
+              onTap: it.$4,
+              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                Icon(it.$1, color: kGold, size: 30),
+                const SizedBox(height: 8),
+                Text(it.$2,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                        fontFamily: 'Tajawal', color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13.5)),
+              ]),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// The big card at the top of «المزيد» that opens «صفحتي».
+class MyPageCard extends StatelessWidget {
+  const MyPageCard({super.key});
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: Listenable.merge([Cloud.instance, Quiz.instance, Repository.instance]),
+        builder: (context, _) {
+          final u = Cloud.instance.user;
+          final quiz = Quiz.instance;
+          final name = u == null
+              ? 'سجّل الدخول لتكون لك صفحة'
+              : quiz.showName && quiz.nick.trim().isNotEmpty
+                  ? quiz.nick.trim()
+                  : (u.displayName ?? 'رقم ${askerNo(u.uid)}');
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+            child: Material(
+              borderRadius: BorderRadius.circular(22),
+              clipBehavior: Clip.antiAlias,
+              elevation: 3,
+              child: InkWell(
+                onTap: () => u == null
+                    ? Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AccountScreen()))
+                    : openDashboard(context),
+                child: Ink(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      begin: Alignment.topRight,
+                      end: Alignment.bottomLeft,
+                      colors: [Color(0xFF0E3B44), Color(0xFF1F5E3B)],
+                    ),
+                    border: Border.all(color: kGold),
+                    borderRadius: BorderRadius.circular(22),
+                  ),
+                  child: Row(children: [
+                    CircleAvatar(
+                      radius: 32,
+                      backgroundColor: kGold,
+                      child: CircleAvatar(
+                        radius: 29,
+                        backgroundColor: const Color(0xFF0E3B44),
+                        backgroundImage: u?.photoURL != null ? NetworkImage(u!.photoURL!) : null,
+                        child: u?.photoURL == null ? const Icon(Icons.person, size: 32, color: kGold) : null,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        const Text('صفحتي', style: TextStyle(color: kGold, fontSize: 12.5, fontWeight: FontWeight.bold)),
+                        Text(name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontFamily: 'Tajawal', color: Colors.white, fontSize: 19, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 4),
+                        Text(
+                            u == null
+                                ? 'نقاطك وقراءتك وفوائدك ومحفوظاتك في مكان واحد'
+                                : '${Progress.points} نقطة · قرأت ${Repository.instance.readThisMonth} هذا الشهر',
+                            style: const TextStyle(color: Colors.white70, fontSize: 12.5)),
+                      ]),
+                    ),
+                    const Icon(Icons.chevron_left, color: Colors.white),
+                  ]),
                 ),
               ),
             ),
