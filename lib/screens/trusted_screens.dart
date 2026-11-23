@@ -119,7 +119,7 @@ class TrustedScholarsScreen extends StatelessWidget {
                     padding: EdgeInsets.all(16),
                     child: Row(
                       children: [
-                        Icon(Icons.smart_toy_outlined, color: Colors.white, size: 30),
+                        Icon(Icons.manage_search_rounded, color: Colors.white, size: 30),
                         SizedBox(width: 12),
                         Expanded(
                           child: Text('بحث الفتاوى من كتب الثقات\nباستخدام الذكاء الاصطناعي',

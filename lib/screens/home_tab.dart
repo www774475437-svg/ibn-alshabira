@@ -149,7 +149,7 @@ class _HomeTabState extends State<HomeTab> {
                       padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                       child: Row(
                         children: [
-                          Icon(Icons.smart_toy_outlined, color: kGold, size: 30),
+                          Icon(Icons.manage_search_rounded, color: kGold, size: 30),
                           SizedBox(width: 12),
                           Expanded(
                             child: Column(
@@ -1708,7 +1708,7 @@ class _ChannelPanel extends StatelessWidget {
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text('أحدث منشورات القناة',
                       style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
-                  Text('جديد الشيخ أولاً بأول',
+                  Text('أولاً بأول',
                       style: TextStyle(color: Color(0xB3FFFFFF), fontSize: 12.5)),
                 ]),
               ),
