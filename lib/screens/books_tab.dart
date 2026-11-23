@@ -274,7 +274,7 @@ class _RecommendedBanner extends StatelessWidget {
                           style: TextStyle(color: Color(0xFFF1D592), fontSize: 11.5, fontWeight: FontWeight.w700)),
                     ),
                     const SizedBox(height: 10),
-                    const Text('كتب ينصح بها الشيخ',
+                    const Text('كتب ينصح بها',
                         style: TextStyle(
                           color: Color(0xFFF7E7BE),
                           fontSize: 22,
