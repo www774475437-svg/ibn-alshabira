@@ -200,8 +200,6 @@ class _HomeTabState extends State<HomeTab> {
                 url: AppConfig.apkUrl,
               ),
             ),
-          // The newest answers and recordings, side by side.
-          SliverToBoxAdapter(child: _LatestBoard(recordings: _recs)),
           const SliverToBoxAdapter(child: OccasionCard()),
           // Back to where the reader stopped.
           const SliverToBoxAdapter(child: _Resume()),
@@ -312,6 +310,8 @@ class _HomeTabState extends State<HomeTab> {
           const SliverToBoxAdapter(child: _GroupTitle('الأسئلة', Icons.quiz_outlined)),
           const SliverToBoxAdapter(child: TourHomeCard()),
           const SliverToBoxAdapter(child: QuizHomeStrip()),
+          // The newest answers and recordings, under the challenges.
+          SliverToBoxAdapter(child: _LatestBoard(recordings: _recs)),
           const SliverToBoxAdapter(child: HomeAnnouncement(place: 'bottom')),
 
           // ------------------------------------------------ تصفّح المكتبة
