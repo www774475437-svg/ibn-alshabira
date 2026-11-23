@@ -161,7 +161,7 @@ class _HomeShellState extends State<HomeShell> with TickerProviderStateMixin {
             case 'saved':
               return (Icons.bookmark_border_rounded, Icons.bookmark_rounded, 'المحفوظات', 0);
             case 'ask':
-              return (Icons.forum_outlined, Icons.forum_rounded, 'اسأل الشيخ', cloud.unseenReplies);
+              return (Icons.contact_support_outlined, Icons.contact_support_rounded, 'اسأل', cloud.unseenReplies);
             case 'admin':
               return (Icons.admin_panel_settings_outlined, Icons.admin_panel_settings, 'الإدارة', cloud.newQuestions);
             case 'scholars':
