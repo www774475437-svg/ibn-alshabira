@@ -250,7 +250,7 @@ class MoreTab extends StatelessWidget {
               ),
               ListTile(
                 leading: const _IconBox(Icons.campaign_outlined),
-                title: const Text('من قناة الشيخ'),
+                title: const Text('من القناة على تيلجرام'),
                 trailing: const Icon(Icons.chevron_left),
                 onTap: () => Navigator.of(context)
                     .push(MaterialPageRoute(builder: (_) => const ChannelScreen())),

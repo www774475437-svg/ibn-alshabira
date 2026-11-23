@@ -24,7 +24,7 @@ class _ChannelScreenState extends State<ChannelScreen> {
     final repo = Repository.instance;
     final items = _q.trim().isEmpty ? repo.channel : repo.searchChannel(_q);
     return Scaffold(
-      appBar: AppBar(title: Text('من قناة الشيخ (${repo.channel.length})')),
+      appBar: AppBar(title: Text('من القناة على تيلجرام (${repo.channel.length})')),
       body: repo.channel.isEmpty
           ? const EmptyState(
               icon: Icons.campaign_outlined,
