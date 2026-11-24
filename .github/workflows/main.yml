@@ -151,6 +151,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh release download --repo ${{ github.repository }} --pattern ibn-alshabira.apk --dir build/web || echo "no release yet"
 
+      - name: The Play bundle too (for uploading it to Google Play from the browser)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download --repo ${{ github.repository }} --pattern ibn-alshabira-play.aab --dir build/web || true
+
       - name: Publish website (gh-pages branch)
         uses: peaceiris/actions-gh-pages@v4
         with:
