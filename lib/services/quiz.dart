@@ -247,7 +247,8 @@ class Quiz extends ChangeNotifier {
   final Map<String, (int, int)> stats = {}; // qid -> (answered, right)
   final Map<String, List<int>> choiceStats = {}; // qid -> how many picked each choice
   String nick = '';
-  bool showName = false; // «أضف اسمي»: off until the reader chooses
+  bool showName = true; // «أضف اسمي»: on unless the reader turns it off
+  bool nameChosen = false; // true once the reader changed «أضف اسمي» himself
   bool timer = false;
   bool kidsMode = false;
   int streak = 0;
@@ -464,7 +465,8 @@ class Quiz extends ChangeNotifier {
       ..clear()
       ..addAll(p.getStringList('quizSaved') ?? const []);
     nick = p.getString('quizNick') ?? '';
-    showName = p.getBool('quizShowName') ?? false;
+    nameChosen = p.getBool('quizNameChosen') ?? false;
+    showName = nameChosen ? (p.getBool('quizShowName') ?? true) : true;
     timer = p.getBool('quizTimer') ?? false;
     kidsMode = p.getBool('quizKids') ?? false;
     streak = p.getInt('quizStreak') ?? 0;
@@ -477,6 +479,7 @@ class Quiz extends ChangeNotifier {
     await p.setStringList('quizSaved', saved.toList());
     await p.setString('quizNick', nick);
     await p.setBool('quizShowName', showName);
+    await p.setBool('quizNameChosen', nameChosen);
     await p.setBool('quizTimer', timer);
     await p.setBool('quizKids', kidsMode);
     await p.setInt('quizStreak', streak);
@@ -512,7 +515,12 @@ class Quiz extends ChangeNotifier {
         }
       }
       if (nick.isEmpty) nick = '${m['nick'] ?? ''}';
-      showName = m['showName'] != false;
+      if (m['nameChosen'] == true) {
+        nameChosen = true;
+        showName = m['showName'] != false;
+      } else if (!nameChosen) {
+        showName = true;
+      }
     }
     await _saveLocal();
     _profileDirty = true;
@@ -731,6 +739,7 @@ class Quiz extends ChangeNotifier {
       await _db.doc('quizUsers/${u.uid}').set({
         'nick': nick.trim().isEmpty ? 'طالب علم' : nick.trim(),
         'showName': showName,
+        'nameChosen': nameChosen,
         'score': right,
         'wrong': wrong,
         'week': week,
@@ -750,7 +759,10 @@ class Quiz extends ChangeNotifier {
 
   Future<void> setProfile({String? nick, bool? showName}) async {
     if (nick != null) this.nick = nick.trim();
-    if (showName != null) this.showName = showName;
+    if (showName != null) {
+      this.showName = showName;
+      nameChosen = true;
+    }
     await _saveLocal();
     notifyListeners();
     await _pushProfile();

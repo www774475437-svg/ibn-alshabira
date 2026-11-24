@@ -321,7 +321,7 @@ class AdminScreen extends StatelessWidget {
           (const Tab(icon: Icon(Icons.search_off), text: 'بحث بلا نتيجة'), const MissesTab()),
           if (cloud.canManageStaff) (const Tab(icon: Icon(Icons.group), text: 'المشرفون'), const _AdminsTab()),
           if (full) (const Tab(icon: Icon(Icons.groups), text: 'المسجّلون'), const MembersTab()),
-          if (cloud.isDeveloper) (const Tab(icon: Icon(Icons.insights), text: 'الاستخدام'), const UsageTab()),
+          if (cloud.isDeveloper) (const Tab(icon: Icon(Icons.bar_chart_rounded), text: 'الاستخدام'), const UsageTab()),
           if (cloud.isDeveloper) (const Tab(icon: Icon(Icons.history), text: 'السجل'), const LogTab()),
         ];
         return DefaultTabController(

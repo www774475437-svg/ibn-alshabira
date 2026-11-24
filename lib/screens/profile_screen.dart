@@ -819,7 +819,7 @@ class _MyThings extends StatelessWidget {
   Widget build(BuildContext context) {
     void go(Widget w) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => w));
     final items = <(IconData, String, Color, VoidCallback)>[
-      (Icons.insights_outlined, 'قراءتي', const Color(0xFF1F5E3B), () => go(const MyReadingScreen())),
+      (Icons.bar_chart_rounded, 'قراءتي', const Color(0xFF1F5E3B), () => go(const MyReadingScreen())),
       (Icons.bookmark_rounded, 'محفوظاتي', const Color(0xFF8E6B1E), () => go(const FavoritesTab())),
       (Icons.lightbulb_outline, 'فوائدي', const Color(0xFF0E3B44), () => go(const MyBenefitsScreen())),
       (Icons.bookmarks_outlined, 'علاماتي الصوتية', const Color(0xFF3B4A8C), () => go(const AudioMarksScreen())),
